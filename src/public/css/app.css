@@ -84,7 +84,16 @@ h3 { font-size: 1rem; }
 .conteudo { flex: 1; min-width: 0; padding: 1.2rem 1.6rem 2.5rem; display: flex; flex-direction: column; }
 .topo { display: flex; align-items: center; gap: .8rem; margin-bottom: 1rem; }
 .menu-toggle { display: none; background: #fff; border: 1px solid var(--borda); border-radius: 8px; padding: .35rem .6rem; font-size: 1.1rem; cursor: pointer; }
-.rodape-app { margin-top: auto; padding-top: 2rem; color: var(--cinza-500); font-size: .78rem; }
+.rodape-app {
+  margin-top: auto; padding-top: 2rem; color: var(--cinza-500); font-size: .78rem;
+  display: flex; justify-content: space-between; gap: .6rem; flex-wrap: wrap;
+}
+.rodape-app .creditos strong { color: var(--cinza-700); font-weight: 600; }
+.creditos-login {
+  margin: 1.2rem 0 0; padding-top: .9rem; border-top: 1px solid var(--borda);
+  text-align: center; font-size: .76rem; color: var(--cinza-500);
+}
+.creditos-login strong { color: var(--azul); font-weight: 600; }
 
 /* --------------------------------------------------------------- cartões */
 .cartao {
@@ -130,6 +139,39 @@ table.tabela td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .aviso-erro { background: var(--vermelho-suave); border-color: #f2c9c4; color: #8c1d16; }
 .aviso-alerta { background: var(--amarelo-suave); border-color: #f0dcae; color: #7a4f00; }
 .aviso-info { background: var(--azul-suave); border-color: #c2d8ea; color: var(--azul); }
+
+/* ------------------------------------------------------- comunicados */
+/* Avisos internos exibidos a todos os usuários (processo concluído/impedido). */
+.comunicado {
+  display: flex; align-items: flex-start; gap: .8rem;
+  border: 1px solid; border-left-width: 4px; border-radius: var(--raio);
+  padding: .7rem .9rem; margin-bottom: .7rem; background: #fff;
+}
+.comunicado-concluido { border-color: #bfe3d0; border-left-color: var(--verde); background: var(--verde-suave); }
+.comunicado-impedido  { border-color: #f2c9c4; border-left-color: var(--vermelho); background: var(--vermelho-suave); }
+.comunicado-marca {
+  font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  padding: .15rem .5rem; border-radius: 999px; white-space: nowrap; margin-top: .1rem;
+}
+.comunicado-concluido .comunicado-marca { background: var(--verde); color: #fff; }
+.comunicado-impedido .comunicado-marca { background: var(--vermelho); color: #fff; }
+.comunicado-texto { flex: 1; min-width: 0; font-size: .89rem; }
+.comunicado-texto strong { display: block; font-size: .93rem; }
+.comunicado-texto strong a { color: inherit; }
+.comunicado-texto small { color: var(--cinza-500); font-size: .76rem; }
+.comunicado-concluido .comunicado-texto { color: #14603a; }
+.comunicado-impedido .comunicado-texto { color: #8c1d16; }
+.botao-fechar {
+  background: none; border: 0; cursor: pointer; font-size: 1.3rem; line-height: 1;
+  color: inherit; opacity: .55; padding: 0 .2rem;
+}
+.botao-fechar:hover { opacity: 1; }
+
+.contador {
+  display: inline-block; min-width: 1.25rem; text-align: center;
+  background: #d9534f; color: #fff; border-radius: 999px;
+  font-size: .68rem; font-weight: 700; padding: 0 .35rem; margin-left: .35rem;
+}
 
 /* ------------------------------------------------------------ formulários */
 form .campo { margin-bottom: .8rem; }

@@ -36,10 +36,13 @@ CREATE TABLE IF NOT EXISTS status_processo (
 );
 
 -- -------------------------------------------------------------- USUARIOS
+-- O acesso é feito pelo ID de usuário (`login`), não pelo e-mail.
+-- O e-mail permanece como dado de contato e é opcional.
 CREATE TABLE IF NOT EXISTS usuarios (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   nome       TEXT    NOT NULL,
-  email      TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+  login      TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+  email      TEXT    UNIQUE COLLATE NOCASE,
   senha_hash TEXT    NOT NULL,
   setor_id   INTEGER NOT NULL REFERENCES setores (id),
   perfil     TEXT    NOT NULL DEFAULT 'Usuário' CHECK (perfil IN ('Administrador', 'Usuário')),
@@ -173,4 +176,29 @@ CREATE TABLE IF NOT EXISTS notificacoes (
 );
 CREATE INDEX IF NOT EXISTS idx_notificacoes_processo ON notificacoes (processo_id);
 
--- Sessões do express-session ficam em arquivo separado (connect-sqlite3).
+-- ----------------------------------------------------------------- AVISOS
+-- Comunicados exibidos dentro da plataforma para TODOS os usuários —
+-- hoje: processo concluído e processo impedido. Diferente de `notificacoes`,
+-- que é o outbox de e-mail dirigido a um destinatário específico.
+CREATE TABLE IF NOT EXISTS avisos (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  tipo        TEXT    NOT NULL CHECK (tipo IN ('concluido', 'impedido')),
+  titulo      TEXT    NOT NULL,
+  mensagem    TEXT    NOT NULL,
+  processo_id INTEGER REFERENCES processos (id) ON DELETE CASCADE,
+  usuario_id  INTEGER REFERENCES usuarios (id),
+  usuario_nome TEXT,
+  criado_em   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_avisos_criado ON avisos (id DESC);
+
+-- Marcação de leitura por usuário: o aviso vale para todos, mas cada um
+-- dispensa o seu.
+CREATE TABLE IF NOT EXISTS avisos_lidos (
+  aviso_id   INTEGER NOT NULL REFERENCES avisos (id) ON DELETE CASCADE,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios (id) ON DELETE CASCADE,
+  lido_em    TEXT    NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (aviso_id, usuario_id)
+);
+
+-- Sessões do express-session ficam na tabela `sessoes` (src/lib/session-store.js).

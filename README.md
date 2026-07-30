@@ -40,24 +40,31 @@ Configurações de ambiente ficam em `.env` (veja `.env.example`).
 
 ### Acesso
 
-A carga inicial cria os 15 usuários da aba `USUÁRIOS` com e-mail no padrão
-`primeiro.nome@jsgrilo.com.br` e a senha definida em `SENHA_PADRAO` (padrão `jsgrilo@2026`).
+O login é feito pelo **ID de usuário** (não pelo e-mail). A carga inicial cria os 15 usuários da
+aba `USUÁRIOS` com o ID derivado do nome e a senha definida em `SENHA_PADRAO`
+(padrão `jsgrilo@2026`).
 
-| Usuário | E-mail | Setor | Perfil |
+| Usuário | ID de login | Setor | Perfil |
 |---|---|---|---|
-| Jacqueline | `jacqueline@jsgrilo.com.br` | Diretoria | Administrador |
-| Gabriela | `gabriela@jsgrilo.com.br` | Fiscal | Administrador |
-| Jocileide | `jocileide@jsgrilo.com.br` | Contábil | Administrador |
-| Elidiane | `elidiane@jsgrilo.com.br` | Administrativo | Administrador |
-| Ana Paula, Cecilia, Geilza | … | Fiscal | Usuário |
-| Ana Lucia, Lalá, Samuel, Crislane | … | Departamento Pessoal | Usuário |
-| Daiane, Nayara | … | Contábil | Usuário |
-| Andreia | `andreia@jsgrilo.com.br` | Financeiro | Usuário |
-| Anna Clara | `anna.clara@jsgrilo.com.br` | Administrativo | Usuário |
+| Jacqueline | `jacqueline` | Diretoria | Administrador |
+| Gabriela | `gabriela` | Fiscal | Administrador |
+| Jocileide | `jocileide` | Contábil | Administrador |
+| Elidiane | `elidiane` | Administrativo | Administrador |
+| Ana Paula, Cecilia, Geilza | `ana.paula`, `cecilia`, `geilza` | Fiscal | Usuário |
+| Ana Lucia, Lalá, Samuel, Crislane | `ana.lucia`, `lala`, `samuel`, `crislane` | Departamento Pessoal | Usuário |
+| Daiane, Nayara | `daiane`, `nayara` | Contábil | Usuário |
+| Andreia | `andreia` | Financeiro | Usuário |
+| Anna Clara | `anna.clara` | Administrativo | Usuário |
+
+O ID é normalizado ao digitar: maiúsculas, acentos e espaços não impedem o acesso — "Ana Paula",
+"ANA.PAULA" e `ana.paula` levam ao mesmo usuário. Quem já tem e-mail cadastrado também consegue
+entrar digitando o e-mail, mas o identificador oficial é o ID.
+
+O e-mail passou a ser **opcional** e serve apenas como dado de contato. Administradores definem o
+ID em Administração → Usuários; deixando o campo vazio, o sistema deriva do nome
+("Ana Paula" vira `ana.paula`).
 
 > Troque as senhas no primeiro acesso (menu **Meu perfil**) ou pela tela **Administração → Usuários**.
-
----
 
 ## Stack
 
@@ -95,7 +102,8 @@ src/
     integracoes.js       adaptadores: Google Chat/Drive + stubs previstos
     documentos.js        upload/registro de anexos
     dashboard.js         indicadores gerenciais
-    usuarios.js          autenticação e CRUD
+    usuarios.js          autenticação por ID de usuário e CRUD
+    avisos.js            mural interno visível a todos os usuários
   routes/                camada HTTP
   views/                 telas EJS
   public/                CSS, JS e Chart.js
@@ -118,6 +126,9 @@ tests/                   testes das regras de negócio (node:test)
 | `USUÁRIOS` | tabela `usuarios` · **Administração → Usuários** |
 | `HISTÓRICO` | tabela `historico` · linha do tempo do processo e **Auditoria** |
 | `PARAMETROS` | tabela `parametros` · **Administração → Parâmetros** |
+
+Além das abas da planilha, a plataforma mantém as tabelas `avisos` e `avisos_lidos` (mural interno),
+`documentos`, `notificacoes` (outbox de e-mail) e `sessoes`.
 
 **Setores auxiliares.** O `CHECKLIST_MODELO` referencia cinco “setores” que não estão na aba
 `SETORES`: Sócios, Financeiro, Cliente, TI e Qualidade. Eles foram criados como setores
@@ -151,8 +162,8 @@ Comercial`, `Aguardando Receita Federal`, `Aguardando Prefeitura`) são definido
 processo. Alterar manualmente para um status de análise exige `PERMITIR_PULAR_ETAPAS`.
 
 **Impedimento** — marcar impedimento exige descrição (`EXIGIR_OBSERVACAO_IMPEDIMENTO`), muda o
-item para `Impedido`, joga o processo para `Impedido` e notifica Diretoria e Administrativo
-(`ENVIAR_EMAIL_IMPEDIMENTO`).
+item para `Impedido`, joga o processo para `Impedido`, notifica Diretoria e Administrativo
+(`ENVIAR_EMAIL_IMPEDIMENTO`) e publica um aviso interno para todos os usuários.
 
 **Bloqueio de conclusão** — com `BLOQUEAR_CONCLUSAO_COM_PENDENCIA` ligado, o botão “Concluir
 processo” fica desabilitado e a tela lista exatamente o que falta:
@@ -181,6 +192,19 @@ itens do próprio setor. O dashboard gerencial é restrito a gestores; a área d
 a administradores.
 
 ---
+
+## Avisos internos (mural para todos os usuários)
+
+Quando um processo é **concluído com sucesso** ou fica **impedido**, a plataforma publica um aviso
+que aparece para **todos os usuários**, independentemente de setor ou perfil — em faixa no topo de
+qualquer tela e no mural em **Avisos**, com contador de não lidos no menu.
+
+- o aviso de conclusão informa o processo, o cliente e quem concluiu;
+- o aviso de impedimento traz o setor e o motivo registrado;
+- cada pessoa dispensa o seu aviso no “×”; isso não afeta o que os outros veem;
+- o mural guarda o histórico, marcando o que já foi lido.
+
+É diferente das notificações por e-mail, que são dirigidas ao setor responsável.
 
 ## Notificações, prazos e integrações
 
@@ -239,3 +263,7 @@ externo (cron copiando `data/`).
 - Upload efetivo para o Google Drive — depende das credenciais da conta de serviço.
 - WhatsApp, Onvio, Domínio Sistemas e e-CAC — previstos e desligados, conforme combinado.
 - Rotina agendada de backup automático.
+
+---
+
+Plataforma criada por **Rodrigo Grilo Salina** e **Gabriela Dionizio**.

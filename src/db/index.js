@@ -17,8 +17,76 @@ function open(file = config.dbFile) {
   return db;
 }
 
+function colunas(conn, tabela) {
+  return conn.prepare(`PRAGMA table_info(${tabela})`).all().map((c) => c.name);
+}
+
+function tabelaExiste(conn, nome) {
+  return Boolean(conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(nome));
+}
+
+/** Login sugerido a partir do e-mail ou do nome (usado só na migração). */
+function loginSugerido(usuario) {
+  const base = usuario.email ? String(usuario.email).split('@')[0] : String(usuario.nome || '');
+  const limpo = base
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/^\.|\.$/g, '');
+  return limpo || `usuario${usuario.id}`;
+}
+
+/**
+ * Bancos criados antes da mudança de login autenticavam por e-mail e não
+ * possuem a coluna `login`. Reconstrói a tabela preservando os dados.
+ */
+function migrarLoginDeUsuarios(conn) {
+  if (!tabelaExiste(conn, 'usuarios')) return;
+  if (colunas(conn, 'usuarios').includes('login')) return;
+
+  const antigos = conn.prepare('SELECT * FROM usuarios').all();
+  const usados = new Set();
+  const comLogin = antigos.map((u) => {
+    let login = loginSugerido(u);
+    let sufixo = 2;
+    while (usados.has(login)) login = `${loginSugerido(u)}${sufixo++}`;
+    usados.add(login);
+    return { ...u, login };
+  });
+
+  conn.pragma('foreign_keys = OFF');
+  conn.transaction(() => {
+    conn.exec(`
+      CREATE TABLE usuarios_novo (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome       TEXT    NOT NULL,
+        login      TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+        email      TEXT    UNIQUE COLLATE NOCASE,
+        senha_hash TEXT    NOT NULL,
+        setor_id   INTEGER NOT NULL REFERENCES setores (id),
+        perfil     TEXT    NOT NULL DEFAULT 'Usuário' CHECK (perfil IN ('Administrador', 'Usuário')),
+        status     TEXT    NOT NULL DEFAULT 'Ativo'   CHECK (status IN ('Ativo', 'Inativo')),
+        criado_em  TEXT    NOT NULL DEFAULT (datetime('now')),
+        ultimo_login TEXT
+      );
+    `);
+    const inserir = conn.prepare(
+      `INSERT INTO usuarios_novo (id, nome, login, email, senha_hash, setor_id, perfil, status, criado_em, ultimo_login)
+       VALUES (@id, @nome, @login, @email, @senha_hash, @setor_id, @perfil, @status, @criado_em, @ultimo_login)`
+    );
+    comLogin.forEach((u) => inserir.run(u));
+    conn.exec('DROP TABLE usuarios; ALTER TABLE usuarios_novo RENAME TO usuarios;');
+  })();
+  conn.pragma('foreign_keys = ON');
+
+  // eslint-disable-next-line no-console
+  console.log(`[migração] coluna "login" criada para ${comLogin.length} usuário(s).`);
+}
+
 function migrate(conn) {
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+  migrarLoginDeUsuarios(conn);
   conn.exec(schema);
 }
 
@@ -38,4 +106,4 @@ function close() {
   }
 }
 
-module.exports = { open, get, tx, close, migrate };
+module.exports = { open, get, tx, close, migrate, loginSugerido };

@@ -81,17 +81,17 @@ function upsertChecklistModelo(conn) {
 
 function upsertUsuarios(conn) {
   const idSetor = conn.prepare('SELECT id FROM setores WHERE nome = ?');
-  const existe = conn.prepare('SELECT id FROM usuarios WHERE email = ?');
+  const existe = conn.prepare('SELECT id FROM usuarios WHERE login = ? OR email = ?');
   const inserir = conn.prepare(
-    `INSERT INTO usuarios (nome, email, senha_hash, setor_id, perfil, status)
-     VALUES (?, ?, ?, ?, ?, ?)`
+    `INSERT INTO usuarios (nome, login, email, senha_hash, setor_id, perfil, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
   );
   const hash = bcrypt.hashSync(config.senhaPadrao, 10);
   dados.USUARIOS.forEach((u) => {
-    if (existe.get(u.email)) return;
+    if (existe.get(u.login, u.email)) return;
     const setor = idSetor.get(u.setor);
     if (!setor) throw new Error(`Setor inexistente para o usuário ${u.nome}: ${u.setor}`);
-    inserir.run(u.nome, u.email, hash, setor.id, u.perfil, u.status);
+    inserir.run(u.nome, u.login, u.email, hash, setor.id, u.perfil, u.status);
   });
 }
 
@@ -104,7 +104,7 @@ function demo(conn) {
     console.log('• Processos de demonstração já existem — nada a fazer.');
     return;
   }
-  const admin = usuarios.porEmail('jacqueline@jsgrilo.com.br') || usuarios.listar()[0];
+  const admin = usuarios.porLogin('jacqueline') || usuarios.listar()[0];
   const tipos = conn.prepare('SELECT id, nome FROM tipos_processo ORDER BY id').all();
   const porNome = (n) => tipos.find((t) => t.nome === n);
 
@@ -157,8 +157,8 @@ function main() {
     const { t } = conn.prepare(`SELECT COUNT(*) AS t FROM ${tabela}`).get();
     console.log(`  • ${tabela}: ${t} registro(s)`);
   }
-  console.log(`\nSenha padrão de todos os usuários: ${config.senhaPadrao}`);
-  console.log('Exemplo de acesso: jacqueline@jsgrilo.com.br (Diretoria/Administrador)');
+  console.log(`\nAcesso pelo ID de usuário. Senha padrão: ${config.senhaPadrao}`);
+  console.log('Exemplo: usuário "jacqueline" (Diretoria/Administrador)');
 
   if (process.argv.includes('--demo')) {
     console.log('\nCriando processos de demonstração...');

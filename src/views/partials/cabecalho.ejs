@@ -20,6 +20,10 @@
       <a href="/processos" class="<%= caminhoAtual.startsWith('/processos') ? 'ativo' : '' %>">Processos</a>
       <a href="/processos/novo" class="<%= caminhoAtual === '/processos/novo' ? 'ativo' : '' %>">Abrir processo</a>
       <a href="/checklist/fila" class="<%= caminhoAtual.startsWith('/checklist') ? 'ativo' : '' %>">Fila do setor</a>
+      <a href="/avisos" class="<%= caminhoAtual.startsWith('/avisos') ? 'ativo' : '' %>">
+        Avisos
+        <% if (avisosTotal) { %><span class="contador"><%= avisosTotal %></span><% } %>
+      </a>
       <% if (ehGestor) { %>
         <a href="/dashboard" class="<%= caminhoAtual.startsWith('/dashboard') ? 'ativo' : '' %>">Dashboard</a>
       <% } %>
@@ -51,4 +55,24 @@
     <% if (flash) { %>
       <div class="aviso aviso-<%= flash.tipo %>"><%= flash.mensagem %></div>
     <% } %>
+
+    <%# Comunicados visíveis para todos os usuários: processo concluído ou impedido %>
+    <% avisos.forEach(function (av) { %>
+      <div class="comunicado comunicado-<%= av.tipo %>">
+        <span class="comunicado-marca"><%= av.tipo === 'concluido' ? 'Concluído' : 'Impedido' %></span>
+        <div class="comunicado-texto">
+          <strong>
+            <% if (av.processo_id) { %>
+              <a href="/processos/<%= av.processo_id %>"><%= av.titulo %></a>
+            <% } else { %><%= av.titulo %><% } %>
+          </strong>
+          <div><%= av.mensagem %></div>
+          <small><%= fmtDataHora(av.criado_em) %> · <%= av.usuario_nome || 'Sistema' %></small>
+        </div>
+        <form method="post" action="/avisos/<%= av.id %>/lido">
+          <input type="hidden" name="retorno" value="<%= caminhoAtual %>">
+          <button class="botao-fechar" aria-label="Dispensar aviso" title="Dispensar">&times;</button>
+        </form>
+      </div>
+    <% }) %>
 <% } %>

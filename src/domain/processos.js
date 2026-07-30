@@ -3,6 +3,7 @@
 const db = require('../db');
 const parametros = require('./parametros');
 const checklist = require('./checklist');
+const avisos = require('./avisos');
 const historico = require('./historico');
 const notificacoes = require('./notificacoes');
 const { agoraISO, hojeISO, somarDias, diffDias } = require('../lib/datas');
@@ -375,7 +376,11 @@ function concluir(processoId, usuario, observacao) {
     usuario,
     observacao: observacao || 'Checklist finalizado e processo liberado para arquivamento.',
   });
-  return obter(processoId);
+
+  const concluido = obter(processoId);
+  // Aviso interno visível para todos os usuários da plataforma.
+  avisos.processoConcluido(concluido, usuario);
+  return concluido;
 }
 
 function cancelar(processoId, usuario, motivo) {

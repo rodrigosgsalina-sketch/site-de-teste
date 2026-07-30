@@ -1,6 +1,7 @@
 'use strict';
 
 const db = require('../db');
+const avisos = require('./avisos');
 const parametros = require('./parametros');
 const { agoraISO, somarHoras } = require('../lib/datas');
 
@@ -193,7 +194,22 @@ function responder(itemId, dados, usuario) {
       itemId
     );
 
-  return { ...obterItem(itemId), aguardando_conferencia: dupla && !impedimento };
+  const atualizado = { ...obterItem(itemId), aguardando_conferencia: dupla && !impedimento };
+
+  // Impedimento gera aviso interno para todos os usuários.
+  if (statusItem === STATUS_ITEM.IMPEDIDO) {
+    const processo = db
+      .get()
+      .prepare(
+        `SELECT p.id, p.codigo, p.razao_social, t.nome AS tipo_processo
+           FROM processos p JOIN tipos_processo t ON t.id = p.tipo_processo_id
+          WHERE p.id = ?`
+      )
+      .get(item.processo_id);
+    if (processo) avisos.processoImpedido(processo, atualizado, usuario);
+  }
+
+  return atualizado;
 }
 
 /** Segunda conferência (EXIGIR_DUPLA_CONFERENCIA). */

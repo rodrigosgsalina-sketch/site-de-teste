@@ -9,8 +9,14 @@
         <input type="text" id="nome" name="nome" required>
       </div>
       <div class="campo">
-        <label for="email">E-mail <span class="obrig">*</span></label>
-        <input type="email" id="email" name="email" required>
+        <label for="login">ID de usuário</label>
+        <input type="text" id="login" name="login" placeholder="deixe vazio para gerar do nome"
+               autocapitalize="none" spellcheck="false">
+        <div class="dica">É o que a pessoa digita para entrar. "Ana Paula" vira <span class="mono">ana.paula</span>.</div>
+      </div>
+      <div class="campo">
+        <label for="email">E-mail (contato)</label>
+        <input type="email" id="email" name="email">
       </div>
       <div class="campo">
         <label for="senha">Senha <span class="obrig">*</span></label>
@@ -38,15 +44,21 @@
 
 <div class="cartao">
   <h3><%= lista.length %> usuário(s)</h3>
-  <p class="dica">Perfil <strong>Administrador</strong> e setor <strong>Diretoria</strong> têm visão completa; os demais só enxergam os processos e itens do próprio setor.</p>
+  <p class="dica">
+    O acesso é feito pelo <strong>ID de usuário</strong> — o e-mail é apenas contato.
+    Perfil <strong>Administrador</strong> e setor <strong>Diretoria</strong> têm visão completa;
+    os demais só enxergam os processos e itens do próprio setor.
+  </p>
   <div class="tabela-scroll">
     <table class="tabela">
-      <thead><tr><th>Nome</th><th>E-mail</th><th>Setor</th><th>Perfil</th><th>Situação</th><th>Nova senha</th><th></th></tr></thead>
+      <thead><tr><th>Nome</th><th>ID de usuário</th><th>E-mail</th><th>Setor</th><th>Perfil</th><th>Situação</th><th>Nova senha</th><th></th></tr></thead>
       <tbody>
         <% lista.forEach(function (u) { %>
           <tr>
             <td><input type="text" form="usuario-<%= u.id %>" name="nome" value="<%= u.nome %>" required></td>
-            <td><input type="email" form="usuario-<%= u.id %>" name="email" value="<%= u.email %>" required></td>
+            <td><input type="text" class="mono" form="usuario-<%= u.id %>" name="login" value="<%= u.login %>"
+                       autocapitalize="none" spellcheck="false" required></td>
+            <td><input type="email" form="usuario-<%= u.id %>" name="email" value="<%= u.email || '' %>"></td>
             <td>
               <select form="usuario-<%= u.id %>" name="setor_id">
                 <% setores.forEach(function (s) { %>

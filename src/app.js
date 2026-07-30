@@ -10,6 +10,7 @@ const config = require('./config');
 const db = require('./db');
 const datas = require('./lib/datas');
 const acesso = require('./domain/acesso');
+const avisosDom = require('./domain/avisos');
 
 const app = express();
 
@@ -61,6 +62,20 @@ app.use((req, res, next) => {
   res.locals.classeItem = classeItem;
   res.locals.flash = req.session ? req.session.flash : null;
   if (req.session) delete req.session.flash;
+
+  // Avisos internos (processo concluído/impedido) valem para todos os usuários.
+  if (usuario) {
+    try {
+      res.locals.avisos = avisosDom.naoLidos(usuario.id, 4);
+      res.locals.avisosTotal = avisosDom.contarNaoLidos(usuario.id);
+    } catch (err) {
+      res.locals.avisos = [];
+      res.locals.avisosTotal = 0;
+    }
+  } else {
+    res.locals.avisos = [];
+    res.locals.avisosTotal = 0;
+  }
   next();
 });
 
@@ -77,6 +92,7 @@ app.use('/', require('./routes/auth'));
 app.use('/', exigirLogin, require('./routes/painel'));
 app.use('/processos', exigirLogin, require('./routes/processos'));
 app.use('/checklist', exigirLogin, require('./routes/checklist'));
+app.use('/avisos', exigirLogin, require('./routes/avisos'));
 app.use('/dashboard', exigirLogin, require('./routes/dashboard'));
 app.use('/admin', exigirLogin, acesso.exigirAdministrador, require('./routes/admin'));
 

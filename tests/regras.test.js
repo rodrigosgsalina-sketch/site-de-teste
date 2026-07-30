@@ -30,7 +30,9 @@ const checklist = require('../src/domain/checklist');
 const processos = require('../src/domain/processos');
 const historico = require('../src/domain/historico');
 const acesso = require('../src/domain/acesso');
+const avisos = require('../src/domain/avisos');
 const dashboard = require('../src/domain/dashboard');
+const usuariosDom = require('../src/domain/usuarios');
 
 /* ----------------------------------------------------------- preparação */
 function carregar() {
@@ -58,10 +60,12 @@ function carregar() {
     });
 
     const usuario = conn.prepare(
-      'INSERT INTO usuarios (nome, email, senha_hash, setor_id, perfil, status) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO usuarios (nome, login, email, senha_hash, setor_id, perfil, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
     const hash = bcrypt.hashSync('teste123', 4);
-    seed.USUARIOS.forEach((u) => usuario.run(u.nome, u.email, hash, idSetor.get(u.setor).id, u.perfil, u.status));
+    seed.USUARIOS.forEach((u) =>
+      usuario.run(u.nome, u.login, u.email, hash, idSetor.get(u.setor).id, u.perfil, u.status)
+    );
   });
   return conn;
 }
@@ -287,6 +291,101 @@ test('dashboard agrega indicadores sem erro', () => {
   assert.ok(Array.isArray(dados.porStatus) && dados.porStatus.length > 0);
   assert.ok(Array.isArray(dados.ranking));
   assert.strictEqual(typeof dados.indicadores.meta, 'number');
+});
+
+/* ------------------------------------------------- login por ID de usuário */
+
+test('autenticação usa o ID de usuário, não o e-mail', () => {
+  const entrada = usuariosDom.autenticar('ana.paula', 'teste123');
+  assert.ok(entrada, 'deveria entrar com o ID de usuário');
+  assert.strictEqual(entrada.nome, 'Ana Paula');
+  assert.strictEqual(entrada.login, 'ana.paula');
+
+  // ID é normalizado: maiúsculas e acentos não impedem o acesso.
+  assert.ok(usuariosDom.autenticar('Ana Paula', 'teste123'), 'deveria aceitar "Ana Paula"');
+  assert.ok(usuariosDom.autenticar('  ANA.PAULA ', 'teste123'), 'deveria aceitar com espaços e maiúsculas');
+
+  assert.strictEqual(usuariosDom.autenticar('ana.paula', 'senha-errada'), null);
+  assert.strictEqual(usuariosDom.autenticar('nao.existe', 'teste123'), null);
+});
+
+test('ID de usuário é único e o e-mail passa a ser opcional', () => {
+  const setorFiscal = conn.prepare("SELECT id FROM setores WHERE nome = 'Fiscal'").get();
+  const criado = usuariosDom.criar({
+    nome: 'Teste Sem Email',
+    senha: 'teste123',
+    setor_id: setorFiscal.id,
+    perfil: 'Usuário',
+  });
+  assert.strictEqual(criado.login, 'teste.sem.email'); // derivado do nome
+  assert.strictEqual(criado.email, null);
+  assert.ok(usuariosDom.autenticar('teste.sem.email', 'teste123'));
+
+  assert.throws(
+    () =>
+      usuariosDom.criar({
+        nome: 'Outro',
+        login: 'ana.paula',
+        senha: 'teste123',
+        setor_id: setorFiscal.id,
+      }),
+    /já está em uso/
+  );
+});
+
+/* --------------------------------------------------- avisos para todos ---- */
+
+test('conclusão e impedimento publicam aviso visível para todos os usuários', () => {
+  parametros.definir('EXIGIR_UPLOAD_DOCUMENTOS', 'Não');
+  parametros.definir('EXIGIR_APROVACAO_GESTOR', 'Não');
+  parametros.definir('EXIGIR_REVISAO_FINAL', 'Não');
+
+  const antes = avisos.listar(admin.id, 500).length;
+
+  // impedimento
+  const impedido = novoProcesso(tipoBaixa.id);
+  const itemFiscal = checklist.doProcesso(impedido.id).find((i) => i.setor === 'Fiscal');
+  checklist.responder(
+    itemFiscal.id,
+    { resposta: 'Sim', possui_impedimento: 'Sim', descricao_impedimento: 'Certidão vencida.' },
+    fiscal
+  );
+
+  // conclusão
+  const concluido = novoProcesso(tipoCertidoes.id);
+  checklist.doProcesso(concluido.id).forEach((i) => checklist.responder(i.id, { resposta: 'Sim' }, admin));
+  processos.concluir(concluido.id, admin);
+
+  const lista = avisos.listar(admin.id, 500);
+  assert.strictEqual(lista.length, antes + 2);
+
+  const avisoConclusao = lista.find((a) => a.tipo === 'concluido' && a.processo_id === concluido.id);
+  const avisoImpedimento = lista.find((a) => a.tipo === 'impedido' && a.processo_id === impedido.id);
+  assert.ok(avisoConclusao, 'deveria publicar aviso de conclusão');
+  assert.ok(avisoImpedimento, 'deveria publicar aviso de impedimento');
+  assert.match(avisoImpedimento.mensagem, /Certidão vencida/);
+
+  // O aviso vale para qualquer usuário, não só para quem agiu.
+  assert.ok(avisos.contarNaoLidos(fiscal.id) >= 2);
+  assert.ok(avisos.contarNaoLidos(admin.id) >= 2);
+
+  // Dispensar afeta apenas quem dispensou.
+  avisos.marcarLido(avisoConclusao.id, fiscal.id);
+  assert.ok(
+    !avisos.naoLidos(fiscal.id, 50).some((a) => a.id === avisoConclusao.id),
+    'o aviso deveria sumir para quem dispensou'
+  );
+  assert.ok(
+    avisos.naoLidos(admin.id, 50).some((a) => a.id === avisoConclusao.id),
+    'o aviso deveria continuar visível para os demais'
+  );
+
+  const anteriores = avisos.contarNaoLidos(fiscal.id);
+  assert.ok(anteriores > 0);
+  avisos.marcarTodosLidos(fiscal.id);
+  assert.strictEqual(avisos.contarNaoLidos(fiscal.id), 0);
+
+  parametros.definir('EXIGIR_REVISAO_FINAL', 'Sim');
 });
 
 test.after(() => {

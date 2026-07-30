@@ -4,7 +4,8 @@
   <div class="cartao">
     <h3>Meus dados</h3>
     <div class="campo"><label>Nome</label><div><%= usuario.nome %></div></div>
-    <div class="campo"><label>E-mail</label><div><%= usuario.email %></div></div>
+    <div class="campo"><label>ID de usuário (login)</label><div class="mono"><%= usuario.login %></div></div>
+    <div class="campo"><label>E-mail (contato)</label><div><%= usuario.email || '—' %></div></div>
     <div class="campo"><label>Setor</label><div><%= usuario.setor %></div></div>
     <div class="campo"><label>Perfil</label><div><%= usuario.perfil %></div></div>
     <p class="dica">Alterações de setor e perfil são feitas por um administrador em Administração → Usuários.</p>

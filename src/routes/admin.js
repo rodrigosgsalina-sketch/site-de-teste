@@ -89,7 +89,7 @@ router.post('/usuarios', (req, res, next) => {
       processoId: null,
       acao: 'Usuário Criado',
       usuario: req.session.usuario,
-      observacao: `${criado.nome} (${criado.email}) — ${criado.setor}/${criado.perfil}`,
+      observacao: `${criado.nome} (${criado.login}) — ${criado.setor}/${criado.perfil}`,
     });
     flash(req, 'sucesso', `Usuário ${criado.nome} criado.`);
     res.redirect('/admin/usuarios');
@@ -109,7 +109,7 @@ router.post('/usuarios/:id', (req, res, next) => {
       processoId: null,
       acao: 'Usuário Atualizado',
       usuario: req.session.usuario,
-      observacao: `${atualizado.nome} — ${atualizado.setor}/${atualizado.perfil}/${atualizado.status}`,
+      observacao: `${atualizado.nome} (${atualizado.login}) — ${atualizado.setor}/${atualizado.perfil}/${atualizado.status}`,
     });
     flash(req, 'sucesso', `Usuário ${atualizado.nome} atualizado.`);
     res.redirect('/admin/usuarios');

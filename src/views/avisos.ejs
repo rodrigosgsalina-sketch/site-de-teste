@@ -1,0 +1,65 @@
+<%- include('partials/cabecalho', { titulo: titulo }) %>
+
+<div class="cartao">
+  <div class="cartao-titulo">
+    <div>
+      <h2>Mural de avisos</h2>
+      <p class="dica" style="margin:0">
+        Todo processo concluído com sucesso ou impedido gera um aviso para todos os usuários da
+        plataforma. Dispensar um aviso afeta apenas a sua tela.
+      </p>
+    </div>
+    <% if (avisosTotal) { %>
+      <form method="post" action="/avisos/lidos">
+        <input type="hidden" name="retorno" value="/avisos">
+        <button class="botao botao-secundario botao-pequeno">Marcar todos como lidos</button>
+      </form>
+    <% } %>
+  </div>
+
+  <% if (!lista.length) { %>
+    <p class="vazio">Nenhum aviso publicado até agora.</p>
+  <% } else { %>
+    <div class="tabela-scroll">
+      <table class="tabela">
+        <thead>
+          <tr><th>Quando</th><th>Tipo</th><th>Aviso</th><th>Processo</th><th>Situação</th></tr>
+        </thead>
+        <tbody>
+          <% lista.forEach(function (av) { %>
+            <tr>
+              <td><%= fmtDataHora(av.criado_em) %></td>
+              <td>
+                <span class="etiqueta <%= av.tipo === 'concluido' ? 'et-verde' : 'et-vermelho' %>">
+                  <%= av.tipo === 'concluido' ? 'Concluído' : 'Impedido' %>
+                </span>
+              </td>
+              <td>
+                <strong><%= av.titulo %></strong>
+                <div class="item-meta"><%= av.mensagem %></div>
+                <div class="item-meta">Registrado por <%= av.usuario_nome || 'Sistema' %></div>
+              </td>
+              <td>
+                <% if (av.processo_id) { %>
+                  <a class="mono" href="/processos/<%= av.processo_id %>"><%= av.processo_codigo %></a>
+                <% } else { %>—<% } %>
+              </td>
+              <td>
+                <% if (av.lido_em) { %>
+                  <span class="etiqueta et-neutro">lido</span>
+                <% } else { %>
+                  <form method="post" action="/avisos/<%= av.id %>/lido">
+                    <input type="hidden" name="retorno" value="/avisos">
+                    <button class="botao botao-secundario botao-pequeno">Marcar como lido</button>
+                  </form>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</div>
+
+<%- include('partials/rodape') %>
