@@ -10,6 +10,14 @@ ponto de configuração da plataforma.
 
 ---
 
+## Requisitos
+
+Apenas **Node.js 22.5 ou superior** (recomendado: Node 22 LTS ou Node 24) — nada além disso.
+
+O banco usa o SQLite embutido no próprio Node (`node:sqlite`), então **não há módulo nativo para
+compilar**: a instalação não pede Visual Studio, Xcode, Python nem node-gyp, e funciona igual em
+Windows, macOS e Linux.
+
 ## Como rodar
 
 ```bash
@@ -71,13 +79,13 @@ ID em Administração → Usuários; deixando o campo vazio, o sistema deriva do
 | Camada | Escolha | Motivo |
 |---|---|---|
 | Servidor | Node.js + Express | simples de hospedar, sem etapa de build |
-| Banco | SQLite (better-sqlite3) | relacional, arquivo único, backup trivial; migrar para Postgres exige só trocar a camada `src/db` |
+| Banco | SQLite embutido no Node (`node:sqlite`) | relacional, arquivo único, backup trivial, **sem dependência nativa para compilar**; migrar para Postgres exige só trocar `src/db/driver.js` |
 | Views | EJS renderizado no servidor | páginas rápidas, funcionam sem JavaScript |
 | Gráficos | Chart.js servido localmente | sem CDN |
 | PDF | PDFKit | checklist e relatório final gerados no servidor |
 | Sessão/senha | express-session + bcryptjs | store de sessão em SQLite (`src/lib/session-store.js`) |
 
-Não há dependência de CDN, serviço externo ou etapa de compilação.
+Não há dependência de CDN, serviço externo, etapa de compilação ou módulo nativo.
 
 ---
 
@@ -91,7 +99,8 @@ src/
   db/
     schema.sql           esquema relacional (uma tabela por aba da planilha)
     seed-data.js         conteúdo da planilha (fonte da carga inicial)
-    index.js             conexão e transações
+    driver.js            acesso ao SQLite embutido do Node (sem módulo nativo)
+    index.js             conexão, migrações e transações
   domain/                regras de negócio (testáveis, sem Express)
     processos.js         criação, numeração, motor de status, conclusão, prazos
     checklist.js         clonagem do modelo, respostas, impedimentos, fila
@@ -247,6 +256,23 @@ mensal (`META_PROCESSOS_MES`) versus realizado. Cada bloco respeita a preferênc
 correspondente em `PARAMETROS` (`EXIBIR_GRAFICOS`, `EXIBIR_TEMPO_MEDIO`, …).
 
 ---
+
+## Se algo der errado na instalação
+
+**`npm error ... better-sqlite3 ... gyp ERR! find VS`** — versões anteriores deste projeto usavam o
+`better-sqlite3`, um módulo nativo que precisa ser compilado em C++ quando não existe binário pronto
+para a sua versão do Node. A partir desta versão o projeto usa o SQLite embutido no Node e o erro
+não acontece mais. Se você veio de uma cópia antiga, apague a pasta `node_modules` e o arquivo
+`package-lock.json` e rode `npm install` de novo.
+
+**`node:sqlite não disponível` ou erro pedindo Node 22.5+** — rode `node -v`. Se a versão for
+anterior à 22.5, instale o Node 22 LTS ou o Node 24 em <https://nodejs.org> e repita `npm install`.
+
+**A porta 3000 já está em uso** — defina outra no arquivo `.env` (`PORT=3001`) ou na linha de
+comando (`PORT=3001 npm start`).
+
+**Quero recomeçar do zero** — `npm run reset && npm run seed` apaga o banco e os anexos e recarrega
+o modelo da planilha.
 
 ## Backup
 

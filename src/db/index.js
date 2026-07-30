@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const Database = require('better-sqlite3');
+const Banco = require('./driver');
 const config = require('../config');
 
 let db = null;
@@ -10,7 +10,7 @@ let db = null;
 function open(file = config.dbFile) {
   if (db) return db;
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
-  db = new Database(file);
+  db = new Banco(file);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   migrate(db);
