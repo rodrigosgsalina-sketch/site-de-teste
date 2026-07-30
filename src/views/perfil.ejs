@@ -1,0 +1,31 @@
+<%- include('partials/cabecalho', { titulo: titulo }) %>
+
+<div class="grade grade-2">
+  <div class="cartao">
+    <h3>Meus dados</h3>
+    <div class="campo"><label>Nome</label><div><%= usuario.nome %></div></div>
+    <div class="campo"><label>E-mail</label><div><%= usuario.email %></div></div>
+    <div class="campo"><label>Setor</label><div><%= usuario.setor %></div></div>
+    <div class="campo"><label>Perfil</label><div><%= usuario.perfil %></div></div>
+    <p class="dica">Alterações de setor e perfil são feitas por um administrador em Administração → Usuários.</p>
+  </div>
+
+  <div class="cartao">
+    <h3>Alterar senha</h3>
+    <% if (erro) { %><div class="aviso aviso-erro"><%= erro %></div><% } %>
+    <% if (sucesso) { %><div class="aviso aviso-sucesso"><%= sucesso %></div><% } %>
+    <form method="post" action="/perfil/senha">
+      <div class="campo">
+        <label for="senha_atual">Senha atual <span class="obrig">*</span></label>
+        <input type="password" id="senha_atual" name="senha_atual" required autocomplete="current-password">
+      </div>
+      <div class="campo">
+        <label for="nova_senha">Nova senha <span class="obrig">*</span></label>
+        <input type="password" id="nova_senha" name="nova_senha" required minlength="6" autocomplete="new-password">
+      </div>
+      <button class="botao">Alterar senha</button>
+    </form>
+  </div>
+</div>
+
+<%- include('partials/rodape') %>

@@ -1,0 +1,119 @@
+<%- include('partials/cabecalho', { titulo: titulo }) %>
+
+<div class="grade grade-4" style="margin-bottom:1rem">
+  <div class="indicador">
+    <div class="valor"><%= resumo.pendentes %></div>
+    <div class="rotulo">Itens pendentes</div>
+  </div>
+  <div class="indicador <%= resumo.impedidos ? 'alerta' : '' %>">
+    <div class="valor"><%= resumo.impedidos %></div>
+    <div class="rotulo">Impedimentos</div>
+  </div>
+  <div class="indicador <%= resumo.atrasados ? 'alerta' : '' %>">
+    <div class="valor"><%= resumo.atrasados %></div>
+    <div class="rotulo">Fora do prazo</div>
+  </div>
+  <div class="indicador">
+    <div class="valor"><%= meus.length %></div>
+    <div class="rotulo">Processos do meu setor</div>
+  </div>
+</div>
+
+<div class="cartao">
+  <div class="cartao-titulo">
+    <h2>Itens do meu setor</h2>
+    <span class="etiqueta et-neutro"><%= setores.join(' · ') %></span>
+  </div>
+
+  <% if (!itens.length) { %>
+    <p class="vazio">Nenhum item pendente para o seu setor. 🎉</p>
+  <% } else { %>
+    <div class="tabela-scroll">
+      <table class="tabela">
+        <thead>
+          <tr><th>Prazo</th><th>Processo</th><th>Setor</th><th>Item</th><th>Situação</th><th></th></tr>
+        </thead>
+        <tbody>
+          <% itens.slice(0, 25).forEach(function (item) { %>
+            <tr>
+              <td class="<%= item.prazo && new Date(item.prazo) < new Date() ? 'item-atrasado' : '' %>">
+                <%= fmtDataHora(item.prazo) %>
+              </td>
+              <td>
+                <a class="mono" href="/processos/<%= item.processo_id %>#item-<%= item.id %>"><%= item.processo_codigo %></a>
+                <div class="item-meta"><%= item.razao_social %> · <%= item.tipo_processo %></div>
+              </td>
+              <td><%= item.setor %></td>
+              <td>
+                <%= item.item %>
+                <% if (!item.obrigatorio) { %><span class="etiqueta et-opcional">opcional</span><% } %>
+                <% if (item.descricao_impedimento) { %><div class="item-meta">Impedimento: <%= item.descricao_impedimento %></div><% } %>
+              </td>
+              <td><span class="etiqueta <%= classeItem(item.status_item) %>"><%= item.status_item %></span></td>
+              <td><a class="botao botao-secundario botao-pequeno" href="/processos/<%= item.processo_id %>#item-<%= item.id %>">Responder</a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <% if (itens.length > 25) { %>
+      <p style="margin-top:.8rem"><a href="/checklist/fila">Ver a fila completa (<%= itens.length %> itens)</a></p>
+    <% } %>
+  <% } %>
+</div>
+
+<div class="grade grade-2">
+  <div class="cartao">
+    <h3>Processos recentes</h3>
+    <% if (!meus.length) { %>
+      <p class="vazio">Nenhum processo visível para o seu setor.</p>
+    <% } else { %>
+      <div class="tabela-scroll">
+        <table class="tabela">
+          <thead><tr><th>Número</th><th>Empresa</th><th>Status</th><th>Previsão</th></tr></thead>
+          <tbody>
+            <% meus.forEach(function (p) { %>
+              <tr>
+                <td><a class="mono" href="/processos/<%= p.id %>"><%= p.codigo %></a></td>
+                <td><%= p.razao_social %></td>
+                <td><span class="etiqueta <%= classeStatus(p.status) %>"><%= p.status %></span></td>
+                <td><%= fmtData(p.data_previsao) %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+
+  <div class="cartao">
+    <h3>Alertas de prazo</h3>
+    <% if (!alertas.length) { %>
+      <p class="vazio">Nenhum processo próximo do vencimento.</p>
+    <% } else { %>
+      <div class="tabela-scroll">
+        <table class="tabela">
+          <thead><tr><th>Número</th><th>Empresa</th><th>Previsão</th><th>Situação</th></tr></thead>
+          <tbody>
+            <% alertas.forEach(function (p) { %>
+              <tr>
+                <td><a class="mono" href="/processos/<%= p.id %>"><%= p.codigo %></a></td>
+                <td><%= p.razao_social %></td>
+                <td><%= fmtData(p.data_previsao) %></td>
+                <td>
+                  <% if (p.dias_restantes < 0) { %>
+                    <span class="etiqueta et-vermelho">atrasado há <%= Math.abs(p.dias_restantes) %> dia(s)</span>
+                  <% } else { %>
+                    <span class="etiqueta et-amarelo">vence em <%= p.dias_restantes %> dia(s)</span>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+</div>
+
+<%- include('partials/rodape') %>

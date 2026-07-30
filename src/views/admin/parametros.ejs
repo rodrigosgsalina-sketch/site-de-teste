@@ -1,0 +1,57 @@
+<%- include('../partials/cabecalho', { titulo: titulo }) %>
+
+<div class="cartao">
+  <div class="aviso aviso-info">
+    Estes são os parâmetros da aba <strong>PARAMETROS</strong> da planilha. As alterações valem
+    imediatamente para novos processos e para as regras de bloqueio, notificação e exibição.
+    Toda alteração fica registrada na auditoria.
+  </div>
+  <div class="campo">
+    <input type="search" data-filtra="#tabela-parametros" placeholder="Filtrar parâmetro por chave ou descrição…">
+  </div>
+</div>
+
+<form method="post" action="/admin/parametros">
+  <table id="tabela-parametros" style="width:100%;border-collapse:separate;border-spacing:0">
+    <tbody>
+      <% grupos.forEach(function (entrada) { %>
+        <% var categoria = entrada[0], itens = entrada[1]; %>
+        <tr><td colspan="2" style="padding:0">
+          <div class="cartao">
+            <h3><%= categoria %></h3>
+            <div class="grade grade-2">
+              <% itens.forEach(function (p) { %>
+                <div class="campo" style="margin:0">
+                  <% if (p.tipo === 'booleano') { %>
+                    <div class="checkbox">
+                      <input type="checkbox" id="campo__<%= p.chave %>" name="campo__<%= p.chave %>" value="Sim"
+                             <%= ['sim','s','true','1'].includes(String(p.valor || '').toLowerCase()) ? 'checked' : '' %>
+                             <%= p.editavel ? '' : 'disabled' %>>
+                      <label for="campo__<%= p.chave %>">
+                        <span class="mono"><%= p.chave %></span>
+                        <div class="dica"><%= p.descricao || '' %></div>
+                      </label>
+                    </div>
+                  <% } else { %>
+                    <label for="campo__<%= p.chave %>"><span class="mono"><%= p.chave %></span></label>
+                    <input type="<%= p.tipo === 'numero' ? 'number' : (p.tipo === 'email' ? 'email' : 'text') %>"
+                           id="campo__<%= p.chave %>" name="campo__<%= p.chave %>"
+                           value="<%= p.valor || '' %>" <%= p.editavel ? '' : 'disabled' %>>
+                    <div class="dica"><%= p.descricao || '' %></div>
+                  <% } %>
+                </div>
+              <% }) %>
+            </div>
+          </div>
+        </td></tr>
+      <% }) %>
+    </tbody>
+  </table>
+
+  <div class="cartao acoes">
+    <button class="botao">Salvar parâmetros</button>
+    <a class="botao botao-secundario" href="/admin">Voltar</a>
+  </div>
+</form>
+
+<%- include('../partials/rodape') %>

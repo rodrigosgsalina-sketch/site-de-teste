@@ -1,0 +1,118 @@
+<%- include('../partials/cabecalho', { titulo: titulo }) %>
+
+<div class="cartao">
+  <div class="aviso aviso-info">
+    Ao salvar, o sistema gera o número do processo automaticamente (PARAMETROS → Numeração),
+    define o status <strong>Aberto</strong>, calcula a previsão de conclusão somando
+    <strong><%= prazoPadrao %> dia(s)</strong> à data de abertura e clona do
+    <strong>CHECKLIST_MODELO</strong> todos os itens do tipo escolhido mais os itens aplicáveis a todos os processos.
+  </div>
+
+  <% if (erro) { %><div class="aviso aviso-erro"><%= erro %></div><% } %>
+
+  <form method="post" action="/processos">
+    <fieldset>
+      <legend>Processo</legend>
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="tipo_processo_id">Tipo de processo <span class="obrig">*</span></label>
+          <select id="tipo_processo_id" name="tipo_processo_id" required>
+            <option value="">Selecione…</option>
+            <% tipos.forEach(function (t) { %>
+              <option value="<%= t.id %>" <%= String(valores.tipo_processo_id) === String(t.id) ? 'selected' : '' %>><%= t.nome %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="data_abertura">Data de abertura</label>
+          <input type="date" id="data_abertura" name="data_abertura" value="<%= valores.data_abertura || '' %>">
+        </div>
+        <div class="campo">
+          <label for="data_previsao">Previsão de conclusão</label>
+          <input type="date" id="data_previsao" name="data_previsao" value="<%= valores.data_previsao || '' %>">
+          <div class="dica">Deixe em branco para calcular automaticamente.</div>
+        </div>
+        <div class="campo">
+          <label for="responsavel_interno_id">Responsável interno</label>
+          <select id="responsavel_interno_id" name="responsavel_interno_id">
+            <option value="">—</option>
+            <% responsaveis.forEach(function (u) { %>
+              <option value="<%= u.id %>" <%= String(valores.responsavel_interno_id) === String(u.id) ? 'selected' : '' %>><%= u.nome %> (<%= u.setor %>)</option>
+            <% }) %>
+          </select>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Empresa</legend>
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="razao_social">Razão social <span class="obrig">*</span></label>
+          <input type="text" id="razao_social" name="razao_social" value="<%= valores.razao_social || '' %>" required>
+        </div>
+        <div class="campo">
+          <label for="nome_fantasia">Nome fantasia</label>
+          <input type="text" id="nome_fantasia" name="nome_fantasia" value="<%= valores.nome_fantasia || '' %>">
+        </div>
+        <div class="campo">
+          <label for="cnpj">CNPJ</label>
+          <input type="text" id="cnpj" name="cnpj" value="<%= valores.cnpj || '' %>" placeholder="00.000.000/0000-00">
+        </div>
+        <div class="campo">
+          <label for="inscricao_estadual">Inscrição estadual</label>
+          <input type="text" id="inscricao_estadual" name="inscricao_estadual" value="<%= valores.inscricao_estadual || '' %>">
+        </div>
+        <div class="campo">
+          <label for="inscricao_municipal">Inscrição municipal</label>
+          <input type="text" id="inscricao_municipal" name="inscricao_municipal" value="<%= valores.inscricao_municipal || '' %>">
+        </div>
+        <div class="campo">
+          <label for="municipio">Município</label>
+          <input type="text" id="municipio" name="municipio" value="<%= valores.municipio || '' %>">
+        </div>
+        <div class="campo">
+          <label for="uf">UF</label>
+          <input type="text" id="uf" name="uf" maxlength="2" value="<%= valores.uf || '' %>">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Contato do cliente</legend>
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="cliente_responsavel">Cliente responsável</label>
+          <input type="text" id="cliente_responsavel" name="cliente_responsavel" value="<%= valores.cliente_responsavel || '' %>">
+        </div>
+        <div class="campo">
+          <label for="telefone">Telefone</label>
+          <input type="tel" id="telefone" name="telefone" value="<%= valores.telefone || '' %>">
+        </div>
+        <div class="campo">
+          <label for="email">E-mail</label>
+          <input type="email" id="email" name="email" value="<%= valores.email || '' %>">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Complemento</legend>
+      <div class="campo">
+        <label for="etapa_atual">Etapa atual</label>
+        <input type="text" id="etapa_atual" name="etapa_atual" value="<%= valores.etapa_atual || '' %>" placeholder="Preenchida automaticamente conforme o checklist">
+      </div>
+      <div class="campo">
+        <label for="observacoes">Observações</label>
+        <textarea id="observacoes" name="observacoes"><%= valores.observacoes || '' %></textarea>
+      </div>
+    </fieldset>
+
+    <div class="acoes">
+      <button class="botao">Abrir processo</button>
+      <a class="botao botao-secundario" href="/processos">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<%- include('../partials/rodape') %>

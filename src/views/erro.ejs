@@ -1,0 +1,13 @@
+<%- include('partials/cabecalho', { titulo: titulo }) %>
+<% if (typeof usuario === 'undefined' || !usuario) { %>
+  <div style="padding:2rem;max-width:640px;margin:0 auto">
+<% } %>
+  <div class="cartao">
+    <h2><%= titulo %></h2>
+    <p><%= mensagem %></p>
+    <a class="botao botao-secundario" href="/">Voltar ao início</a>
+  </div>
+<% if (typeof usuario === 'undefined' || !usuario) { %>
+  </div>
+<% } %>
+<%- include('partials/rodape') %>

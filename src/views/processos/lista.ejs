@@ -1,0 +1,82 @@
+<%- include('../partials/cabecalho', { titulo: titulo }) %>
+
+<div class="cartao">
+  <form method="get" action="/processos" class="filtros">
+    <div class="campo">
+      <label for="q">Buscar</label>
+      <input type="search" id="q" name="q" value="<%= filtros.busca %>" placeholder="Número, razão social ou CNPJ">
+    </div>
+    <div class="campo">
+      <label for="status">Status</label>
+      <select id="status" name="status">
+        <option value="">Todos</option>
+        <% statusLista.forEach(function (s) { %>
+          <option value="<%= s.nome %>" <%= filtros.status === s.nome ? 'selected' : '' %>><%= s.nome %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="campo">
+      <label for="tipo">Tipo</label>
+      <select id="tipo" name="tipo">
+        <option value="">Todos</option>
+        <% tipos.forEach(function (t) { %>
+          <option value="<%= t.id %>" <%= String(filtros.tipoId) === String(t.id) ? 'selected' : '' %>><%= t.nome %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="campo checkbox" style="align-self:center">
+      <input type="checkbox" id="atrasados" name="atrasados" value="1" <%= filtros.atrasados ? 'checked' : '' %>>
+      <label for="atrasados">Somente atrasados</label>
+    </div>
+    <div class="acoes">
+      <button class="botao botao-pequeno">Filtrar</button>
+      <a class="botao botao-secundario botao-pequeno" href="/processos">Limpar</a>
+      <a class="botao botao-pequeno" href="/processos/novo">Abrir processo</a>
+    </div>
+  </form>
+</div>
+
+<div class="cartao">
+  <div class="cartao-titulo">
+    <h2><%= processos.length %> processo(s)</h2>
+  </div>
+
+  <% if (!processos.length) { %>
+    <p class="vazio">Nenhum processo encontrado com os filtros atuais.</p>
+  <% } else { %>
+    <div class="tabela-scroll">
+      <table class="tabela">
+        <thead>
+          <tr>
+            <th>Número</th><th>Empresa</th><th>Tipo</th><th>Status</th>
+            <th>Etapa atual</th><th>Abertura</th><th>Previsão</th><th>Responsável</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% processos.forEach(function (p) { %>
+            <tr>
+              <td><a class="mono" href="/processos/<%= p.id %>"><%= p.codigo %></a></td>
+              <td>
+                <%= p.razao_social %>
+                <% if (p.nome_fantasia) { %><div class="item-meta"><%= p.nome_fantasia %></div><% } %>
+              </td>
+              <td><%= p.tipo_processo %></td>
+              <td><span class="etiqueta <%= classeStatus(p.status) %>"><%= p.status %></span></td>
+              <td><%= p.etapa_atual || '—' %></td>
+              <td><%= fmtData(p.data_abertura) %></td>
+              <td>
+                <%= fmtData(p.data_previsao) %>
+                <% if (!p.status_final && p.data_previsao && new Date(p.data_previsao) < new Date(new Date().toISOString().slice(0,10))) { %>
+                  <span class="etiqueta et-vermelho">atrasado</span>
+                <% } %>
+              </td>
+              <td><%= p.responsavel_interno || '—' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</div>
+
+<%- include('../partials/rodape') %>

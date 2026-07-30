@@ -1,0 +1,96 @@
+<%- include('../partials/cabecalho', { titulo: titulo }) %>
+
+<div class="grade grade-2">
+  <div class="cartao">
+    <h3>Tipos de processo</h3>
+    <form method="post" action="/admin/tabelas/tipos" class="filtros" style="margin-bottom:1rem">
+      <div class="campo" style="flex:1">
+        <label for="novo-tipo">Novo tipo</label>
+        <input type="text" id="novo-tipo" name="nome" required>
+      </div>
+      <button class="botao botao-pequeno">Adicionar</button>
+    </form>
+
+    <div class="tabela-scroll">
+      <table class="tabela">
+        <thead><tr><th>Tipo</th><th>Ativo</th><th></th></tr></thead>
+        <tbody>
+          <% tipos.forEach(function (t) { %>
+            <tr>
+              <td><input type="text" form="tipo-<%= t.id %>" name="nome" value="<%= t.nome %>" required></td>
+              <td><input type="checkbox" form="tipo-<%= t.id %>" name="ativo" value="1" <%= t.ativo ? 'checked' : '' %>></td>
+              <td><button class="botao botao-secundario botao-pequeno" form="tipo-<%= t.id %>">Salvar</button></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <% tipos.forEach(function (t) { %>
+      <form id="tipo-<%= t.id %>" method="post" action="/admin/tabelas/tipos" hidden>
+        <input type="hidden" name="id" value="<%= t.id %>">
+      </form>
+    <% }) %>
+    <p class="dica">Tipos inativos deixam de aparecer na abertura de processos, mas continuam válidos nos processos já criados.</p>
+  </div>
+
+  <div class="cartao">
+    <h3>Setores</h3>
+    <form method="post" action="/admin/tabelas/setores" class="filtros" style="margin-bottom:1rem">
+      <div class="campo" style="flex:1">
+        <label for="novo-setor">Novo setor</label>
+        <input type="text" id="novo-setor" name="nome" required>
+      </div>
+      <div class="campo checkbox" style="align-self:center">
+        <input type="checkbox" id="novo-setor-aux" name="auxiliar" value="1">
+        <label for="novo-setor-aux">Auxiliar</label>
+      </div>
+      <button class="botao botao-pequeno">Adicionar</button>
+    </form>
+
+    <div class="tabela-scroll">
+      <table class="tabela">
+        <thead><tr><th>Setor</th><th>Auxiliar</th><th>Ativo</th><th></th></tr></thead>
+        <tbody>
+          <% setores.forEach(function (s) { %>
+            <tr>
+              <td><input type="text" form="setor-<%= s.id %>" name="nome" value="<%= s.nome %>" required></td>
+              <td><input type="checkbox" form="setor-<%= s.id %>" name="auxiliar" value="1" <%= s.auxiliar ? 'checked' : '' %>></td>
+              <td><input type="checkbox" form="setor-<%= s.id %>" name="ativo" value="1" <%= s.ativo ? 'checked' : '' %>></td>
+              <td><button class="botao botao-secundario botao-pequeno" form="setor-<%= s.id %>">Salvar</button></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <% setores.forEach(function (s) { %>
+      <form id="setor-<%= s.id %>" method="post" action="/admin/tabelas/setores" hidden>
+        <input type="hidden" name="id" value="<%= s.id %>">
+      </form>
+    <% }) %>
+    <p class="dica">Setores <strong>auxiliares</strong> (Sócios, Cliente, TI, Qualidade, Financeiro) aparecem no checklist mas não têm equipe própria: são respondidos pelo Administrativo e pelos gestores.</p>
+  </div>
+</div>
+
+<div class="cartao">
+  <h3>Status de processo</h3>
+  <p class="dica">Os status são definidos automaticamente pelo andamento do checklist; os marcados como “espera” podem ser aplicados manualmente na tela do processo.</p>
+  <div class="tabela-scroll">
+    <table class="tabela">
+      <thead><tr><th>#</th><th>Status</th><th>Encerra o processo</th><th>Espera externa</th></tr></thead>
+      <tbody>
+        <% status.forEach(function (s) { %>
+          <tr>
+            <td class="num"><%= s.ordem %></td>
+            <td><span class="etiqueta <%= classeStatus(s.nome) %>"><%= s.nome %></span></td>
+            <td><%= s.final ? 'Sim' : 'Não' %></td>
+            <td><%= s.espera ? 'Sim' : 'Não' %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('../partials/rodape') %>

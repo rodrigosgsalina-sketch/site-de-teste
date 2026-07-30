@@ -1,0 +1,29 @@
+<%- include('../partials/cabecalho', { titulo: titulo }) %>
+
+<div class="cartao">
+  <div class="campo">
+    <input type="search" data-filtra="#tabela-auditoria" placeholder="Filtrar por ação, usuário ou processo…">
+  </div>
+  <div class="tabela-scroll">
+    <table class="tabela" id="tabela-auditoria">
+      <thead><tr><th>Data/hora</th><th>Processo</th><th>Ação</th><th>Usuário</th><th>Observação</th></tr></thead>
+      <tbody>
+        <% lista.forEach(function (h) { %>
+          <tr>
+            <td><%= fmtDataHora(h.data_hora) %></td>
+            <td>
+              <% if (h.processo_codigo) { %>
+                <a class="mono" href="/processos/<%= h.processo_id %>"><%= h.processo_codigo %></a>
+              <% } else { %>—<% } %>
+            </td>
+            <td><%= h.acao %></td>
+            <td><%= h.usuario_nome || 'Sistema' %></td>
+            <td><%= h.observacao || '' %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('../partials/rodape') %>

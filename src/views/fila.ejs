@@ -1,0 +1,48 @@
+<%- include('partials/cabecalho', { titulo: titulo }) %>
+
+<div class="cartao">
+  <div class="cartao-titulo">
+    <h2>Fila de <%= setores.join(' · ') %></h2>
+    <div class="abas" style="border:0;margin:0">
+      <a href="/checklist/fila" class="<%= todos ? '' : 'ativo' %>">Somente pendentes</a>
+      <a href="/checklist/fila?todos=1" class="<%= todos ? 'ativo' : '' %>">Todos os itens</a>
+    </div>
+  </div>
+
+  <div class="campo">
+    <input type="search" data-filtra="#tabela-fila" placeholder="Filtrar por processo, empresa ou item…">
+  </div>
+
+  <% if (!itens.length) { %>
+    <p class="vazio">Nenhum item na fila.</p>
+  <% } else { %>
+    <div class="tabela-scroll">
+      <table class="tabela" id="tabela-fila">
+        <thead>
+          <tr><th>Prazo</th><th>Processo</th><th>Empresa</th><th>Setor</th><th>Item</th><th>Situação</th><th></th></tr>
+        </thead>
+        <tbody>
+          <% itens.forEach(function (item) { %>
+            <tr>
+              <td class="<%= item.prazo && new Date(item.prazo) < new Date() && item.status_item !== 'Concluído' ? 'item-atrasado' : '' %>">
+                <%= fmtDataHora(item.prazo) %>
+              </td>
+              <td><a class="mono" href="/processos/<%= item.processo_id %>#item-<%= item.id %>"><%= item.processo_codigo %></a></td>
+              <td><%= item.razao_social %><div class="item-meta"><%= item.tipo_processo %></div></td>
+              <td><%= item.setor %></td>
+              <td>
+                <%= item.item %>
+                <% if (!item.obrigatorio) { %><span class="etiqueta et-opcional">opcional</span><% } %>
+                <% if (item.descricao_impedimento) { %><div class="item-meta">Impedimento: <%= item.descricao_impedimento %></div><% } %>
+              </td>
+              <td><span class="etiqueta <%= classeItem(item.status_item) %>"><%= item.status_item %></span></td>
+              <td><a class="botao botao-secundario botao-pequeno" href="/processos/<%= item.processo_id %>#item-<%= item.id %>">Abrir</a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</div>
+
+<%- include('partials/rodape') %>

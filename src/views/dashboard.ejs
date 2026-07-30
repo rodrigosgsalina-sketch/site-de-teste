@@ -1,0 +1,211 @@
+<%- include('partials/cabecalho', { titulo: titulo }) %>
+
+<div class="cartao">
+  <form method="get" action="/dashboard" class="filtros">
+    <div class="campo">
+      <label for="inicio">Período — início</label>
+      <input type="date" id="inicio" name="inicio" value="<%= periodo.inicio %>">
+    </div>
+    <div class="campo">
+      <label for="fim">Período — fim</label>
+      <input type="date" id="fim" name="fim" value="<%= periodo.fim %>">
+    </div>
+    <button class="botao botao-pequeno">Aplicar</button>
+    <a class="botao botao-secundario botao-pequeno" href="/dashboard">Mês atual</a>
+  </form>
+</div>
+
+<div class="grade grade-4" style="margin-bottom:1rem">
+  <div class="indicador">
+    <div class="valor"><%= indicadores.total %></div>
+    <div class="rotulo">Processos cadastrados</div>
+  </div>
+  <div class="indicador">
+    <div class="valor"><%= indicadores.em_andamento %></div>
+    <div class="rotulo">Em andamento</div>
+  </div>
+  <div class="indicador <%= indicadores.impedidos ? 'alerta' : '' %>">
+    <div class="valor"><%= indicadores.impedidos %></div>
+    <div class="rotulo">Impedidos</div>
+  </div>
+  <div class="indicador <%= indicadores.atrasados ? 'alerta' : '' %>">
+    <div class="valor"><%= indicadores.atrasados %></div>
+    <div class="rotulo">Atrasados</div>
+  </div>
+  <div class="indicador ok">
+    <div class="valor"><%= indicadores.concluidos_periodo %></div>
+    <div class="rotulo">Concluídos no período</div>
+  </div>
+  <div class="indicador">
+    <div class="valor"><%= indicadores.dias_medios_periodo || '—' %></div>
+    <div class="rotulo">Dias médios (período)</div>
+  </div>
+  <div class="indicador">
+    <div class="valor"><%= indicadores.meta %></div>
+    <div class="rotulo">Meta mensal</div>
+  </div>
+  <div class="indicador <%= indicadores.meta_percentual !== null && indicadores.meta_percentual >= 100 ? 'ok' : '' %>">
+    <div class="valor"><%= indicadores.meta_percentual === null ? '—' : indicadores.meta_percentual + '%' %></div>
+    <div class="rotulo">Meta atingida</div>
+    <% if (indicadores.meta) { %>
+      <div class="barra" style="margin-top:.4rem"><span style="width:<%= Math.min(100, indicadores.meta_percentual || 0) %>%"></span></div>
+    <% } %>
+  </div>
+</div>
+
+<% if (prefs.graficos) { %>
+  <div class="grade grade-2">
+    <div class="cartao">
+      <h3>Processos por status</h3>
+      <div class="grafico-caixa"><canvas id="grafico-status"></canvas></div>
+    </div>
+    <div class="cartao">
+      <h3>Processos por tipo</h3>
+      <div class="grafico-caixa"><canvas id="grafico-tipo"></canvas></div>
+    </div>
+  </div>
+<% } %>
+
+<div class="grade grade-2">
+  <% if (prefs.tempoMedio) { %>
+    <div class="cartao">
+      <h3>Tempo médio de conclusão por tipo</h3>
+      <% if (!tempoMedio.length) { %>
+        <p class="vazio">Nenhum processo concluído ainda.</p>
+      <% } else { %>
+        <div class="tabela-scroll">
+          <table class="tabela">
+            <thead><tr><th>Tipo</th><th class="num">Concluídos</th><th class="num">Dias médios</th></tr></thead>
+            <tbody>
+              <% tempoMedio.forEach(function (t) { %>
+                <tr><td><%= t.tipo %></td><td class="num"><%= t.concluidos %></td><td class="num"><%= t.dias_medios %></td></tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  <% } %>
+
+  <% if (prefs.produtividade) { %>
+    <div class="cartao">
+      <h3>Produtividade por setor (período)</h3>
+      <% if (!produtividade.length) { %>
+        <p class="vazio">Nenhum item respondido no período.</p>
+      <% } else { %>
+        <div class="tabela-scroll">
+          <table class="tabela">
+            <thead><tr><th>Setor</th><th class="num">Respondidos</th><th class="num">Impedimentos</th><th class="num">Fora do prazo</th></tr></thead>
+            <tbody>
+              <% produtividade.forEach(function (p) { %>
+                <tr>
+                  <td><%= p.setor %></td>
+                  <td class="num"><%= p.respondidos %></td>
+                  <td class="num"><%= p.impedimentos %></td>
+                  <td class="num"><%= p.fora_do_prazo %></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  <% } %>
+</div>
+
+<% if (prefs.ranking) { %>
+  <div class="cartao">
+    <h3>Ranking de colaboradores (período)</h3>
+    <% if (!ranking.length) { %>
+      <p class="vazio">Nenhum item respondido no período.</p>
+    <% } else { %>
+      <div class="tabela-scroll">
+        <table class="tabela">
+          <thead>
+            <tr><th>#</th><th>Colaborador</th><th>Setor</th><th class="num">Itens</th><th class="num">Concluídos</th><th class="num">Impedimentos</th><th class="num">No prazo</th></tr>
+          </thead>
+          <tbody>
+            <% ranking.forEach(function (r, i) { %>
+              <tr>
+                <td class="num"><%= i + 1 %>º</td>
+                <td><%= r.colaborador %></td>
+                <td><%= r.setor %></td>
+                <td class="num"><%= r.itens_respondidos %></td>
+                <td class="num"><%= r.concluidos %></td>
+                <td class="num"><%= r.impedimentos %></td>
+                <td class="num"><%= r.no_prazo %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+<% } %>
+
+<div class="grade grade-2">
+  <% if (prefs.impedidos) { %>
+    <div class="cartao">
+      <h3>Processos impedidos</h3>
+      <% if (!impedidos.length) { %>
+        <p class="vazio">Nenhum impedimento aberto.</p>
+      <% } else { %>
+        <div class="tabela-scroll">
+          <table class="tabela">
+            <thead><tr><th>Processo</th><th>Setor</th><th>Motivo</th><th>Desde</th></tr></thead>
+            <tbody>
+              <% impedidos.forEach(function (i) { %>
+                <tr>
+                  <td><a class="mono" href="/processos/<%= i.id %>"><%= i.codigo %></a>
+                    <div class="item-meta"><%= i.razao_social %></div></td>
+                  <td><%= i.setor %><div class="item-meta"><%= i.item %></div></td>
+                  <td><%= i.descricao_impedimento || '—' %></td>
+                  <td><%= fmtData(i.data_resposta) %></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  <% } %>
+
+  <% if (prefs.concluidos) { %>
+    <div class="cartao">
+      <h3>Concluídos no período</h3>
+      <% if (!concluidos.length) { %>
+        <p class="vazio">Nenhum processo concluído no período.</p>
+      <% } else { %>
+        <div class="tabela-scroll">
+          <table class="tabela">
+            <thead><tr><th>Processo</th><th>Tipo</th><th>Conclusão</th><th class="num">Dias</th></tr></thead>
+            <tbody>
+              <% concluidos.forEach(function (c) { %>
+                <tr>
+                  <td><a class="mono" href="/processos/<%= c.id %>"><%= c.codigo %></a>
+                    <div class="item-meta"><%= c.razao_social %></div></td>
+                  <td><%= c.tipo_processo %></td>
+                  <td><%= fmtData(c.data_conclusao) %></td>
+                  <td class="num"><%= Math.round(c.dias) %></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  <% } %>
+</div>
+
+<% if (prefs.graficos) { %>
+  <script src="/static/vendor/chart.umd.js"></script>
+  <script>
+    window.DADOS_DASHBOARD = {
+      porStatus: <%- JSON.stringify(porStatus) %>,
+      porTipo: <%- JSON.stringify(porTipo) %>
+    };
+  </script>
+  <script src="/static/js/dashboard.js"></script>
+<% } %>
+
+<%- include('partials/rodape') %>

@@ -1,0 +1,53 @@
+<%- include('../partials/cabecalho', { titulo: titulo }) %>
+
+<div class="cartao">
+  <div class="cartao-titulo">
+    <h3>Verificação de prazos</h3>
+    <form method="post" action="/admin/alertas/executar">
+      <button class="botao botao-pequeno">Executar agora</button>
+    </form>
+  </div>
+  <p class="dica">
+    A varredura roda automaticamente em segundo plano e pode ser disparada manualmente aqui.
+    Ela usa os parâmetros <span class="mono">ALERTAR_PROCESSO_ATRASADO</span> e
+    <span class="mono">DIAS_ALERTA_ATRASO</span>.
+  </p>
+</div>
+
+<div class="cartao">
+  <h3>Notificações registradas</h3>
+  <p class="dica">
+    Todas as notificações ficam registradas mesmo quando o transporte de e-mail está simulado
+    (<span class="mono">MAIL_TRANSPORT=mock</span>), o que permite auditar o que seria enviado.
+  </p>
+  <div class="campo">
+    <input type="search" data-filtra="#tabela-notificacoes" placeholder="Filtrar…">
+  </div>
+  <div class="tabela-scroll">
+    <table class="tabela" id="tabela-notificacoes">
+      <thead><tr><th>Quando</th><th>Processo</th><th>Destinatário</th><th>Setor</th><th>Assunto</th><th>Evento</th><th>Situação</th></tr></thead>
+      <tbody>
+        <% lista.forEach(function (n) { %>
+          <tr>
+            <td><%= fmtDataHora(n.criado_em) %></td>
+            <td>
+              <% if (n.processo_codigo) { %>
+                <a class="mono" href="/processos/<%= n.processo_id %>"><%= n.processo_codigo %></a>
+              <% } else { %>—<% } %>
+            </td>
+            <td><%= n.destinatario %></td>
+            <td><%= n.setor || '—' %></td>
+            <td><%= n.assunto %></td>
+            <td class="mono"><%= n.evento || '—' %></td>
+            <td>
+              <span class="etiqueta <%= n.status === 'Enviada' ? 'et-verde' : (n.status === 'Falha' ? 'et-vermelho' : 'et-neutro') %>"><%= n.status %></span>
+              <% if (n.erro) { %><div class="item-meta"><%= n.erro %></div><% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('../partials/rodape') %>

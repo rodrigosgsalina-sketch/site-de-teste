@@ -1,0 +1,104 @@
+<%- include('../partials/cabecalho', { titulo: titulo }) %>
+
+<div class="cartao">
+  <form method="get" action="/admin/checklist-modelo" class="filtros">
+    <div class="campo" style="min-width:280px">
+      <label for="tipo">Tipo de processo</label>
+      <select id="tipo" name="tipo" onchange="this.form.submit()">
+        <option value="">Todos os tipos</option>
+        <option value="todos" <%= filtro === 'todos' ? 'selected' : '' %>>Itens aplicados a todo processo</option>
+        <% tipos.forEach(function (t) { %>
+          <option value="<%= t.id %>" <%= String(filtro) === String(t.id) ? 'selected' : '' %>><%= t.nome %></option>
+        <% }) %>
+      </select>
+    </div>
+    <noscript><button class="botao botao-pequeno">Filtrar</button></noscript>
+  </form>
+
+  <div class="aviso aviso-info">
+    Alterações no modelo valem para <strong>novos processos</strong>. Processos já abertos mantêm o
+    checklist que foi clonado na abertura, preservando a auditoria.
+  </div>
+</div>
+
+<div class="cartao">
+  <h3>Novo item</h3>
+  <form method="post" action="/admin/checklist-modelo">
+    <div class="linha-campos">
+      <div class="campo">
+        <label for="tipo_processo_id">Tipo de processo</label>
+        <select id="tipo_processo_id" name="tipo_processo_id">
+          <option value="todos">Todos os processos</option>
+          <% tipos.forEach(function (t) { %>
+            <option value="<%= t.id %>" <%= String(filtro) === String(t.id) ? 'selected' : '' %>><%= t.nome %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="setor_id">Setor <span class="obrig">*</span></label>
+        <select id="setor_id" name="setor_id" required>
+          <% setores.forEach(function (s) { %><option value="<%= s.id %>"><%= s.nome %></option><% }) %>
+        </select>
+      </div>
+      <div class="campo" style="flex:2">
+        <label for="item">Item <span class="obrig">*</span></label>
+        <input type="text" id="item" name="item" placeholder="Ex.: Contrato Social elaborado?" required>
+      </div>
+      <div class="campo checkbox" style="align-self:center">
+        <input type="checkbox" id="obrigatorio" name="obrigatorio" value="1" checked>
+        <label for="obrigatorio">Obrigatório</label>
+      </div>
+    </div>
+    <button class="botao">Adicionar item</button>
+  </form>
+</div>
+
+<div class="cartao">
+  <h3><%= itens.length %> item(ns) no modelo</h3>
+  <div class="campo">
+    <input type="search" data-filtra="#tabela-modelo" placeholder="Filtrar por item, setor ou tipo…">
+  </div>
+  <div class="tabela-scroll">
+    <table class="tabela" id="tabela-modelo">
+      <thead><tr><th>Tipo</th><th>Setor</th><th>Item</th><th>Obrigatório</th><th>Ativo</th><th></th></tr></thead>
+      <tbody>
+        <% itens.forEach(function (m) { %>
+          <tr>
+            <td>
+              <select form="modelo-<%= m.id %>" name="tipo_processo_id">
+                <option value="todos" <%= m.tipo_processo_id ? '' : 'selected' %>>Todos</option>
+                <% tipos.forEach(function (t) { %>
+                  <option value="<%= t.id %>" <%= m.tipo_processo_id === t.id ? 'selected' : '' %>><%= t.nome %></option>
+                <% }) %>
+              </select>
+            </td>
+            <td>
+              <select form="modelo-<%= m.id %>" name="setor_id">
+                <% setores.forEach(function (s) { %>
+                  <option value="<%= s.id %>" <%= m.setor_id === s.id ? 'selected' : '' %>><%= s.nome %></option>
+                <% }) %>
+              </select>
+            </td>
+            <td><input type="text" form="modelo-<%= m.id %>" name="item" value="<%= m.item %>" required></td>
+            <td><input type="checkbox" form="modelo-<%= m.id %>" name="obrigatorio" value="1" <%= m.obrigatorio ? 'checked' : '' %>></td>
+            <td><input type="checkbox" form="modelo-<%= m.id %>" name="ativo" value="1" <%= m.ativo ? 'checked' : '' %>></td>
+            <td class="acoes">
+              <button class="botao botao-secundario botao-pequeno" form="modelo-<%= m.id %>">Salvar</button>
+              <button class="botao botao-perigo botao-pequeno" form="modelo-excluir-<%= m.id %>">Excluir</button>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+
+  <% itens.forEach(function (m) { %>
+    <form id="modelo-<%= m.id %>" method="post" action="/admin/checklist-modelo" hidden>
+      <input type="hidden" name="id" value="<%= m.id %>">
+    </form>
+    <form id="modelo-excluir-<%= m.id %>" method="post" action="/admin/checklist-modelo/<%= m.id %>/excluir"
+          data-confirmar="Remover este item do modelo?" hidden></form>
+  <% }) %>
+</div>
+
+<%- include('../partials/rodape') %>

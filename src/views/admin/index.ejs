@@ -1,0 +1,57 @@
+<%- include('../partials/cabecalho', { titulo: titulo }) %>
+
+<div class="grade grade-4" style="margin-bottom:1rem">
+  <div class="indicador"><div class="valor"><%= resumo.processos %></div><div class="rotulo">Processos</div></div>
+  <div class="indicador"><div class="valor"><%= resumo.tipos %></div><div class="rotulo">Tipos de processo</div></div>
+  <div class="indicador"><div class="valor"><%= resumo.setores %></div><div class="rotulo">Setores</div></div>
+  <div class="indicador"><div class="valor"><%= resumo.usuarios %></div><div class="rotulo">Usuários</div></div>
+  <div class="indicador"><div class="valor"><%= resumo.modelo %></div><div class="rotulo">Itens no checklist modelo</div></div>
+  <div class="indicador"><div class="valor"><%= resumo.status %></div><div class="rotulo">Status</div></div>
+  <div class="indicador"><div class="valor"><%= resumo.parametros %></div><div class="rotulo">Parâmetros</div></div>
+</div>
+
+<div class="grade grade-2">
+  <div class="cartao">
+    <h3>Configuração</h3>
+    <ul>
+      <li><a href="/admin/parametros">Parâmetros do sistema</a> — numeração, prazos, notificações, regras de bloqueio e dashboard.</li>
+      <li><a href="/admin/checklist-modelo">Checklist modelo</a> — quais itens cada setor valida por tipo de processo.</li>
+      <li><a href="/admin/tabelas">Tipos, status e setores</a></li>
+      <li><a href="/admin/usuarios">Usuários</a> — perfil, setor e situação.</li>
+    </ul>
+    <h3 style="margin-top:1rem">Operação</h3>
+    <ul>
+      <li><a href="/admin/notificacoes">Notificações enviadas</a> e verificação manual de prazos.</li>
+      <li><a href="/admin/auditoria">Auditoria</a> — todas as ações registradas.</li>
+    </ul>
+  </div>
+
+  <div class="cartao">
+    <h3>Integrações</h3>
+    <div class="tabela-scroll">
+      <table class="tabela">
+        <thead><tr><th>Integração</th><th>Parâmetro</th><th>Situação</th></tr></thead>
+        <tbody>
+          <% integracoes.forEach(function (i) { %>
+            <tr>
+              <td><%= i.rotulo %><div class="item-meta"><%= i.observacao %></div></td>
+              <td class="mono"><%= i.parametroChave %></td>
+              <td>
+                <% if (!i.implementado) { %>
+                  <span class="etiqueta et-neutro">prevista</span>
+                <% } else if (i.habilitado) { %>
+                  <span class="etiqueta et-verde">ativa</span>
+                <% } else { %>
+                  <span class="etiqueta et-amarelo">desligada</span>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <p class="dica">As integrações marcadas como “prevista” têm o adaptador declarado, mas ainda não executam chamadas externas.</p>
+  </div>
+</div>
+
+<%- include('../partials/rodape') %>

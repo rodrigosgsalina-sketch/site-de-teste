@@ -1,0 +1,106 @@
+<%- include('../partials/cabecalho', { titulo: titulo }) %>
+
+<div class="cartao">
+  <% if (erro) { %><div class="aviso aviso-erro"><%= erro %></div><% } %>
+
+  <form method="post" action="/processos/<%= processo.id %>/editar">
+    <fieldset>
+      <legend>Processo</legend>
+      <div class="linha-campos">
+        <div class="campo">
+          <label>Número</label>
+          <input type="text" value="<%= processo.codigo %>" disabled>
+        </div>
+        <div class="campo">
+          <label>Tipo</label>
+          <input type="text" value="<%= processo.tipo_processo %>" disabled>
+          <div class="dica">O tipo define o checklist e não pode ser alterado após a abertura.</div>
+        </div>
+        <div class="campo">
+          <label for="data_previsao">Previsão de conclusão</label>
+          <input type="date" id="data_previsao" name="data_previsao" value="<%= processo.data_previsao || '' %>">
+        </div>
+        <div class="campo">
+          <label for="responsavel_interno_id">Responsável interno</label>
+          <select id="responsavel_interno_id" name="responsavel_interno_id">
+            <option value="">—</option>
+            <% responsaveis.forEach(function (u) { %>
+              <option value="<%= u.id %>" <%= String(processo.responsavel_interno_id) === String(u.id) ? 'selected' : '' %>><%= u.nome %> (<%= u.setor %>)</option>
+            <% }) %>
+          </select>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Empresa</legend>
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="razao_social">Razão social <span class="obrig">*</span></label>
+          <input type="text" id="razao_social" name="razao_social" value="<%= processo.razao_social || '' %>" required>
+        </div>
+        <div class="campo">
+          <label for="nome_fantasia">Nome fantasia</label>
+          <input type="text" id="nome_fantasia" name="nome_fantasia" value="<%= processo.nome_fantasia || '' %>">
+        </div>
+        <div class="campo">
+          <label for="cnpj">CNPJ</label>
+          <input type="text" id="cnpj" name="cnpj" value="<%= processo.cnpj || '' %>">
+        </div>
+        <div class="campo">
+          <label for="inscricao_estadual">Inscrição estadual</label>
+          <input type="text" id="inscricao_estadual" name="inscricao_estadual" value="<%= processo.inscricao_estadual || '' %>">
+        </div>
+        <div class="campo">
+          <label for="inscricao_municipal">Inscrição municipal</label>
+          <input type="text" id="inscricao_municipal" name="inscricao_municipal" value="<%= processo.inscricao_municipal || '' %>">
+        </div>
+        <div class="campo">
+          <label for="municipio">Município</label>
+          <input type="text" id="municipio" name="municipio" value="<%= processo.municipio || '' %>">
+        </div>
+        <div class="campo">
+          <label for="uf">UF</label>
+          <input type="text" id="uf" name="uf" maxlength="2" value="<%= processo.uf || '' %>">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Contato do cliente</legend>
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="cliente_responsavel">Cliente responsável</label>
+          <input type="text" id="cliente_responsavel" name="cliente_responsavel" value="<%= processo.cliente_responsavel || '' %>">
+        </div>
+        <div class="campo">
+          <label for="telefone">Telefone</label>
+          <input type="tel" id="telefone" name="telefone" value="<%= processo.telefone || '' %>">
+        </div>
+        <div class="campo">
+          <label for="email">E-mail</label>
+          <input type="email" id="email" name="email" value="<%= processo.email || '' %>">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Complemento</legend>
+      <div class="campo">
+        <label for="etapa_atual">Etapa atual</label>
+        <input type="text" id="etapa_atual" name="etapa_atual" value="<%= processo.etapa_atual || '' %>">
+      </div>
+      <div class="campo">
+        <label for="observacoes">Observações</label>
+        <textarea id="observacoes" name="observacoes"><%= processo.observacoes || '' %></textarea>
+      </div>
+    </fieldset>
+
+    <div class="acoes">
+      <button class="botao">Salvar alterações</button>
+      <a class="botao botao-secundario" href="/processos/<%= processo.id %>">Voltar</a>
+    </div>
+  </form>
+</div>
+
+<%- include('../partials/rodape') %>

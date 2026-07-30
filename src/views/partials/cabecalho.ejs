@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= titulo %> · JS Grilo Processos</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2312395b'/><text x='16' y='22' font-size='16' font-family='sans-serif' fill='white' text-anchor='middle'>JS</text></svg>">
+</head>
+<body>
+<% if (typeof usuario !== 'undefined' && usuario) { %>
+<div class="app">
+  <aside class="lateral" id="lateral">
+    <div class="marca">
+      <span class="marca-sigla">JS</span>
+      <span class="marca-texto"><strong>JS Grilo</strong><small>Contabilidade &amp; Gestão</small></span>
+    </div>
+    <nav>
+      <a href="/" class="<%= caminhoAtual === '/' ? 'ativo' : '' %>">Minha fila</a>
+      <a href="/processos" class="<%= caminhoAtual.startsWith('/processos') ? 'ativo' : '' %>">Processos</a>
+      <a href="/processos/novo" class="<%= caminhoAtual === '/processos/novo' ? 'ativo' : '' %>">Abrir processo</a>
+      <a href="/checklist/fila" class="<%= caminhoAtual.startsWith('/checklist') ? 'ativo' : '' %>">Fila do setor</a>
+      <% if (ehGestor) { %>
+        <a href="/dashboard" class="<%= caminhoAtual.startsWith('/dashboard') ? 'ativo' : '' %>">Dashboard</a>
+      <% } %>
+      <% if (ehAdmin) { %>
+        <span class="nav-grupo">Administração</span>
+        <a href="/admin/parametros" class="<%= caminhoAtual === '/admin/parametros' ? 'ativo' : '' %>">Parâmetros</a>
+        <a href="/admin/checklist-modelo" class="<%= caminhoAtual === '/admin/checklist-modelo' ? 'ativo' : '' %>">Checklist modelo</a>
+        <a href="/admin/usuarios" class="<%= caminhoAtual === '/admin/usuarios' ? 'ativo' : '' %>">Usuários</a>
+        <a href="/admin/tabelas" class="<%= caminhoAtual === '/admin/tabelas' ? 'ativo' : '' %>">Tipos e setores</a>
+        <a href="/admin/notificacoes" class="<%= caminhoAtual === '/admin/notificacoes' ? 'ativo' : '' %>">Notificações</a>
+        <a href="/admin/auditoria" class="<%= caminhoAtual === '/admin/auditoria' ? 'ativo' : '' %>">Auditoria</a>
+      <% } %>
+    </nav>
+    <div class="lateral-rodape">
+      <a href="/perfil" class="usuario-chip">
+        <strong><%= usuario.nome %></strong>
+        <small><%= usuario.setor %> · <%= usuario.perfil %></small>
+      </a>
+      <form method="post" action="/logout"><button class="btn-link">Sair</button></form>
+    </div>
+  </aside>
+
+  <main class="conteudo">
+    <header class="topo">
+      <button class="menu-toggle" onclick="document.getElementById('lateral').classList.toggle('aberta')" aria-label="Menu">☰</button>
+      <h1><%= titulo %></h1>
+    </header>
+
+    <% if (flash) { %>
+      <div class="aviso aviso-<%= flash.tipo %>"><%= flash.mensagem %></div>
+    <% } %>
+<% } %>

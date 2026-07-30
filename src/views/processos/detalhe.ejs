@@ -1,0 +1,313 @@
+<%- include('../partials/cabecalho', { titulo: titulo }) %>
+
+<div class="cartao">
+  <div class="cartao-titulo">
+    <div>
+      <h2 style="margin-bottom:.3rem"><%= processo.codigo %> — <%= processo.razao_social %></h2>
+      <div>
+        <span class="etiqueta <%= classeStatus(processo.status) %>"><%= processo.status %></span>
+        <span class="etiqueta et-neutro"><%= processo.tipo_processo %></span>
+        <% if (processo.etapa_atual) { %><span class="etiqueta et-neutro"><%= processo.etapa_atual %></span><% } %>
+      </div>
+    </div>
+    <div class="acoes">
+      <% if (podeGerenciar) { %><a class="botao botao-secundario botao-pequeno" href="/processos/<%= processo.id %>/editar">Editar cadastro</a><% } %>
+      <% if (gerarPdfChecklist) { %><a class="botao botao-secundario botao-pequeno" href="/processos/<%= processo.id %>/checklist.pdf" target="_blank" rel="noopener">PDF do checklist</a><% } %>
+      <% if (gerarRelatorioFinal) { %><a class="botao botao-secundario botao-pequeno" href="/processos/<%= processo.id %>/relatorio.pdf" target="_blank" rel="noopener">Relatório final</a><% } %>
+    </div>
+  </div>
+
+  <div class="grade grade-4">
+    <div>
+      <label>Abertura</label>
+      <div><%= fmtData(processo.data_abertura) %></div>
+    </div>
+    <div>
+      <label>Previsão de conclusão</label>
+      <div>
+        <%= fmtData(processo.data_previsao) %>
+        <% if (!processo.status_final && processo.data_previsao && new Date(processo.data_previsao) < new Date(new Date().toISOString().slice(0,10))) { %>
+          <span class="etiqueta et-vermelho">atrasado</span>
+        <% } %>
+      </div>
+    </div>
+    <div>
+      <label>Conclusão real</label>
+      <div><%= fmtData(processo.data_conclusao) %></div>
+    </div>
+    <div>
+      <label>Responsável interno</label>
+      <div><%= processo.responsavel_interno || '—' %></div>
+    </div>
+  </div>
+
+  <hr style="border:0;border-top:1px solid var(--borda);margin:1rem 0">
+
+  <div class="grade grade-4">
+    <div><label>Nome fantasia</label><div><%= processo.nome_fantasia || '—' %></div></div>
+    <div><label>CNPJ</label><div class="mono"><%= processo.cnpj || '—' %></div></div>
+    <div><label>Inscrição estadual</label><div class="mono"><%= processo.inscricao_estadual || '—' %></div></div>
+    <div><label>Inscrição municipal</label><div class="mono"><%= processo.inscricao_municipal || '—' %></div></div>
+    <div><label>Município / UF</label><div><%= [processo.municipio, processo.uf].filter(Boolean).join(' / ') || '—' %></div></div>
+    <div><label>Cliente responsável</label><div><%= processo.cliente_responsavel || '—' %></div></div>
+    <div><label>Telefone</label><div><%= processo.telefone || '—' %></div></div>
+    <div><label>E-mail</label><div><%= processo.email || '—' %></div></div>
+  </div>
+  <% if (processo.observacoes) { %>
+    <div style="margin-top:.8rem"><label>Observações</label><div><%= processo.observacoes %></div></div>
+  <% } %>
+</div>
+
+<!-- ------------------------------------------------------------ progresso -->
+<div class="cartao">
+  <div class="cartao-titulo">
+    <h2>Checklist</h2>
+    <div class="mono"><%= progresso.concluidos %>/<%= progresso.total %> itens · <%= progresso.percentual %>%</div>
+  </div>
+  <div class="barra"><span style="width:<%= progresso.percentual %>%"></span></div>
+  <div class="barra-legenda">
+    <span><%= progresso.pendentes %> pendente(s) · <%= progresso.impedidos %> impedido(s)</span>
+    <span><%= progresso.obrigatorios_pendentes %> obrigatório(s) em aberto</span>
+  </div>
+</div>
+
+<!-- ----------------------------------------------------------- checklist -->
+<% grupos.forEach(function (grupo) { %>
+  <details class="setor-bloco" id="setor-<%= grupo.setor_id %>" <%= grupo.pendentes || grupo.impedidos ? 'open' : '' %>>
+    <summary>
+      <%= grupo.setor %>
+      <% if (grupo.impedidos) { %><span class="etiqueta et-vermelho"><%= grupo.impedidos %> impedido(s)</span><% } %>
+      <% if (!grupo.editavel) { %><span class="somente-leitura">somente leitura</span><% } %>
+      <span class="contagem"><%= grupo.concluidos %>/<%= grupo.total %> · <%= grupo.percentual %>%</span>
+    </summary>
+
+    <% grupo.itens.forEach(function (item) { %>
+      <div class="item-checklist" id="item-<%= item.id %>">
+        <div class="item-cabecalho">
+          <div class="item-texto">
+            <%= item.item %>
+            <% if (!item.obrigatorio) { %><span class="etiqueta et-opcional">opcional</span><% } %>
+          </div>
+          <span class="etiqueta <%= classeItem(item.status_item) %>"><%= item.status_item %></span>
+        </div>
+
+        <div class="item-meta">
+          <span class="mono"><%= item.codigo %></span>
+          · Resposta: <strong><%= item.resposta || '—' %></strong>
+          · Responsável: <%= item.responsavel_nome || '—' %>
+          · <%= item.data_resposta ? fmtDataHora(item.data_resposta) : 'sem resposta' %>
+          <% if (item.prazo && item.status_item !== 'Concluído') { %>
+            · Prazo: <span class="<%= new Date(item.prazo) < new Date() ? 'item-atrasado' : '' %>"><%= fmtDataHora(item.prazo) %></span>
+          <% } %>
+          <% if (item.conferente_nome) { %> · Conferido por <%= item.conferente_nome %><% } %>
+        </div>
+
+        <% if (item.descricao_impedimento) { %>
+          <div class="item-impedimento"><strong>Impedimento:</strong> <%= item.descricao_impedimento %></div>
+        <% } %>
+        <% if (item.observacao) { %>
+          <div class="item-meta">Observação: <%= item.observacao %></div>
+        <% } %>
+
+        <% if (grupo.editavel && !processo.status_final) { %>
+          <form method="post" action="/checklist/<%= item.id %>/responder" class="item-form">
+            <input type="hidden" name="retorno" value="/processos/<%= processo.id %>#setor-<%= grupo.setor_id %>">
+            <div class="campo">
+              <label for="resposta-<%= item.id %>">Resposta</label>
+              <select id="resposta-<%= item.id %>" name="resposta" required>
+                <option value="">Selecione…</option>
+                <% ['Sim','Não','N/A'].forEach(function (opcao) { %>
+                  <option value="<%= opcao %>" <%= item.resposta === opcao ? 'selected' : '' %>><%= opcao %></option>
+                <% }) %>
+              </select>
+            </div>
+            <div class="campo">
+              <label for="imp-<%= item.id %>">Possui impedimento?</label>
+              <select id="imp-<%= item.id %>" name="possui_impedimento" data-impedimento="bloco-imp-<%= item.id %>">
+                <option value="Não" <%= item.possui_impedimento ? '' : 'selected' %>>Não</option>
+                <option value="Sim" <%= item.possui_impedimento ? 'selected' : '' %>>Sim</option>
+              </select>
+            </div>
+            <div class="campo largo" id="bloco-imp-<%= item.id %>" hidden>
+              <label for="desc-<%= item.id %>">Descrição do impedimento <span class="obrig">*</span></label>
+              <textarea id="desc-<%= item.id %>" name="descricao_impedimento"><%= item.descricao_impedimento || '' %></textarea>
+            </div>
+            <div class="campo largo">
+              <label for="obs-<%= item.id %>">Observação</label>
+              <input type="text" id="obs-<%= item.id %>" name="observacao" value="<%= item.observacao || '' %>">
+            </div>
+            <div class="acoes largo">
+              <button class="botao botao-pequeno">Salvar resposta</button>
+              <% if (duplaConferencia && item.resposta && item.status_item === 'Pendente' && !item.possui_impedimento) { %>
+                <button class="botao botao-secundario botao-pequeno" formaction="/checklist/<%= item.id %>/conferir">Conferir (2ª conferência)</button>
+              <% } %>
+              <% if (item.resposta) { %>
+                <button class="botao botao-secundario botao-pequeno" formaction="/checklist/<%= item.id %>/reabrir" formnovalidate>Reabrir item</button>
+              <% } %>
+            </div>
+          </form>
+        <% } else if (!grupo.editavel) { %>
+          <div class="item-meta">Somente o setor <%= grupo.setor %> (ou um gestor) pode responder este item.</div>
+        <% } %>
+      </div>
+    <% }) %>
+  </details>
+<% }) %>
+
+<!-- --------------------------------------------------------- ações fluxo -->
+<div class="grade grade-2">
+  <div class="cartao">
+    <h3>Concluir processo</h3>
+    <% if (problemas.length) { %>
+      <div class="aviso aviso-alerta">
+        <strong>Conclusão bloqueada:</strong>
+        <ul style="margin:.4rem 0 0 1rem;padding:0">
+          <% problemas.forEach(function (p) { %><li><%= p %></li><% }) %>
+        </ul>
+      </div>
+    <% } else { %>
+      <div class="aviso aviso-sucesso">Todos os requisitos foram atendidos — o processo pode ser concluído.</div>
+    <% } %>
+    <form method="post" action="/processos/<%= processo.id %>/concluir" data-confirmar="Confirmar a conclusão deste processo?">
+      <div class="campo">
+        <label for="obs-conclusao">Observação da conclusão</label>
+        <input type="text" id="obs-conclusao" name="observacao" placeholder="Opcional">
+      </div>
+      <button class="botao" <%= podeConcluir ? '' : 'disabled' %>>Concluir processo</button>
+    </form>
+  </div>
+
+  <div class="cartao">
+    <h3>Situação do processo</h3>
+    <form method="post" action="/processos/<%= processo.id %>/status">
+      <div class="campo">
+        <label for="status">Definir status manualmente</label>
+        <select id="status" name="status">
+          <% statusLista.filter(function (s) { return !s.final; }).forEach(function (s) { %>
+            <option value="<%= s.nome %>"
+                    <%= processo.status === s.nome ? 'selected' : '' %>
+                    <%= (s.espera || permitirPularEtapas) ? '' : 'disabled' %>><%= s.nome %></option>
+          <% }) %>
+        </select>
+        <div class="dica">Os status de análise são definidos automaticamente pelo checklist. Use este campo para registrar esperas externas (cliente, Junta, Receita, Prefeitura).</div>
+      </div>
+      <div class="campo">
+        <label for="obs-status">Observação</label>
+        <input type="text" id="obs-status" name="observacao">
+      </div>
+      <button class="botao botao-secundario">Alterar status</button>
+    </form>
+
+    <% if (ehGestor) { %>
+      <hr style="border:0;border-top:1px solid var(--borda);margin:1rem 0">
+      <% if (processo.status_final) { %>
+        <form method="post" action="/processos/<%= processo.id %>/reabrir" data-confirmar="Reabrir este processo?">
+          <div class="campo">
+            <label for="motivo-reabrir">Motivo da reabertura</label>
+            <input type="text" id="motivo-reabrir" name="motivo">
+          </div>
+          <button class="botao botao-secundario">Reabrir processo</button>
+        </form>
+      <% } else { %>
+        <form method="post" action="/processos/<%= processo.id %>/cancelar" data-confirmar="Cancelar definitivamente este processo?">
+          <div class="campo">
+            <label for="motivo-cancelar">Motivo do cancelamento <span class="obrig">*</span></label>
+            <input type="text" id="motivo-cancelar" name="motivo" required>
+          </div>
+          <button class="botao botao-perigo">Cancelar processo</button>
+        </form>
+      <% } %>
+    <% } %>
+  </div>
+</div>
+
+<!-- --------------------------------------------------------- documentos -->
+<div class="cartao" id="documentos">
+  <div class="cartao-titulo">
+    <h3>Documentos</h3>
+    <% if (exigirUpload) { %><span class="etiqueta et-amarelo">upload obrigatório para concluir</span><% } %>
+  </div>
+
+  <% if (!documentos.length) { %>
+    <p class="vazio">Nenhum documento anexado.</p>
+  <% } else { %>
+    <div class="tabela-scroll">
+      <table class="tabela">
+        <thead><tr><th>Arquivo</th><th>Descrição</th><th>Enviado por</th><th>Data</th><th></th></tr></thead>
+        <tbody>
+          <% documentos.forEach(function (doc) { %>
+            <tr>
+              <td><a href="/processos/<%= processo.id %>/documentos/<%= doc.id %>"><%= doc.nome_original %></a>
+                <div class="item-meta"><%= Math.max(1, Math.round(doc.tamanho / 1024)) %> KB</div></td>
+              <td><%= doc.descricao || '—' %></td>
+              <td><%= doc.usuario_nome || '—' %></td>
+              <td><%= fmtDataHora(doc.criado_em) %></td>
+              <td>
+                <% if (podeGerenciar) { %>
+                  <form method="post" action="/processos/<%= processo.id %>/documentos/<%= doc.id %>/excluir" data-confirmar="Remover este documento?">
+                    <button class="botao botao-secundario botao-pequeno">Remover</button>
+                  </form>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+
+  <form method="post" action="/processos/<%= processo.id %>/documentos" enctype="multipart/form-data" style="margin-top:1rem">
+    <div class="linha-campos">
+      <div class="campo">
+        <label for="arquivo">Anexar documento</label>
+        <input type="file" id="arquivo" name="arquivo" required>
+      </div>
+      <div class="campo">
+        <label for="descricao-doc">Descrição</label>
+        <input type="text" id="descricao-doc" name="descricao" placeholder="Ex.: Contrato social assinado">
+      </div>
+    </div>
+    <button class="botao botao-secundario">Enviar documento</button>
+  </form>
+</div>
+
+<!-- ------------------------------------------------ histórico / notificações -->
+<div class="grade grade-2">
+  <div class="cartao">
+    <h3>Histórico (auditoria)</h3>
+    <ul class="linha-tempo">
+      <% historico.forEach(function (h) { %>
+        <li>
+          <div class="acao"><%= h.acao %></div>
+          <div class="quando"><%= fmtDataHora(h.data_hora) %> · <%= h.usuario_nome || 'Sistema' %></div>
+          <% if (h.observacao) { %><div class="obs"><%= h.observacao %></div><% } %>
+        </li>
+      <% }) %>
+    </ul>
+  </div>
+
+  <div class="cartao">
+    <h3>Notificações enviadas</h3>
+    <% if (!notificacoes.length) { %>
+      <p class="vazio">Nenhuma notificação registrada para este processo.</p>
+    <% } else { %>
+      <div class="tabela-scroll">
+        <table class="tabela">
+          <thead><tr><th>Quando</th><th>Destinatário</th><th>Assunto</th><th>Situação</th></tr></thead>
+          <tbody>
+            <% notificacoes.forEach(function (n) { %>
+              <tr>
+                <td><%= fmtDataHora(n.criado_em) %></td>
+                <td><%= n.destinatario %></td>
+                <td><%= n.assunto %></td>
+                <td><span class="etiqueta <%= n.status === 'Enviada' ? 'et-verde' : (n.status === 'Falha' ? 'et-vermelho' : 'et-neutro') %>"><%= n.status %></span></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+</div>
+
+<%- include('../partials/rodape') %>
