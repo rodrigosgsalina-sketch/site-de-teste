@@ -115,7 +115,7 @@ src/
     avisos.js            mural interno visível a todos os usuários
   routes/                camada HTTP
   views/                 telas EJS
-  public/                CSS, JS e Chart.js
+  public/                CSS, JS, Chart.js e as fontes (fonts/)
 scripts/                 seed, reset, cópia de assets
 tests/                   testes das regras de negócio (node:test)
 ```
@@ -256,6 +256,28 @@ mensal (`META_PROCESSOS_MES`) versus realizado. Cada bloco respeita a preferênc
 correspondente em `PARAMETROS` (`EXIBIR_GRAFICOS`, `EXIBIR_TEMPO_MEDIO`, …).
 
 ---
+
+## Identidade visual e interface
+
+**Tipografia.** Três famílias empacotadas no projeto (`src/public/fonts/`, ~160 KB, nenhuma
+requisição a CDN):
+
+| Fonte | Papel |
+|---|---|
+| Manrope (variável) | títulos, navegação, números e etiquetas |
+| IBM Plex Sans (variável) | texto de interface, formulários e tabelas |
+| IBM Plex Mono | dados de sistema: `PR-2026-0001`, `CHK-0007`, chaves de parâmetro |
+
+As duas primeiras são fontes variáveis: um arquivo por família cobre todos os pesos, e as duas
+principais são pré-carregadas para o texto não "piscar" na troca de fonte.
+
+**Movimento.** As animações servem à leitura, não à decoração: a página se monta de cima para
+baixo em cascata curta, os avisos entram deslizando, a barra de progresso preenche a partir do
+zero, os indicadores contam até o valor quando entram na tela e o cabeçalho ganha sombra ao rolar.
+Botões, linhas de tabela e itens de menu respondem ao ponteiro.
+
+Tudo isso é desligado automaticamente para quem ativa **"reduzir movimento"** no sistema
+operacional — nesse caso a interface aparece pronta, sem transições.
 
 ## Se algo der errado na instalação
 

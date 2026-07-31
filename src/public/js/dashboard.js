@@ -5,10 +5,13 @@
   var dados = window.DADOS_DASHBOARD || { porStatus: [], porTipo: [] };
   if (typeof Chart === 'undefined') return;
 
-  var PALETA = ['#1d5c8f', '#1d7a4c', '#a56b00', '#b3261e', '#5b3f8f', '#0f7f8f', '#8f5a1d', '#4a6572', '#7a1d5c', '#2f7f2f'];
+  var PALETA = ['#1d5c8f', '#2f9e6e', '#c58a1a', '#c9503f', '#6d5aa8', '#128a9a', '#9a6a2f', '#5b7183', '#a3437f', '#3f8f4f'];
 
-  Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-  Chart.defaults.color = '#64798c';
+  Chart.defaults.font.family = "'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+  Chart.defaults.font.weight = 500;
+  Chart.defaults.color = '#8698a8';
+  Chart.defaults.animation.duration = 700;
+  Chart.defaults.animation.easing = 'easeOutQuart';
 
   var alvoStatus = document.getElementById('grafico-status');
   if (alvoStatus && dados.porStatus.length) {
@@ -41,6 +44,7 @@
           label: 'Processos',
           data: dados.porTipo.map(function (d) { return d.total; }),
           backgroundColor: '#1d5c8f',
+          hoverBackgroundColor: '#2c7cb8',
           borderRadius: 4
         }]
       },
@@ -50,7 +54,7 @@
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-          x: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#eef2f6' } },
+          x: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#eef3f8' } },
           y: { grid: { display: false }, ticks: { font: { size: 11 } } }
         }
       }

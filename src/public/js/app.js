@@ -1,6 +1,9 @@
-/* Pequenos comportamentos de interface. Nenhuma dependência externa. */
+/* Comportamentos de interface. Sem dependências externas.
+   Todo movimento respeita a preferência "reduzir animações" do sistema. */
 (function () {
   'use strict';
+
+  var reduzirMovimento = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* Impedimento: revela e torna obrigatória a descrição. */
   function ligarImpedimentos(raiz) {
@@ -36,7 +39,7 @@
     var alvo = document.querySelector(location.hash);
     if (alvo && alvo.tagName === 'DETAILS') {
       alvo.open = true;
-      alvo.scrollIntoView({ block: 'center' });
+      alvo.scrollIntoView({ block: 'center', behavior: reduzirMovimento ? 'auto' : 'smooth' });
     }
   }
 
@@ -54,10 +57,78 @@
     });
   }
 
+  /* O cabeçalho ganha borda e sombra assim que a página sai do topo. */
+  function ligarTopo() {
+    var topo = document.querySelector('.topo');
+    if (!topo) return;
+    function atualizar() {
+      topo.classList.toggle('deslocado', window.scrollY > 4);
+    }
+    window.addEventListener('scroll', atualizar, { passive: true });
+    atualizar();
+  }
+
+  /* Indicadores contam do zero até o valor final quando entram na tela. */
+  function ligarContadores() {
+    var alvos = [].slice.call(document.querySelectorAll('.indicador .valor'));
+    if (!alvos.length) return;
+
+    if (reduzirMovimento || !('IntersectionObserver' in window)) return;
+
+    function animar(el) {
+      var texto = el.textContent.trim();
+      var casa = texto.match(/^(\d+)(%?)$/);
+      if (!casa) return; // ignora "—" e valores com decimais
+      var destino = parseInt(casa[1], 10);
+      var sufixo = casa[2] || '';
+      if (destino === 0) return;
+
+      var duracao = Math.min(900, 260 + destino * 22);
+      var inicio = null;
+      el.style.minWidth = el.offsetWidth + 'px';
+
+      function passo(agora) {
+        if (inicio === null) inicio = agora;
+        var t = Math.min(1, (agora - inicio) / duracao);
+        var suave = 1 - Math.pow(1 - t, 3);
+        el.textContent = Math.round(destino * suave) + sufixo;
+        if (t < 1) requestAnimationFrame(passo);
+      }
+      el.textContent = '0' + sufixo;
+      requestAnimationFrame(passo);
+    }
+
+    var observador = new IntersectionObserver(
+      function (entradas) {
+        entradas.forEach(function (entrada) {
+          if (!entrada.isIntersecting) return;
+          observador.unobserve(entrada.target);
+          animar(entrada.target);
+        });
+      },
+      { threshold: 0.4 }
+    );
+    alvos.forEach(function (el) { observador.observe(el); });
+  }
+
+  /* Fecha o menu lateral ao tocar fora dele, no celular. */
+  function ligarMenuMovel() {
+    var lateral = document.getElementById('lateral');
+    if (!lateral) return;
+    document.addEventListener('click', function (evento) {
+      if (!lateral.classList.contains('aberta')) return;
+      if (lateral.contains(evento.target) || evento.target.closest('.menu-toggle')) return;
+      lateral.classList.remove('aberta');
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     ligarImpedimentos(document);
     ligarConfirmacoes(document);
     ligarFiltros(document);
+    ligarTopo();
+    ligarContadores();
+    ligarMenuMovel();
     abrirAncora();
   });
 })();
