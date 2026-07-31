@@ -5,15 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><%= titulo %> · JS Grilo Processos</title>
   <link rel="stylesheet" href="/static/css/app.css">
-  <link rel="icon" type="image/png" href="/static/img/marca-jsgrilo.png">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2312395b'/><text x='16' y='22' font-size='16' font-family='sans-serif' fill='white' text-anchor='middle'>JS</text></svg>">
 </head>
 <body>
 <% if (typeof usuario !== 'undefined' && usuario) { %>
 <div class="app">
   <aside class="lateral" id="lateral">
-    <a class="marca" href="/" aria-label="JS Grilo Contabilidade &amp; Gestão — ir para o início">
-      <img src="/static/img/logo-jsgrilo.png" alt="JS Grilo Contabilidade &amp; Gestão" width="800" height="264">
-    </a>
+    <div class="marca">
+      <span class="marca-sigla">JS</span>
+      <span class="marca-texto"><strong>JS Grilo</strong><small>Contabilidade &amp; Gestão</small></span>
+    </div>
     <nav>
       <a href="/" class="<%= caminhoAtual === '/' ? 'ativo' : '' %>">Minha fila</a>
       <a href="/processos" class="<%= caminhoAtual.startsWith('/processos') ? 'ativo' : '' %>">Processos</a>

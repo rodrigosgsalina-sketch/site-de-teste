@@ -1,33 +1,7 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
 const PDFDocument = require('pdfkit');
 const { formatarData, formatarDataHora } = require('./datas');
-
-/** Logomarca usada no topo dos documentos. */
-const LOGO = path.join(__dirname, '..', 'public', 'img', 'logo-jsgrilo.png');
-const TEM_LOGO = fs.existsSync(LOGO);
-const LARGURA_LOGO = 118;
-
-/** Lê largura e altura do cabeçalho IHDR do PNG, para reservar o espaço certo. */
-function dimensoesPNG(arquivo) {
-  const cabecalho = Buffer.alloc(24);
-  const fd = fs.openSync(arquivo, 'r');
-  try {
-    fs.readSync(fd, cabecalho, 0, 24, 0);
-  } finally {
-    fs.closeSync(fd);
-  }
-  return { largura: cabecalho.readUInt32BE(16), altura: cabecalho.readUInt32BE(20) };
-}
-
-const ALTURA_LOGO = TEM_LOGO
-  ? (() => {
-      const { largura, altura } = dimensoesPNG(LOGO);
-      return (LARGURA_LOGO * altura) / largura;
-    })()
-  : 0;
 
 const AZUL = '#12395b';
 const CINZA = '#5b6b7a';
@@ -35,14 +9,7 @@ const VERDE = '#1d7a4c';
 const VERMELHO = '#b3261e';
 
 function cabecalho(doc, titulo, processo) {
-  if (TEM_LOGO) {
-    // O PDFKit não move o cursor depois de desenhar a imagem, então o espaço
-    // ocupado pela logomarca é reservado à mão para o texto não sobrepô-la.
-    doc.image(LOGO, doc.page.margins.left, doc.y, { width: LARGURA_LOGO });
-    doc.y += ALTURA_LOGO + 10;
-  } else {
-    doc.fillColor(AZUL).fontSize(16).font('Helvetica-Bold').text('JS Grilo Contabilidade & Gestão');
-  }
+  doc.fillColor(AZUL).fontSize(16).font('Helvetica-Bold').text('JS Grilo Contabilidade & Gestão');
   doc.fontSize(11).font('Helvetica').fillColor(CINZA).text(titulo);
   doc.moveDown(0.6);
   doc.fillColor(AZUL).fontSize(13).font('Helvetica-Bold').text(`${processo.codigo} — ${processo.razao_social}`);

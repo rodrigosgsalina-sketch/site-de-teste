@@ -115,7 +115,7 @@ src/
     avisos.js            mural interno visível a todos os usuários
   routes/                camada HTTP
   views/                 telas EJS
-  public/                CSS, JS, Chart.js e a logomarca (img/)
+  public/                CSS, JS e Chart.js
 scripts/                 seed, reset, cópia de assets
 tests/                   testes das regras de negócio (node:test)
 ```
@@ -256,23 +256,6 @@ mensal (`META_PROCESSOS_MES`) versus realizado. Cada bloco respeita a preferênc
 correspondente em `PARAMETROS` (`EXIBIR_GRAFICOS`, `EXIBIR_TEMPO_MEDIO`, …).
 
 ---
-
-## Identidade visual
-
-A logomarca fica em `src/public/img/`:
-
-| Arquivo | Onde aparece |
-|---|---|
-| `logo-jsgrilo.png` | topo da barra lateral, tela de login e cabeçalho dos PDFs |
-| `marca-jsgrilo.png` | ícone da aba do navegador (favicon) |
-| `logo-jsgrilo.webp` | original recebido, guardado como referência |
-
-Para trocar a marca, basta substituir os arquivos mantendo os nomes. Não é preciso redimensionar
-nada antes: a exibição é limitada por CSS a **148 × 52 px** na barra lateral e **210 × 90 px** na
-tela de login, preservando a proporção — logos altas, largas ou quadradas se ajustam sem invadir o
-menu. No PDF a marca sai com 118 pt de largura e o espaço é reservado a partir das dimensões reais
-do arquivo. Se `logo-jsgrilo.png` for removido, os PDFs voltam a imprimir o nome do escritório em
-texto.
 
 ## Se algo der errado na instalação
 

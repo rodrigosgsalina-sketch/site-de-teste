@@ -53,19 +53,14 @@ h3 { font-size: 1rem; }
   height: 100vh;
 }
 
-/* A logomarca é escura, então fica sobre um bloco claro dentro da barra.
-   O bloco acompanha o tamanho da imagem, que é limitada em largura e altura
-   para não invadir o menu — vale para logos de qualquer proporção. */
-.marca {
-  display: block; width: fit-content; margin: .8rem auto .5rem;
-  padding: .45rem .6rem; background: #fff; border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.22);
+.marca { display: flex; align-items: center; gap: .6rem; padding: 1.1rem 1rem; border-bottom: 1px solid rgba(255,255,255,.12); }
+.marca-sigla {
+  background: #fff; color: var(--azul); font-weight: 700; border-radius: 8px;
+  width: 34px; height: 34px; display: grid; place-items: center; font-size: .95rem;
 }
-.marca img {
-  display: block; width: auto; height: auto;
-  max-width: 148px; max-height: 52px; object-fit: contain;
-}
-.marca:focus-visible { outline: 2px solid #9ec7ea; outline-offset: 2px; }
+.marca-texto { display: flex; flex-direction: column; line-height: 1.15; }
+.marca-texto strong { color: #fff; font-size: .98rem; }
+.marca-texto small { color: #9fbcd6; font-size: .72rem; }
 
 .lateral nav { display: flex; flex-direction: column; padding: .6rem 0; overflow-y: auto; flex: 1; }
 .lateral nav a {
@@ -263,11 +258,6 @@ legend { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-
 .login-tela { min-height: 100vh; display: grid; place-items: center; padding: 1.5rem; background: linear-gradient(160deg, #12395b, #1d5c8f); }
 .login-caixa { background: #fff; border-radius: 14px; padding: 1.8rem; width: min(400px, 100%); box-shadow: 0 18px 50px rgba(0,0,0,.25); }
 .login-caixa h1 { font-size: 1.25rem; }
-.login-marca { margin: 0 0 .9rem; }
-.login-marca img {
-  display: block; width: auto; height: auto;
-  max-width: 210px; max-height: 90px; object-fit: contain; margin: 0 auto;
-}
 .login-caixa .sub { color: var(--cinza-500); font-size: .86rem; margin-bottom: 1.2rem; }
 
 /* ---------------------------------------------------------------- gráficos */
