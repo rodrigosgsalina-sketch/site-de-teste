@@ -5,6 +5,7 @@ const db = require('../db');
 const historico = require('../domain/historico');
 const integracoes = require('../domain/integracoes');
 const notificacoes = require('../domain/notificacoes');
+const ordemSetores = require('../domain/ordem-setores');
 const parametros = require('../domain/parametros');
 const processos = require('../domain/processos');
 const usuarios = require('../domain/usuarios');
@@ -197,38 +198,166 @@ router.post('/tabelas/setores', (req, res, next) => {
 });
 
 /* --------------------------------------------------------- Checklist modelo */
-router.get('/checklist-modelo', (req, res) => {
-  const conn = db.get();
-  const tipoId = req.query.tipo ? Number(req.query.tipo) : null;
-  const filtro = req.query.tipo === 'todos' ? 'TODOS' : tipoId;
 
-  let where = '';
+/** Sem acento e sem caixa. */
+function semAcento(texto) {
+  return String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+/**
+ * Reduz a palavra ao radical aproximado para que a busca não dependa de plural
+ * nem de acento: "Certidões" e "certidao" chegam ambos a "certidao".
+ */
+function radical(palavra) {
+  return palavra.replace(/(oes|aes|aos)$/, 'ao').replace(/s$/, '');
+}
+
+/** Texto comparável usado pela busca do checklist modelo. */
+function paraBusca(texto) {
+  return semAcento(texto)
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .map(radical)
+    .join(' ');
+}
+
+/** Lê os filtros da querystring e devolve WHERE + argumentos. */
+function filtrosDoModelo(query) {
+  const filtros = {
+    tipo: query.tipo === undefined ? '' : String(query.tipo),
+    setor: query.setor ? String(query.setor) : '',
+    q: (query.q || '').trim(),
+    obrigatorio: query.obrigatorio === '1' || query.obrigatorio === '0' ? query.obrigatorio : '',
+    ativo: query.ativo === '1' || query.ativo === '0' ? query.ativo : '',
+  };
+
+  const condicoes = [];
   const args = [];
-  if (filtro === 'TODOS') {
-    where = 'WHERE m.tipo_processo_id IS NULL';
-  } else if (filtro) {
-    where = 'WHERE m.tipo_processo_id = ?';
-    args.push(filtro);
+
+  if (filtros.tipo === 'todos') {
+    condicoes.push('m.tipo_processo_id IS NULL');
+  } else if (filtros.tipo) {
+    // Um tipo específico inclui os itens aplicados a todos os processos.
+    condicoes.push('(m.tipo_processo_id = ? OR m.tipo_processo_id IS NULL)');
+    args.push(Number(filtros.tipo));
+  }
+  if (filtros.setor) {
+    condicoes.push('m.setor_id = ?');
+    args.push(Number(filtros.setor));
+  }
+  if (filtros.obrigatorio) {
+    condicoes.push('m.obrigatorio = ?');
+    args.push(Number(filtros.obrigatorio));
+  }
+  if (filtros.ativo) {
+    condicoes.push('m.ativo = ?');
+    args.push(Number(filtros.ativo));
   }
 
-  const itens = conn
+  return { filtros, where: condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '', args };
+}
+
+/** Mantém os filtros aplicados ao voltar para a listagem. */
+function retornoDoModelo(req) {
+  const filtros = String(req.body.retorno || '').replace(/[^a-zA-Z0-9=&%._-]/g, '');
+  return `/admin/checklist-modelo${filtros ? `?${filtros}` : ''}`;
+}
+
+router.get('/checklist-modelo', (req, res) => {
+  const conn = db.get();
+  const { filtros, where, args } = filtrosDoModelo(req.query);
+  const tipoSelecionado = filtros.tipo && filtros.tipo !== 'todos' ? Number(filtros.tipo) : null;
+
+  // Com um tipo escolhido, a listagem já segue a ordem de atendimento dele.
+  const posicao = tipoSelecionado
+    ? `COALESCE(ost.ordem, 1000 + s.ordem)`
+    : `1000 + s.ordem`;
+  const juncaoOrdem = tipoSelecionado
+    ? `LEFT JOIN ordem_setores_tipo ost ON ost.tipo_processo_id = ${tipoSelecionado} AND ost.setor_id = m.setor_id`
+    : '';
+
+  let itens = conn
     .prepare(
-      `SELECT m.*, s.nome AS setor, t.nome AS tipo
+      `SELECT m.*, s.nome AS setor, t.nome AS tipo, ${posicao} AS posicao_setor
          FROM checklist_modelo m
          JOIN setores s ON s.id = m.setor_id
          LEFT JOIN tipos_processo t ON t.id = m.tipo_processo_id
+         ${juncaoOrdem}
          ${where}
-        ORDER BY (m.tipo_processo_id IS NULL) DESC, t.ordem, s.ordem, m.ordem`
+        ORDER BY posicao_setor, (m.tipo_processo_id IS NULL), t.ordem, m.ordem, m.id`
     )
     .all(...args);
+
+  if (filtros.q) {
+    // Busca tolerante: ignora acento, caixa e plural, e procura no item, no setor
+    // e no tipo. Vários termos funcionam como "e" ("debitos federais").
+    const termos = paraBusca(filtros.q).split(' ').filter(Boolean);
+    itens = itens.filter((m) => {
+      const alvo = paraBusca(`${m.item} ${m.setor} ${m.tipo || 'todos os processos'}`);
+      return termos.every((t) => alvo.includes(t));
+    });
+  }
+
+  const total = conn.prepare('SELECT COUNT(*) AS t FROM checklist_modelo').get().t;
 
   res.render('admin/checklist-modelo', {
     titulo: 'Checklist modelo',
     itens,
+    total,
+    filtros,
+    tipoSelecionado,
+    ordemSetores: tipoSelecionado ? ordemSetores.doTipo(tipoSelecionado) : [],
     tipos: conn.prepare('SELECT id, nome FROM tipos_processo ORDER BY nome').all(),
-    setores: conn.prepare('SELECT id, nome FROM setores WHERE ativo = 1 ORDER BY ordem').all(),
-    filtro: req.query.tipo || '',
+    tiposComOrdem: ordemSetores.tiposComOrdemPropria(),
+    setores: conn.prepare('SELECT id, nome, auxiliar FROM setores WHERE ativo = 1 ORDER BY ordem').all(),
   });
+});
+
+/* Ordem de atendimento dos setores dentro de um tipo de processo. */
+function voltarParaOrdem(req, res, tipoId, mensagem) {
+  if (mensagem) flash(req, 'sucesso', mensagem);
+  res.redirect(`/admin/checklist-modelo?tipo=${tipoId}#ordem`);
+}
+
+router.post('/checklist-modelo/ordem/mover', (req, res, next) => {
+  try {
+    const tipoId = Number(req.body.tipo_processo_id);
+    const setorId = Number(req.body.setor_id);
+    const direcao = req.body.direcao === 'cima' ? -1 : 1;
+    if (!tipoId || !setorId) throw new ErroValidacao('Informe o tipo e o setor.');
+
+    const lista = ordemSetores.mover(tipoId, setorId, direcao);
+    const tipo = db.get().prepare('SELECT nome FROM tipos_processo WHERE id = ?').get(tipoId);
+    historico.registrar({
+      processoId: null,
+      acao: 'Ordem de Setores Alterada',
+      usuario: req.session.usuario,
+      observacao: `${tipo ? tipo.nome : tipoId}: ${lista.map((s) => s.nome).join(' → ')}`,
+    });
+    voltarParaOrdem(req, res, tipoId, 'Ordem de atendimento atualizada.');
+  } catch (err) {
+    if (err instanceof ErroValidacao) {
+      flash(req, 'erro', err.message);
+      return res.redirect('/admin/checklist-modelo');
+    }
+    next(err);
+  }
+});
+
+router.post('/checklist-modelo/ordem/limpar', (req, res) => {
+  const tipoId = Number(req.body.tipo_processo_id);
+  ordemSetores.limpar(tipoId);
+  const tipo = db.get().prepare('SELECT nome FROM tipos_processo WHERE id = ?').get(tipoId);
+  historico.registrar({
+    processoId: null,
+    acao: 'Ordem de Setores Alterada',
+    usuario: req.session.usuario,
+    observacao: `${tipo ? tipo.nome : tipoId}: ordem personalizada removida (volta ao padrão).`,
+  });
+  voltarParaOrdem(req, res, tipoId, 'O tipo voltou a seguir a ordem geral dos setores.');
 });
 
 router.post('/checklist-modelo', (req, res, next) => {
@@ -271,7 +400,7 @@ router.post('/checklist-modelo', (req, res, next) => {
       observacao: item,
     });
     flash(req, 'sucesso', 'Item do checklist modelo salvo. Novos processos já usarão a alteração.');
-    res.redirect(`/admin/checklist-modelo${req.body.tipo_processo_id ? `?tipo=${req.body.tipo_processo_id}` : ''}`);
+    res.redirect(retornoDoModelo(req));
   } catch (err) {
     if (err instanceof ErroValidacao) {
       flash(req, 'erro', err.message);
@@ -290,7 +419,7 @@ router.post('/checklist-modelo/:id/excluir', (req, res) => {
     observacao: `Item ${req.params.id} removido.`,
   });
   flash(req, 'sucesso', 'Item removido do modelo (processos já abertos não são afetados).');
-  res.redirect('/admin/checklist-modelo');
+  res.redirect(retornoDoModelo(req));
 });
 
 /* ------------------------------------------------ Notificações e auditoria */

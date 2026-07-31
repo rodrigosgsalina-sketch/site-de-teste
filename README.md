@@ -113,6 +113,7 @@ src/
     dashboard.js         indicadores gerenciais
     usuarios.js          autenticação por ID de usuário e CRUD
     avisos.js            mural interno visível a todos os usuários
+    ordem-setores.js     ordem de atendimento dos setores por tipo de processo
   routes/                camada HTTP
   views/                 telas EJS
   public/                CSS, JS, Chart.js e as fontes (fonts/)
@@ -130,14 +131,15 @@ tests/                   testes das regras de negócio (node:test)
 | `STATUS_PROCESSO` | tabela `status_processo` · aplicados automaticamente pelo motor de status |
 | `SETORES` | tabela `setores` · **Administração → Tipos e setores** |
 | `PROCESSOS` | tabela `processos` · **Abrir processo** e painel do processo |
-| `CHECKLIST_MODELO` | tabela `checklist_modelo` · **Administração → Checklist modelo** |
+| `CHECKLIST_MODELO` | tabela `checklist_modelo` · **Administração → Checklist modelo** (com filtros por texto, tipo, setor, obrigatoriedade e situação) |
 | `CHECKLIST` | tabela `checklist` · gerada na abertura, respondida no painel do processo |
 | `USUÁRIOS` | tabela `usuarios` · **Administração → Usuários** |
 | `HISTÓRICO` | tabela `historico` · linha do tempo do processo e **Auditoria** |
 | `PARAMETROS` | tabela `parametros` · **Administração → Parâmetros** |
 
 Além das abas da planilha, a plataforma mantém as tabelas `avisos` e `avisos_lidos` (mural interno),
-`documentos`, `notificacoes` (outbox de e-mail) e `sessoes`.
+`ordem_setores_tipo` (ordem de atendimento por tipo), `documentos`, `notificacoes` (outbox de
+e-mail) e `sessoes`.
 
 **Setores auxiliares.** O `CHECKLIST_MODELO` referencia cinco “setores” que não estão na aba
 `SETORES`: Sócios, Financeiro, Cliente, TI e Qualidade. Eles foram criados como setores
@@ -157,6 +159,13 @@ sequência reinicia sozinha quando o ano vira.
 `PRAZO_PADRAO_PROCESSO_DIAS`; o checklist é clonado do modelo (itens do tipo escolhido **+**
 os itens da linha “Todos”), cada item recebendo o prazo do seu setor
 (`PRAZO_FISCAL_HORAS`, `PRAZO_DP_HORAS`, `PRAZO_CONTABIL_HORAS`, `PRAZO_JURIDICO_HORAS`).
+
+**Ordem de atendimento por tipo** — em **Administração → Checklist modelo**, ao escolher um tipo
+de processo é possível definir quem responde primeiro (por exemplo, Departamento Pessoal antes do
+Paralegal na Baixa de Empresa). A ordem vale para o agrupamento do checklist, para a etapa atual,
+para o status `Em Análise <setor>` e para o aviso de vez do setor — e, por ser lida no momento do
+uso, também se aplica aos processos já em andamento. Tipos sem ordem própria seguem a ordem geral
+da tabela `setores`; setores sem posição definida vão para o fim.
 
 **Motor de status** — recalculado a cada resposta do checklist:
 

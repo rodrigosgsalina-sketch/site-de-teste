@@ -576,6 +576,31 @@ legend {
 .item-form .largo { grid-column: 1 / -1; }
 .item-atrasado { color: var(--vermelho); font-weight: 600; }
 
+/* --------------------------------------------- ordem de atendimento */
+.ordem-setores { list-style: none; margin: .2rem 0 0; padding: 0; display: grid; gap: .4rem; counter-reset: setor; }
+.ordem-setores li {
+  display: flex; align-items: center; gap: .8rem;
+  padding: .6rem .75rem; border: 1px solid var(--linha); border-radius: var(--raio-sm);
+  background: var(--superficie-2);
+  transition: border-color var(--rapido) ease, background var(--rapido) ease, transform var(--rapido) var(--suave);
+  animation: surgir var(--medio) var(--suave) both;
+}
+.ordem-setores li:hover { background: var(--superficie); border-color: var(--linha-forte); transform: translateX(2px); }
+.ordem-posicao {
+  flex: none; width: 26px; height: 26px; border-radius: var(--raio-xs);
+  display: grid; place-items: center;
+  background: var(--azul-800); color: #fff;
+  font-family: var(--display); font-size: .8rem; font-weight: 700;
+}
+.ordem-nome { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+.ordem-nome strong { font-family: var(--display); font-size: .93rem; color: var(--tinta); font-weight: 600; }
+.ordem-nome small { color: var(--tinta-4); font-size: .78rem; }
+.ordem-setores .acoes { gap: .3rem; }
+.ordem-setores li:nth-child(1) { animation-delay: 20ms; }
+.ordem-setores li:nth-child(2) { animation-delay: 45ms; }
+.ordem-setores li:nth-child(3) { animation-delay: 70ms; }
+.ordem-setores li:nth-child(n+4) { animation-delay: 90ms; }
+
 /* ----------------------------------------------------------- linha tempo */
 .linha-tempo { list-style: none; margin: 0; padding: 0; }
 .linha-tempo li {

@@ -32,6 +32,7 @@ const historico = require('../src/domain/historico');
 const acesso = require('../src/domain/acesso');
 const avisos = require('../src/domain/avisos');
 const dashboard = require('../src/domain/dashboard');
+const ordemSetores = require('../src/domain/ordem-setores');
 const usuariosDom = require('../src/domain/usuarios');
 
 /* ----------------------------------------------------------- preparação */
@@ -386,6 +387,67 @@ test('conclusão e impedimento publicam aviso visível para todos os usuários',
   assert.strictEqual(avisos.contarNaoLidos(fiscal.id), 0);
 
   parametros.definir('EXIGIR_REVISAO_FINAL', 'Sim');
+});
+
+/* ------------------------------------------- ordem de atendimento por tipo */
+
+test('ordem dos setores definida por tipo governa checklist, etapa e status', () => {
+  // Sem ordem própria, "Baixa de Empresa" segue a ordem geral: Paralegal antes do DP.
+  const padrao = ordemSetores.doTipo(tipoBaixa.id).map((s) => s.nome);
+  assert.ok(padrao.indexOf('Paralegal') < padrao.indexOf('Departamento Pessoal'));
+
+  const processoPadrao = novoProcesso(tipoBaixa.id);
+  assert.strictEqual(processos.obter(processoPadrao.id).status, 'Em Análise Fiscal');
+
+  // Departamento Pessoal primeiro, Paralegal por último.
+  const ids = ordemSetores.doTipo(tipoBaixa.id);
+  const dp = ids.find((s) => s.nome === 'Departamento Pessoal');
+  const paralegal = ids.find((s) => s.nome === 'Paralegal');
+  const demais = ids.filter((s) => s !== dp && s !== paralegal);
+  ordemSetores.definir(tipoBaixa.id, [dp.id, ...demais.map((s) => s.id), paralegal.id]);
+
+  const nova = ordemSetores.doTipo(tipoBaixa.id).map((s) => s.nome);
+  assert.strictEqual(nova[0], 'Departamento Pessoal');
+  assert.strictEqual(nova.at(-1), 'Paralegal');
+
+  // O agrupamento do checklist — inclusive de processo já aberto — acompanha.
+  const grupos = checklist.agrupadoPorSetor(processoPadrao.id).map((g) => g.setor);
+  assert.strictEqual(grupos[0], 'Departamento Pessoal');
+  assert.strictEqual(grupos.at(-1), 'Paralegal');
+
+  // O motor de status passa a apontar para o setor que agora vem primeiro.
+  processos.recalcularStatus(processoPadrao.id, admin, { silencioso: true });
+  assert.strictEqual(processos.obter(processoPadrao.id).status, 'Em Análise Departamento Pessoal');
+  assert.match(processos.obter(processoPadrao.id).etapa_atual, /Departamento Pessoal/);
+
+  // Processos abertos depois nascem com a mesma ordem.
+  const novo = novoProcesso(tipoBaixa.id);
+  assert.strictEqual(processos.obter(novo.id).status, 'Em Análise Departamento Pessoal');
+
+  // "Mover" reposiciona um setor de cada vez.
+  ordemSetores.mover(tipoBaixa.id, dp.id, 1);
+  assert.strictEqual(ordemSetores.doTipo(tipoBaixa.id)[1].nome, 'Departamento Pessoal');
+  ordemSetores.mover(tipoBaixa.id, dp.id, -1);
+  assert.strictEqual(ordemSetores.doTipo(tipoBaixa.id)[0].nome, 'Departamento Pessoal');
+
+  // Limpar devolve o tipo à ordem geral, sem afetar outros tipos.
+  ordemSetores.limpar(tipoBaixa.id);
+  assert.deepStrictEqual(ordemSetores.doTipo(tipoBaixa.id).map((s) => s.nome), padrao);
+  processos.recalcularStatus(processoPadrao.id, admin, { silencioso: true });
+  assert.strictEqual(processos.obter(processoPadrao.id).status, 'Em Análise Fiscal');
+});
+
+test('ordem personalizada de um tipo não interfere nos demais', () => {
+  const antesCertidoes = ordemSetores.doTipo(tipoCertidoes.id).map((s) => s.nome);
+  const baixa = ordemSetores.doTipo(tipoBaixa.id);
+  ordemSetores.definir(tipoBaixa.id, [...baixa.map((s) => s.id)].reverse());
+
+  assert.deepStrictEqual(ordemSetores.doTipo(tipoCertidoes.id).map((s) => s.nome), antesCertidoes);
+  assert.deepStrictEqual(
+    ordemSetores.doTipo(tipoBaixa.id).map((s) => s.nome),
+    baixa.map((s) => s.nome).reverse()
+  );
+  ordemSetores.limpar(tipoBaixa.id);
 });
 
 test.after(() => {

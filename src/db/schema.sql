@@ -64,6 +64,18 @@ CREATE TABLE IF NOT EXISTS checklist_modelo (
 );
 CREATE INDEX IF NOT EXISTS idx_modelo_tipo ON checklist_modelo (tipo_processo_id);
 
+-- ------------------------------------------------- ORDEM_SETORES_TIPO
+-- Ordem de atendimento dos setores dentro de um tipo de processo: define
+-- quem entra primeiro no checklist (ex.: Departamento Pessoal antes do
+-- Paralegal em "Baixa de Empresa"). Setores sem posição definida vão para o
+-- fim, na ordem geral da tabela `setores`.
+CREATE TABLE IF NOT EXISTS ordem_setores_tipo (
+  tipo_processo_id INTEGER NOT NULL REFERENCES tipos_processo (id) ON DELETE CASCADE,
+  setor_id         INTEGER NOT NULL REFERENCES setores (id) ON DELETE CASCADE,
+  ordem            INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (tipo_processo_id, setor_id)
+);
+
 -- -------------------------------------------------------------- PROCESSOS
 CREATE TABLE IF NOT EXISTS processos (
   id                     INTEGER PRIMARY KEY AUTOINCREMENT,

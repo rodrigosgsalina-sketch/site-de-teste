@@ -2,6 +2,7 @@
 
 const db = require('../db');
 const avisos = require('./avisos');
+const ordemSetores = require('./ordem-setores');
 const parametros = require('./parametros');
 const { agoraISO, somarHoras } = require('../lib/datas');
 
@@ -21,14 +22,16 @@ function gerarParaProcesso(processoId, tipoProcessoId, aberturaISO = agoraISO())
   const conn = db.get();
   const modelos = conn
     .prepare(
-      `SELECT m.id, m.setor_id, m.item, m.obrigatorio, m.ordem, s.nome AS setor, s.ordem AS setor_ordem
+      `SELECT m.id, m.setor_id, m.item, m.obrigatorio, m.ordem, s.nome AS setor,
+              ${ordemSetores.posicaoSQL()} AS setor_ordem
          FROM checklist_modelo m
          JOIN setores s ON s.id = m.setor_id
+         ${ordemSetores.joinSQL('?', 's.id')}
         WHERE m.ativo = 1
           AND (m.tipo_processo_id = ? OR m.tipo_processo_id IS NULL)
-        ORDER BY (m.tipo_processo_id IS NULL), s.ordem, m.ordem, m.id`
+        ORDER BY setor_ordem, m.ordem, m.id`
     )
-    .all(tipoProcessoId);
+    .all(tipoProcessoId, tipoProcessoId);
 
   const inserir = conn.prepare(
     `INSERT INTO checklist
@@ -59,7 +62,8 @@ function gerarParaProcesso(processoId, tipoProcessoId, aberturaISO = agoraISO())
 }
 
 const SELECT_ITEM = `
-  SELECT c.*, s.nome AS setor, s.auxiliar AS setor_auxiliar, s.ordem AS setor_ordem,
+  SELECT c.*, s.nome AS setor, s.auxiliar AS setor_auxiliar,
+         ${ordemSetores.posicaoSQL()} AS setor_ordem,
          u.nome AS responsavel_nome, uc.nome AS conferente_nome,
          p.codigo AS processo_codigo, p.razao_social, p.data_previsao,
          t.nome AS tipo_processo
@@ -67,6 +71,7 @@ const SELECT_ITEM = `
     JOIN setores s ON s.id = c.setor_id
     JOIN processos p ON p.id = c.processo_id
     JOIN tipos_processo t ON t.id = p.tipo_processo_id
+    ${ordemSetores.joinSQL('p.tipo_processo_id', 'c.setor_id')}
     LEFT JOIN usuarios u ON u.id = c.responsavel_id
     LEFT JOIN usuarios uc ON uc.id = c.conferido_por_id`;
 
@@ -77,7 +82,7 @@ function obterItem(id) {
 function doProcesso(processoId) {
   return db
     .get()
-    .prepare(`${SELECT_ITEM} WHERE c.processo_id = ? ORDER BY s.ordem, c.ordem, c.id`)
+    .prepare(`${SELECT_ITEM} WHERE c.processo_id = ? ORDER BY setor_ordem, c.ordem, c.id`)
     .all(processoId);
 }
 
@@ -272,13 +277,15 @@ function setoresPendentes(processoId) {
   return db
     .get()
     .prepare(
-      `SELECT s.id, s.nome, s.ordem, COUNT(*) AS pendentes,
+      `SELECT s.id, s.nome, ${ordemSetores.posicaoSQL()} AS ordem, COUNT(*) AS pendentes,
               SUM(CASE WHEN c.status_item = 'Impedido' THEN 1 ELSE 0 END) AS impedidos
          FROM checklist c
+         JOIN processos p ON p.id = c.processo_id
          JOIN setores s ON s.id = c.setor_id
+         ${ordemSetores.joinSQL('p.tipo_processo_id', 'c.setor_id')}
         WHERE c.processo_id = ? AND c.status_item <> 'Concluído'
         GROUP BY s.id
-        ORDER BY s.ordem`
+        ORDER BY ordem`
     )
     .all(processoId);
 }
@@ -287,8 +294,14 @@ function setoresDoProcesso(processoId) {
   return db
     .get()
     .prepare(
-      `SELECT DISTINCT s.nome FROM checklist c JOIN setores s ON s.id = c.setor_id
-        WHERE c.processo_id = ? ORDER BY s.ordem`
+      `SELECT s.nome, MIN(${ordemSetores.posicaoSQL()}) AS ordem
+         FROM checklist c
+         JOIN processos p ON p.id = c.processo_id
+         JOIN setores s ON s.id = c.setor_id
+         ${ordemSetores.joinSQL('p.tipo_processo_id', 'c.setor_id')}
+        WHERE c.processo_id = ?
+        GROUP BY s.id
+        ORDER BY ordem`
     )
     .all(processoId)
     .map((r) => r.nome);

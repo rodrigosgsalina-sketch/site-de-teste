@@ -1,26 +1,148 @@
 <%- include('../partials/cabecalho', { titulo: titulo }) %>
 
-<div class="cartao">
-  <form method="get" action="/admin/checklist-modelo" class="filtros">
-    <div class="campo" style="min-width:280px">
-      <label for="tipo">Tipo de processo</label>
-      <select id="tipo" name="tipo" onchange="this.form.submit()">
-        <option value="">Todos os tipos</option>
-        <option value="todos" <%= filtro === 'todos' ? 'selected' : '' %>>Itens aplicados a todo processo</option>
-        <% tipos.forEach(function (t) { %>
-          <option value="<%= t.id %>" <%= String(filtro) === String(t.id) ? 'selected' : '' %>><%= t.nome %></option>
-        <% }) %>
-      </select>
-    </div>
-    <noscript><button class="botao botao-pequeno">Filtrar</button></noscript>
-  </form>
+<%
+  var tipoAtual = tipoSelecionado ? tipos.find(function (t) { return t.id === tipoSelecionado; }) : null;
+  var qs = function () {
+    var base = { tipo: filtros.tipo, setor: filtros.setor, q: filtros.q,
+                 obrigatorio: filtros.obrigatorio, ativo: filtros.ativo };
+    return Object.keys(base)
+      .filter(function (k) { return base[k] !== '' && base[k] !== undefined && base[k] !== null; })
+      .map(function (k) { return k + '=' + encodeURIComponent(base[k]); })
+      .join('&');
+  };
+%>
 
-  <div class="aviso aviso-info">
-    Alterações no modelo valem para <strong>novos processos</strong>. Processos já abertos mantêm o
-    checklist que foi clonado na abertura, preservando a auditoria.
-  </div>
+<!-- ------------------------------------------------------------- filtros -->
+<div class="cartao">
+  <form method="get" action="/admin/checklist-modelo">
+    <div class="linha-campos">
+      <div class="campo" style="grid-column: span 2">
+        <label for="q">Buscar item</label>
+        <input type="search" id="q" name="q" value="<%= filtros.q %>"
+               placeholder="Trecho do item, setor ou tipo — ex.: certidão, DBE, débitos">
+      </div>
+      <div class="campo">
+        <label for="tipo">Tipo de processo</label>
+        <select id="tipo" name="tipo">
+          <option value="">Todos os tipos</option>
+          <option value="todos" <%= filtros.tipo === 'todos' ? 'selected' : '' %>>
+            Somente itens aplicados a todo processo
+          </option>
+          <% tipos.forEach(function (t) { %>
+            <option value="<%= t.id %>" <%= String(filtros.tipo) === String(t.id) ? 'selected' : '' %>>
+              <%= t.nome %><%= tiposComOrdem.indexOf(t.id) !== -1 ? ' · ordem própria' : '' %>
+            </option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="setor">Setor</label>
+        <select id="setor" name="setor">
+          <option value="">Todos os setores</option>
+          <% setores.forEach(function (s) { %>
+            <option value="<%= s.id %>" <%= String(filtros.setor) === String(s.id) ? 'selected' : '' %>>
+              <%= s.nome %><%= s.auxiliar ? ' (auxiliar)' : '' %>
+            </option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="obrigatorio">Obrigatoriedade</label>
+        <select id="obrigatorio" name="obrigatorio">
+          <option value="">Todas</option>
+          <option value="1" <%= filtros.obrigatorio === '1' ? 'selected' : '' %>>Somente obrigatórios</option>
+          <option value="0" <%= filtros.obrigatorio === '0' ? 'selected' : '' %>>Somente opcionais</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="ativo">Situação</label>
+        <select id="ativo" name="ativo">
+          <option value="">Todas</option>
+          <option value="1" <%= filtros.ativo === '1' ? 'selected' : '' %>>Somente ativos</option>
+          <option value="0" <%= filtros.ativo === '0' ? 'selected' : '' %>>Somente inativos</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="acoes">
+      <button class="botao botao-pequeno">Aplicar filtros</button>
+      <a class="botao botao-secundario botao-pequeno" href="/admin/checklist-modelo">Limpar</a>
+      <span class="dica" style="margin-left:auto">
+        <strong><%= itens.length %></strong> de <%= total %> item(ns) do modelo<% if (tipoAtual) { %>
+          · tipo <strong><%= tipoAtual.nome %></strong>, com os itens de todo processo<% } %>
+      </span>
+    </div>
+  </form>
 </div>
 
+<!-- ------------------------------------------------- ordem de atendimento -->
+<% if (tipoAtual) { %>
+  <div class="cartao" id="ordem">
+    <div class="cartao-titulo">
+      <div>
+        <h3>Ordem de atendimento — <%= tipoAtual.nome %></h3>
+        <p class="dica" style="margin:0;max-width:70ch">
+          Define quem responde primeiro neste tipo de processo. Vale para o agrupamento do checklist,
+          para a etapa atual, para o status “Em Análise …” e para o aviso de vez do setor — inclusive
+          nos processos que já estão em andamento.
+        </p>
+      </div>
+      <% if (tiposComOrdem.indexOf(tipoAtual.id) !== -1) { %>
+        <form method="post" action="/admin/checklist-modelo/ordem/limpar"
+              data-confirmar="Voltar este tipo à ordem geral dos setores?">
+          <input type="hidden" name="tipo_processo_id" value="<%= tipoAtual.id %>">
+          <button class="botao botao-secundario botao-pequeno">Voltar ao padrão</button>
+        </form>
+      <% } else { %>
+        <span class="etiqueta et-neutro">seguindo a ordem geral dos setores</span>
+      <% } %>
+    </div>
+
+    <% if (!ordemSetores.length) { %>
+      <p class="vazio">Este tipo ainda não tem itens de checklist cadastrados.</p>
+    <% } else { %>
+      <ol class="ordem-setores">
+        <% ordemSetores.forEach(function (s, i) { %>
+          <li>
+            <span class="ordem-posicao"><%= i + 1 %></span>
+            <span class="ordem-nome">
+              <strong><%= s.nome %></strong>
+              <% if (s.auxiliar) { %><span class="etiqueta et-opcional">auxiliar</span><% } %>
+              <small><%= s.itens %> item(ns)</small>
+            </span>
+            <span class="acoes">
+              <form method="post" action="/admin/checklist-modelo/ordem/mover">
+                <input type="hidden" name="tipo_processo_id" value="<%= tipoAtual.id %>">
+                <input type="hidden" name="setor_id" value="<%= s.id %>">
+                <input type="hidden" name="direcao" value="cima">
+                <button class="botao botao-secundario botao-pequeno" title="Subir"
+                        aria-label="Mover <%= s.nome %> para cima" <%= i === 0 ? 'disabled' : '' %>>&uarr;</button>
+              </form>
+              <form method="post" action="/admin/checklist-modelo/ordem/mover">
+                <input type="hidden" name="tipo_processo_id" value="<%= tipoAtual.id %>">
+                <input type="hidden" name="setor_id" value="<%= s.id %>">
+                <input type="hidden" name="direcao" value="baixo">
+                <button class="botao botao-secundario botao-pequeno" title="Descer"
+                        aria-label="Mover <%= s.nome %> para baixo"
+                        <%= i === ordemSetores.length - 1 ? 'disabled' : '' %>>&darr;</button>
+              </form>
+            </span>
+          </li>
+        <% }) %>
+      </ol>
+    <% } %>
+  </div>
+<% } else { %>
+  <div class="cartao">
+    <div class="aviso aviso-info" style="margin:0">
+      Escolha um <strong>tipo de processo</strong> no filtro acima para definir a
+      <strong>ordem de atendimento dos setores</strong> — por exemplo, colocar o Departamento
+      Pessoal primeiro e o Paralegal por último.
+    </div>
+  </div>
+<% } %>
+
+<!-- ------------------------------------------------------------ novo item -->
 <div class="cartao">
   <h3>Novo item</h3>
   <form method="post" action="/admin/checklist-modelo">
@@ -30,17 +152,19 @@
         <select id="tipo_processo_id" name="tipo_processo_id">
           <option value="todos">Todos os processos</option>
           <% tipos.forEach(function (t) { %>
-            <option value="<%= t.id %>" <%= String(filtro) === String(t.id) ? 'selected' : '' %>><%= t.nome %></option>
+            <option value="<%= t.id %>" <%= tipoSelecionado === t.id ? 'selected' : '' %>><%= t.nome %></option>
           <% }) %>
         </select>
       </div>
       <div class="campo">
         <label for="setor_id">Setor <span class="obrig">*</span></label>
         <select id="setor_id" name="setor_id" required>
-          <% setores.forEach(function (s) { %><option value="<%= s.id %>"><%= s.nome %></option><% }) %>
+          <% setores.forEach(function (s) { %>
+            <option value="<%= s.id %>" <%= String(filtros.setor) === String(s.id) ? 'selected' : '' %>><%= s.nome %></option>
+          <% }) %>
         </select>
       </div>
-      <div class="campo" style="flex:2">
+      <div class="campo" style="grid-column: span 2">
         <label for="item">Item <span class="obrig">*</span></label>
         <input type="text" id="item" name="item" placeholder="Ex.: Contrato Social elaborado?" required>
       </div>
@@ -53,52 +177,70 @@
   </form>
 </div>
 
+<!-- ------------------------------------------------------------- listagem -->
 <div class="cartao">
-  <h3><%= itens.length %> item(ns) no modelo</h3>
-  <div class="campo">
-    <input type="search" data-filtra="#tabela-modelo" placeholder="Filtrar por item, setor ou tipo…">
-  </div>
-  <div class="tabela-scroll">
-    <table class="tabela" id="tabela-modelo">
-      <thead><tr><th>Tipo</th><th>Setor</th><th>Item</th><th>Obrigatório</th><th>Ativo</th><th></th></tr></thead>
-      <tbody>
-        <% itens.forEach(function (m) { %>
-          <tr>
-            <td>
-              <select form="modelo-<%= m.id %>" name="tipo_processo_id">
-                <option value="todos" <%= m.tipo_processo_id ? '' : 'selected' %>>Todos</option>
-                <% tipos.forEach(function (t) { %>
-                  <option value="<%= t.id %>" <%= m.tipo_processo_id === t.id ? 'selected' : '' %>><%= t.nome %></option>
-                <% }) %>
-              </select>
-            </td>
-            <td>
-              <select form="modelo-<%= m.id %>" name="setor_id">
-                <% setores.forEach(function (s) { %>
-                  <option value="<%= s.id %>" <%= m.setor_id === s.id ? 'selected' : '' %>><%= s.nome %></option>
-                <% }) %>
-              </select>
-            </td>
-            <td><input type="text" form="modelo-<%= m.id %>" name="item" value="<%= m.item %>" required></td>
-            <td><input type="checkbox" form="modelo-<%= m.id %>" name="obrigatorio" value="1" <%= m.obrigatorio ? 'checked' : '' %>></td>
-            <td><input type="checkbox" form="modelo-<%= m.id %>" name="ativo" value="1" <%= m.ativo ? 'checked' : '' %>></td>
-            <td class="acoes">
-              <button class="botao botao-secundario botao-pequeno" form="modelo-<%= m.id %>">Salvar</button>
-              <button class="botao botao-perigo botao-pequeno" form="modelo-excluir-<%= m.id %>">Excluir</button>
-            </td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
+  <div class="cartao-titulo">
+    <h3><%= itens.length %> item(ns) encontrados</h3>
+    <% if (tipoAtual) { %>
+      <span class="dica">Listados na ordem de atendimento definida acima.</span>
+    <% } %>
   </div>
 
-  <% itens.forEach(function (m) { %>
-    <form id="modelo-<%= m.id %>" method="post" action="/admin/checklist-modelo" hidden>
-      <input type="hidden" name="id" value="<%= m.id %>">
-    </form>
-    <form id="modelo-excluir-<%= m.id %>" method="post" action="/admin/checklist-modelo/<%= m.id %>/excluir"
-          data-confirmar="Remover este item do modelo?" hidden></form>
-  <% }) %>
+  <% if (!itens.length) { %>
+    <p class="vazio">Nenhum item corresponde aos filtros. <a href="/admin/checklist-modelo">Limpar filtros</a>.</p>
+  <% } else { %>
+    <div class="tabela-scroll">
+      <table class="tabela" id="tabela-modelo">
+        <thead>
+          <tr><th>Tipo</th><th>Setor</th><th>Item</th><th>Obrigatório</th><th>Ativo</th><th></th></tr>
+        </thead>
+        <tbody>
+          <% itens.forEach(function (m) { %>
+            <tr>
+              <td>
+                <select form="modelo-<%= m.id %>" name="tipo_processo_id">
+                  <option value="todos" <%= m.tipo_processo_id ? '' : 'selected' %>>Todos</option>
+                  <% tipos.forEach(function (t) { %>
+                    <option value="<%= t.id %>" <%= m.tipo_processo_id === t.id ? 'selected' : '' %>><%= t.nome %></option>
+                  <% }) %>
+                </select>
+              </td>
+              <td>
+                <select form="modelo-<%= m.id %>" name="setor_id">
+                  <% setores.forEach(function (s) { %>
+                    <option value="<%= s.id %>" <%= m.setor_id === s.id ? 'selected' : '' %>><%= s.nome %></option>
+                  <% }) %>
+                </select>
+              </td>
+              <td><input type="text" form="modelo-<%= m.id %>" name="item" value="<%= m.item %>" required></td>
+              <td><input type="checkbox" form="modelo-<%= m.id %>" name="obrigatorio" value="1" <%= m.obrigatorio ? 'checked' : '' %>></td>
+              <td><input type="checkbox" form="modelo-<%= m.id %>" name="ativo" value="1" <%= m.ativo ? 'checked' : '' %>></td>
+              <td class="acoes">
+                <button class="botao botao-secundario botao-pequeno" form="modelo-<%= m.id %>">Salvar</button>
+                <button class="botao botao-perigo botao-pequeno" form="modelo-excluir-<%= m.id %>">Excluir</button>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <% itens.forEach(function (m) { %>
+      <form id="modelo-<%= m.id %>" method="post" action="/admin/checklist-modelo" hidden>
+        <input type="hidden" name="id" value="<%= m.id %>">
+        <input type="hidden" name="retorno" value="<%= qs() %>">
+      </form>
+      <form id="modelo-excluir-<%= m.id %>" method="post" action="/admin/checklist-modelo/<%= m.id %>/excluir"
+            data-confirmar="Remover este item do modelo?" hidden>
+        <input type="hidden" name="retorno" value="<%= qs() %>">
+      </form>
+    <% }) %>
+  <% } %>
+
+  <p class="dica" style="margin-top:1rem">
+    Alterações no modelo valem para <strong>novos processos</strong>. Processos já abertos mantêm o
+    checklist clonado na abertura — só a ordem de atendimento é aplicada também a eles.
+  </p>
 </div>
 
 <%- include('../partials/rodape') %>
