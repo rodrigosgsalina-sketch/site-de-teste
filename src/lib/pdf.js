@@ -8,7 +8,7 @@ const { formatarData, formatarDataHora } = require('./datas');
 /** Logomarca usada no topo dos documentos. */
 const LOGO = path.join(__dirname, '..', 'public', 'img', 'logo-jsgrilo.png');
 const TEM_LOGO = fs.existsSync(LOGO);
-const LARGURA_LOGO = 150;
+const LARGURA_LOGO = 118;
 
 /** Lê largura e altura do cabeçalho IHDR do PNG, para reservar o espaço certo. */
 function dimensoesPNG(arquivo) {

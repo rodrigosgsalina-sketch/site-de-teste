@@ -267,9 +267,12 @@ A logomarca fica em `src/public/img/`:
 | `marca-jsgrilo.png` | ícone da aba do navegador (favicon) |
 | `logo-jsgrilo.webp` | original recebido, guardado como referência |
 
-Para trocar a marca, basta substituir os arquivos mantendo os nomes — a plataforma lê as dimensões
-do PNG na hora de montar o PDF, então logos com outra proporção continuam saindo corretas. Se
-`logo-jsgrilo.png` for removido, os PDFs voltam a imprimir o nome do escritório em texto.
+Para trocar a marca, basta substituir os arquivos mantendo os nomes. Não é preciso redimensionar
+nada antes: a exibição é limitada por CSS a **148 × 52 px** na barra lateral e **210 × 90 px** na
+tela de login, preservando a proporção — logos altas, largas ou quadradas se ajustam sem invadir o
+menu. No PDF a marca sai com 118 pt de largura e o espaço é reservado a partir das dimensões reais
+do arquivo. Se `logo-jsgrilo.png` for removido, os PDFs voltam a imprimir o nome do escritório em
+texto.
 
 ## Se algo der errado na instalação
 

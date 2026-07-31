@@ -53,12 +53,18 @@ h3 { font-size: 1rem; }
   height: 100vh;
 }
 
-/* A logomarca é escura, então fica sobre um bloco claro dentro da barra. */
+/* A logomarca é escura, então fica sobre um bloco claro dentro da barra.
+   O bloco acompanha o tamanho da imagem, que é limitada em largura e altura
+   para não invadir o menu — vale para logos de qualquer proporção. */
 .marca {
-  display: block; margin: .8rem; padding: .75rem .85rem;
-  background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.22);
+  display: block; width: fit-content; margin: .8rem auto .5rem;
+  padding: .45rem .6rem; background: #fff; border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.22);
 }
-.marca img { display: block; width: 100%; height: auto; }
+.marca img {
+  display: block; width: auto; height: auto;
+  max-width: 148px; max-height: 52px; object-fit: contain;
+}
 .marca:focus-visible { outline: 2px solid #9ec7ea; outline-offset: 2px; }
 
 .lateral nav { display: flex; flex-direction: column; padding: .6rem 0; overflow-y: auto; flex: 1; }
@@ -258,7 +264,10 @@ legend { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-
 .login-caixa { background: #fff; border-radius: 14px; padding: 1.8rem; width: min(400px, 100%); box-shadow: 0 18px 50px rgba(0,0,0,.25); }
 .login-caixa h1 { font-size: 1.25rem; }
 .login-marca { margin: 0 0 .9rem; }
-.login-marca img { display: block; width: 100%; max-width: 260px; height: auto; margin: 0 auto; }
+.login-marca img {
+  display: block; width: auto; height: auto;
+  max-width: 210px; max-height: 90px; object-fit: contain; margin: 0 auto;
+}
 .login-caixa .sub { color: var(--cinza-500); font-size: .86rem; margin-bottom: 1.2rem; }
 
 /* ---------------------------------------------------------------- gráficos */
