@@ -16,6 +16,7 @@
     <% if (erro) { %><div class="aviso aviso-erro"><%= erro %></div><% } %>
     <% if (sucesso) { %><div class="aviso aviso-sucesso"><%= sucesso %></div><% } %>
     <form method="post" action="/perfil/senha">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="campo">
         <label for="senha_atual">Senha atual <span class="obrig">*</span></label>
         <input type="password" id="senha_atual" name="senha_atual" required autocomplete="current-password">

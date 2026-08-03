@@ -137,6 +137,7 @@
     <p class="dica">O cadastro sai da lista. Os processos já abertos para a empresa não são afetados.</p>
     <form method="post" action="/clientes/<%= cliente.id %>/excluir"
           data-confirmar="Remover o cliente <%= cliente.nome %> do cadastro?">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <button class="botao botao-perigo botao-pequeno">Remover cliente</button>
     </form>
   </div>

@@ -12,6 +12,7 @@
 </div>
 
 <form method="post" action="/admin/parametros">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
   <table id="tabela-parametros" style="width:100%;border-collapse:separate;border-spacing:0">
     <tbody>
       <% grupos.forEach(function (entrada) { %>
@@ -53,5 +54,117 @@
     <a class="botao botao-secundario" href="/admin">Voltar</a>
   </div>
 </form>
+
+<!-- ------------------------------------------------------------- backup -->
+<div class="cartao" id="backup">
+  <div class="cartao-titulo">
+    <h2>Backup da plataforma</h2>
+    <span class="etiqueta et-neutro">somente administradores</span>
+  </div>
+
+  <p class="dica" style="font-size:.9rem">
+    O backup é um único arquivo <code>.json</code> com <strong>tudo</strong> o que está na plataforma
+    hoje: processos, checklists, clientes, usuários, parâmetros, histórico, avisos e notificações.
+    O mesmo arquivo volta por aqui, na restauração, e repõe a plataforma exatamente como estava.
+    Guarde-o em local seguro — ele contém dados de clientes e as senhas (cifradas) dos usuários.
+  </p>
+
+  <div class="grade grade-2" style="margin-top:1rem">
+    <div>
+      <h3>Salvar backup</h3>
+      <form method="post" action="/admin/backup">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="checkbox" style="margin:.6rem 0">
+          <input type="checkbox" id="incluir_arquivos" name="incluir_arquivos" value="1">
+          <label for="incluir_arquivos">
+            Incluir os documentos anexados aos processos
+            <div class="dica">Deixa o arquivo bem maior, mas o backup passa a bastar sozinho.</div>
+          </label>
+        </div>
+        <button class="botao">Baixar backup agora</button>
+      </form>
+      <% if (backupsSalvos && backupsSalvos.length) { %>
+        <div class="dica" style="margin-top:.9rem">
+          Cópias guardadas no servidor (<code>data/backups</code>):
+          <ul style="margin:.35rem 0 0 1rem">
+            <% backupsSalvos.forEach(function (b) { %>
+              <li><span class="mono"><%= b.nome %></span> · <%= Math.max(1, Math.round(b.tamanho / 1024)) %> KB · <%= fmtDataHora(b.data) %></li>
+            <% }) %>
+          </ul>
+        </div>
+      <% } %>
+    </div>
+
+    <div>
+      <h3>Restaurar backup</h3>
+      <% if (!conferencia) { %>
+        <p class="dica">
+          Envie um arquivo gerado aqui. Nada é gravado no envio: primeiro a plataforma mostra
+          o que há dentro para você conferir.
+        </p>
+        <form method="post" action="/admin/backup/restaurar" enctype="multipart/form-data">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div class="campo">
+            <label for="arquivo_backup">Arquivo de backup (.json)</label>
+            <input type="file" id="arquivo_backup" name="backup" accept="application/json,.json" required>
+          </div>
+          <button class="botao botao-secundario">Conferir arquivo</button>
+        </form>
+      <% } else { %>
+        <div class="aviso aviso-alerta">
+          <strong>Confira antes de confirmar.</strong> A restauração <u>substitui</u> todo o conteúdo
+          atual pelo do arquivo. O estado de agora é guardado automaticamente em
+          <code>data/backups</code> antes da troca.
+        </div>
+
+        <div class="dica" style="margin:.5rem 0">
+          <span class="mono"><%= conferencia.nomeEnviado %></span> ·
+          gerado em <%= fmtDataHora(conferencia.geradoEm) %> por <%= conferencia.geradoPor %>
+          <% if (conferencia.arquivos) { %>
+            · <%= conferencia.arquivos %> anexo(s) (<%= Math.round(conferencia.bytesArquivos / 1024 / 1024 * 10) / 10 %> MB)
+          <% } %>
+        </div>
+
+        <% conferencia.avisos.forEach(function (aviso) { %>
+          <div class="aviso aviso-alerta"><%= aviso %></div>
+        <% }) %>
+
+        <div style="overflow-x:auto">
+          <table class="tabela">
+            <thead><tr><th>Conteúdo</th><th style="text-align:right">Hoje</th><th style="text-align:right">No backup</th></tr></thead>
+            <tbody>
+              <% conferencia.conteudo.forEach(function (linha) { %>
+                <tr>
+                  <td><%= linha.rotulo %></td>
+                  <td class="mono" style="text-align:right"><%= linha.atual %></td>
+                  <td class="mono" style="text-align:right"><%= linha.doArquivo %></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+
+        <form method="post" action="/admin/backup/confirmar" style="margin-top:1rem"
+              data-confirmar="Substituir todos os dados atuais pelo conteúdo do backup?">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div class="checkbox" style="margin:.4rem 0">
+            <input type="checkbox" id="ignorar_arquivos" name="ignorar_arquivos" value="1">
+            <label for="ignorar_arquivos">Não repor os documentos anexados (só os dados)</label>
+          </div>
+          <div class="campo">
+            <label for="confirmacao">Para confirmar, digite <strong>RESTAURAR</strong></label>
+            <input type="text" id="confirmacao" name="confirmacao" autocomplete="off" required
+                   placeholder="RESTAURAR" pattern="[Rr][Ee][Ss][Tt][Aa][Uu][Rr][Aa][Rr]">
+          </div>
+          <button class="botao">Restaurar agora</button>
+        </form>
+        <form method="post" action="/admin/backup/cancelar" style="margin-top:.5rem">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="botao botao-secundario">Cancelar</button>
+        </form>
+      <% } %>
+    </div>
+  </div>
+</div>
 
 <%- include('../partials/rodape') %>

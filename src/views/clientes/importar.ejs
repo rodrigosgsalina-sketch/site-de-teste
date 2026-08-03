@@ -13,6 +13,7 @@
     </p>
 
     <form method="post" action="/clientes/importar" enctype="multipart/form-data" style="margin-top:1rem">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="linha-campos">
         <div class="campo" style="grid-column: span 2">
           <label for="planilha">Planilha de empresas <span class="obrig">*</span></label>
@@ -141,6 +142,7 @@
   <div class="cartao">
     <h3>Confirmar importação</h3>
     <form method="post" action="/clientes/importar/confirmar">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="checkbox" style="margin-bottom:.9rem">
         <input type="checkbox" id="atualizar" name="atualizar" value="1" checked>
         <label for="atualizar">

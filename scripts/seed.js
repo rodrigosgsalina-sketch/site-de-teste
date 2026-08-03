@@ -86,7 +86,7 @@ function upsertUsuarios(conn) {
     `INSERT INTO usuarios (nome, login, email, senha_hash, setor_id, perfil, status)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   );
-  const hash = bcrypt.hashSync(config.senhaPadrao, 10);
+  const hash = bcrypt.hashSync(config.senhaPadrao, config.bcryptRounds);
   dados.USUARIOS.forEach((u) => {
     if (existe.get(u.login, u.email)) return;
     const setor = idSetor.get(u.setor);

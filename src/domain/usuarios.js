@@ -1,6 +1,7 @@
 'use strict';
 
 const bcrypt = require('bcryptjs');
+const config = require('../config');
 const db = require('../db');
 const { agoraISO } = require('../lib/datas');
 const { ErroValidacao } = require('./checklist');
@@ -52,6 +53,9 @@ function porEmail(email) {
   return db.get().prepare(`${SELECT} WHERE u.email = ?`).get(valor);
 }
 
+// Hash sem dono, usado para gastar o mesmo tempo quando o ID não existe.
+const HASH_FALSO = bcrypt.hashSync('senha-que-nao-e-de-ninguem', config.bcryptRounds);
+
 /**
  * Autentica pelo ID de usuário. Por conveniência, também aceita o e-mail
  * cadastrado — quem digitar um dos dois entra.
@@ -60,12 +64,41 @@ function autenticar(identificador, senha) {
   const entrada = String(identificador || '').trim();
   if (!entrada) return null;
   const usuario = porLogin(entrada) || (entrada.includes('@') ? porEmail(entrada) : undefined);
-  if (!usuario) return null;
+  if (!usuario) {
+    // Confere contra um hash descartável: sem isso, "usuário inexistente"
+    // responderia mais rápido que "senha errada" e o tempo de resposta
+    // entregaria quais IDs existem.
+    bcrypt.compareSync(String(senha || ''), HASH_FALSO);
+    return null;
+  }
   if (usuario.status !== 'Ativo') return { bloqueado: true };
   const linha = db.get().prepare('SELECT senha_hash FROM usuarios WHERE id = ?').get(usuario.id);
   if (!bcrypt.compareSync(String(senha || ''), linha.senha_hash)) return null;
   db.get().prepare('UPDATE usuarios SET ultimo_login = ? WHERE id = ?').run(agoraISO(), usuario.id);
   return usuario;
+}
+
+/**
+ * Exige um tamanho mínimo (SENHA_MINIMA, 8 por padrão) e recusa as senhas que
+ * qualquer lista de ataque tenta primeiro.
+ */
+const SENHAS_OBVIAS = new Set([
+  '12345678', '123456789', 'senha123', 'password', 'password1', 'qwerty123',
+  'admin123', 'jsgrilo123', 'contabilidade', '1234567890', 'abcd1234',
+]);
+
+function validarSenha(senha, rotulo = 'A senha') {
+  const valor = String(senha || '');
+  if (valor.length < config.senhaMinima) {
+    throw new ErroValidacao(`${rotulo} deve ter ao menos ${config.senhaMinima} caracteres.`);
+  }
+  if (SENHAS_OBVIAS.has(valor.toLowerCase())) {
+    throw new ErroValidacao(`${rotulo} é fácil demais de adivinhar. Escolha outra.`);
+  }
+  if (/^(.)\1+$/.test(valor)) {
+    throw new ErroValidacao(`${rotulo} não pode ser um único caractere repetido.`);
+  }
+  return valor;
 }
 
 function validarLogin(login, idAtual = null) {
@@ -94,7 +127,7 @@ function criar({ nome, login, email, senha, setor_id, perfil, status }) {
   // Sem ID informado, deriva do nome: "Ana Paula" vira "ana.paula".
   const loginFinal = validarLogin(login && login.trim() ? login : loginDisponivel(nome));
   const emailFinal = validarEmail(email);
-  if (!senha || senha.length < 6) throw new ErroValidacao('A senha deve ter ao menos 6 caracteres.');
+  validarSenha(senha);
 
   const info = db
     .get()
@@ -106,7 +139,7 @@ function criar({ nome, login, email, senha, setor_id, perfil, status }) {
       nome.trim(),
       loginFinal,
       emailFinal,
-      bcrypt.hashSync(senha, 10),
+      bcrypt.hashSync(senha, config.bcryptRounds),
       Number(setor_id),
       perfil === 'Administrador' ? 'Administrador' : 'Usuário',
       status === 'Inativo' ? 'Inativo' : 'Ativo'
@@ -135,8 +168,8 @@ function atualizar(id, { nome, login, email, setor_id, perfil, status, senha }) 
     );
 
   if (senha && senha.trim()) {
-    if (senha.length < 6) throw new ErroValidacao('A senha deve ter ao menos 6 caracteres.');
-    db.get().prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?').run(bcrypt.hashSync(senha, 10), id);
+    validarSenha(senha);
+    db.get().prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?').run(bcrypt.hashSync(senha, config.bcryptRounds), id);
   }
   return obter(id);
 }
@@ -147,12 +180,13 @@ function alterarSenha(id, senhaAtual, novaSenha) {
   if (!bcrypt.compareSync(String(senhaAtual || ''), linha.senha_hash)) {
     throw new ErroValidacao('Senha atual incorreta.');
   }
-  if (!novaSenha || novaSenha.length < 6) throw new ErroValidacao('A nova senha deve ter ao menos 6 caracteres.');
-  db.get().prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?').run(bcrypt.hashSync(novaSenha, 10), id);
+  validarSenha(novaSenha, 'A nova senha');
+  db.get().prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?').run(bcrypt.hashSync(novaSenha, config.bcryptRounds), id);
 }
 
 module.exports = {
   listar,
+  validarSenha,
   obter,
   porLogin,
   porEmail,

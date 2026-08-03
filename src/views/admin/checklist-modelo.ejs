@@ -90,6 +90,7 @@
       <% if (tiposComOrdem.indexOf(tipoAtual.id) !== -1) { %>
         <form method="post" action="/admin/checklist-modelo/ordem/limpar"
               data-confirmar="Voltar este tipo à ordem geral dos setores?">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <input type="hidden" name="tipo_processo_id" value="<%= tipoAtual.id %>">
           <button class="botao botao-secundario botao-pequeno">Voltar ao padrão</button>
         </form>
@@ -112,6 +113,7 @@
             </span>
             <span class="acoes">
               <form method="post" action="/admin/checklist-modelo/ordem/mover">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                 <input type="hidden" name="tipo_processo_id" value="<%= tipoAtual.id %>">
                 <input type="hidden" name="setor_id" value="<%= s.id %>">
                 <input type="hidden" name="direcao" value="cima">
@@ -119,6 +121,7 @@
                         aria-label="Mover <%= s.nome %> para cima" <%= i === 0 ? 'disabled' : '' %>>&uarr;</button>
               </form>
               <form method="post" action="/admin/checklist-modelo/ordem/mover">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                 <input type="hidden" name="tipo_processo_id" value="<%= tipoAtual.id %>">
                 <input type="hidden" name="setor_id" value="<%= s.id %>">
                 <input type="hidden" name="direcao" value="baixo">
@@ -146,6 +149,7 @@
 <div class="cartao">
   <h3>Novo item</h3>
   <form method="post" action="/admin/checklist-modelo">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
     <div class="linha-campos">
       <div class="campo">
         <label for="tipo_processo_id">Tipo de processo</label>
@@ -227,11 +231,13 @@
 
     <% itens.forEach(function (m) { %>
       <form id="modelo-<%= m.id %>" method="post" action="/admin/checklist-modelo" hidden>
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <input type="hidden" name="id" value="<%= m.id %>">
         <input type="hidden" name="retorno" value="<%= qs() %>">
       </form>
       <form id="modelo-excluir-<%= m.id %>" method="post" action="/admin/checklist-modelo/<%= m.id %>/excluir"
             data-confirmar="Remover este item do modelo?" hidden>
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <input type="hidden" name="retorno" value="<%= qs() %>">
       </form>
     <% }) %>

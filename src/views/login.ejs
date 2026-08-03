@@ -18,6 +18,7 @@
     <% if (erro) { %><div class="aviso aviso-erro"><%= erro %></div><% } %>
 
     <form method="post" action="/login">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="campo">
         <label for="login">ID de usuário <span class="obrig">*</span></label>
         <input type="text" id="login" name="login" value="<%= login %>" required autofocus

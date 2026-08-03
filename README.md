@@ -32,7 +32,7 @@ Para subir também alguns processos de demonstração:
 npm run seed:demo
 ```
 
-Testes das regras de negócio:
+Testes (regras de negócio, segurança e backup):
 
 ```bash
 npm test
@@ -105,6 +105,11 @@ src/
     seed-data.js         conteúdo da planilha (fonte da carga inicial)
     driver.js            acesso ao SQLite embutido do Node (sem módulo nativo)
     index.js             conexão, migrações e transações
+  lib/
+    seguranca.js         HTTPS obrigatório, cabeçalhos/CSP, freio de força bruta
+    csrf.js              token por sessão em todo formulário
+    session-store.js     sessões no mesmo SQLite da aplicação
+    datas.js, pdf.js     utilidades de data e geração de PDF
   domain/                regras de negócio (testáveis, sem Express)
     processos.js         criação, numeração, motor de status, conclusão, prazos
     checklist.js         clonagem do modelo, respostas, impedimentos, fila
@@ -120,11 +125,12 @@ src/
     ordem-setores.js     ordem de atendimento dos setores por tipo de processo
     clientes.js          cadastro das empresas atendidas
     importacao-clientes.js  leitura do relatório de empresas do Domínio Sistemas
+    backup.js            backup completo em JSON e restauração transacional
   routes/                camada HTTP
   views/                 telas EJS
   public/                CSS, JS, Chart.js e as fontes (fonts/)
-scripts/                 seed, reset, cópia de assets
-tests/                   testes das regras de negócio (node:test)
+scripts/                 seed, reset, cópia de assets, certificado TLS de teste
+tests/                   regras de negócio, segurança e backup (node:test)
 ```
 
 ---
@@ -359,12 +365,121 @@ comando (`PORT=3001 npm start`).
 **Quero recomeçar do zero** — `npm run reset && npm run seed` apaga o banco e os anexos e recarrega
 o modelo da planilha.
 
-## Backup
+## Segurança e publicação na internet
 
-Todo o estado fica em `data/` (banco SQLite + uploads). Copiar essa pasta com a aplicação
-parada é um backup completo. O parâmetro `BACKUP_AUTOMATICO` está previsto na tela de
-parâmetros, mas a rotina agendada de cópia ainda não foi implementada — hoje o backup é
-externo (cron copiando `data/`).
+A plataforma foi preparada para ficar exposta na internet. O que já vem ligado:
+
+| Defesa | Como funciona |
+|---|---|
+| **HTTPS obrigatório** | Com `FORCE_HTTPS` (padrão em produção), toda requisição em HTTP puro é redirecionada com 308 para `https://` — e um POST em HTTP é recusado, nunca redirecionado, para a senha não viajar em claro. |
+| **HSTS** | `Strict-Transport-Security` de 180 dias, enviado só nas respostas que já vieram por HTTPS. |
+| **Cookie de sessão** | `HttpOnly` (o JavaScript da página não lê), `SameSite=Lax` e `Secure` sempre que houver HTTPS. Nome próprio (`jsgrilo.sid`), sem revelar a tecnologia. |
+| **CSRF** | Todo formulário carrega um token ligado à sessão; sem ele — ou com o token de outra sessão — a escrita é recusada com 403. Vale inclusive para o envio de arquivos e para a restauração de backup. |
+| **Content-Security-Policy** | `default-src 'self'` com **nonce por requisição** nos scripts: nada de script inline injetado, nada carregado de outro domínio, nada de `<iframe>` embutindo a plataforma. |
+| **Sessão renovada no login** | O identificador de sessão muda no instante em que a senha confere (evita fixação de sessão); sair destrói a sessão no servidor. |
+| **Freio de força bruta** | 8 tentativas por IP + usuário a cada 15 minutos (`LOGIN_TENTATIVAS`, `LOGIN_JANELA_MINUTOS`); estourado o limite, responde 429 com `Retry-After` e insistir só renova a espera. |
+| **Mensagem única no login** | "ID de usuário ou senha inválidos" tanto para usuário inexistente quanto para senha errada — e o tempo de resposta é o mesmo nos dois casos, para não entregar quais IDs existem. |
+| **Senhas** | bcrypt com custo 12 (`BCRYPT_ROUNDS`), mínimo de 8 caracteres, recusando as senhas óbvias das listas de ataque. |
+| **Anexos** | Extensões em lista fechada (nada de `.html`, `.svg` ou executável), nome de arquivo higienizado, gravação com nome gerado pelo servidor, download sempre como anexo e com `nosniff`. |
+| **Sem redirecionador aberto** | Os campos de "retorno" só aceitam caminhos internos: `//site-falso` e `https://…` viram `/`. |
+| **Injeção** | Todo acesso ao banco usa *prepared statements*; o EJS escapa a saída por padrão e os dados embutidos em `<script>` passam por um serializador que neutraliza `</script>`. |
+| **Saída para a internet** | Parâmetros de webhook (`WEBHOOK_*`) só aceitam `https://`. |
+| **Outros cabeçalhos** | `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, `Origin-Agent-Cluster`, e o `X-Powered-By` desligado. |
+
+Em `NODE_ENV=production` a aplicação **se recusa a subir** com `SESSION_SECRET` no valor de
+exemplo ou sem HTTPS declarado (nem certificado próprio, nem proxy). É proposital: essas duas
+falhas não dão erro visível, só deixam a porta aberta.
+
+### Como publicar com HTTPS
+
+Há dois caminhos; escolha um.
+
+**Opção A — a própria plataforma serve o HTTPS.** Aponte o certificado e a chave no `.env`:
+
+```env
+NODE_ENV=production
+SESSION_SECRET=<troque: openssl rand -hex 32>
+TLS_CERT=/etc/letsencrypt/live/processos.seudominio.com.br/fullchain.pem
+TLS_KEY=/etc/letsencrypt/live/processos.seudominio.com.br/privkey.pem
+PORT=443
+HTTP_REDIRECT_PORT=80     # porta 80 só redireciona para https
+```
+
+O certificado gratuito sai do [Let's Encrypt](https://letsencrypt.org) com o `certbot`.
+Para **testar HTTPS na sua máquina** antes de publicar, gere um certificado local:
+
+```bash
+npm run certificado      # cria data/certificados/ e mostra as linhas do .env
+npm start                # https://localhost:3000
+```
+
+(O navegador vai avisar que o certificado é autoassinado — normal em teste.)
+
+**Opção B — um proxy à frente termina o HTTPS** (nginx, Caddy, Cloudflare Tunnel). É o caminho
+mais simples de manter, porque a renovação do certificado fica com o proxy. Nesse caso:
+
+```env
+NODE_ENV=production
+SESSION_SECRET=<troque>
+TRUST_PROXY=1             # faz a aplicação reconhecer X-Forwarded-Proto e o IP real
+```
+
+Um `Caddyfile` completo, com certificado automático, cabe em três linhas:
+
+```
+processos.seudominio.com.br {
+    reverse_proxy localhost:3000
+}
+```
+
+### Antes de abrir para a internet
+
+1. troque `SESSION_SECRET` (`openssl rand -hex 32`);
+2. troque a senha de todos os usuários — a carga inicial usa a mesma `SENHA_PADRAO` para todos;
+3. confira que a pasta `data/` **não** está publicada pelo servidor web (ela guarda o banco, os
+   anexos e os backups);
+4. baixe um backup pela tela de Parâmetros e guarde fora do servidor;
+5. mantenha o Node atualizado (`npm audit` está limpo hoje: 0 vulnerabilidades).
+
+---
+
+## Backup e restauração
+
+Em **Administração → Parâmetros** há o cartão **Backup da plataforma**, com os dois lados da
+operação — e os dois são exclusivos do administrador.
+
+**Salvar backup** baixa um único arquivo `.json` com *tudo* o que está na plataforma naquele
+momento: processos, checklists, clientes, usuários, parâmetros, checklist modelo, ordem de
+atendimento, histórico/auditoria, avisos e notificações. Uma caixa opcional inclui também os
+documentos anexados aos processos, e aí o arquivo passa a bastar sozinho. O nome sai no formato
+`backup-jsgrilo-2026-08-03-18-29.json`.
+
+**Restaurar backup** recebe esse mesmo arquivo de volta, em duas etapas:
+
+1. no envio, **nada é gravado** — a plataforma confere a assinatura de integridade do arquivo e
+   mostra uma tabela comparando, linha a linha, quantos registros existem hoje e quantos vêm no
+   backup;
+2. a troca só acontece depois de digitar **RESTAURAR** e confirmar. Antes de apagar qualquer
+   coisa, o estado atual é salvo sozinho em `data/backups/antes-de-restaurar-….json`.
+
+A restauração é total (apaga e repõe), porque um backup vale como retrato de um momento —
+mesclar dois momentos criaria um terceiro que nunca existiu. Ela roda dentro de uma transação:
+ou a plataforma inteira volta ao retrato do arquivo, ou nada muda. Ao final, a numeração
+automática (`PR-2026-0001`) continua de onde o backup parou.
+
+Detalhes que valem saber:
+
+- o arquivo traz um `checksum` — backup editado à mão, truncado ou de outra origem é recusado
+  antes de tocar no banco;
+- se o backup não tiver nenhum administrador ativo, a conferência avisa antes de você confirmar;
+- as sessões abertas ficam de fora do backup (sessão é do navegador, não do acervo do escritório);
+- o arquivo contém dados de clientes e as senhas (cifradas) dos usuários — **guarde-o como
+  documento sigiloso**;
+- a cópia bruta continua valendo: com a aplicação parada, copiar a pasta `data/` também é um
+  backup completo.
+
+O parâmetro `BACKUP_AUTOMATICO` segue previsto na tela de parâmetros; a rotina agendada
+(gerar sozinho todo dia) ainda não foi implementada — hoje o backup é sob demanda, pelo botão.
 
 ---
 
@@ -373,7 +488,8 @@ externo (cron copiando `data/`).
 - Envio real de e-mail (transporte SMTP) — a estrutura está pronta, falta plugar o provedor.
 - Upload efetivo para o Google Drive — depende das credenciais da conta de serviço.
 - WhatsApp, Onvio, Domínio Sistemas e e-CAC — previstos e desligados, conforme combinado.
-- Rotina agendada de backup automático.
+- Rotina agendada de backup automático (o backup manual, pela tela de Parâmetros, está pronto).
+- Segundo fator de autenticação e expiração periódica de senha.
 
 ---
 

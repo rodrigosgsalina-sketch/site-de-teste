@@ -4,6 +4,7 @@
   <% if (erro) { %><div class="aviso aviso-erro"><%= erro %></div><% } %>
 
   <form method="post" action="<%= novo ? '/clientes' : '/clientes/' + cliente.id + '/editar' %>">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
     <fieldset>
       <legend>Identificação</legend>
       <div class="linha-campos">

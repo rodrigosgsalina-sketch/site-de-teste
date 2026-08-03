@@ -40,7 +40,24 @@ function porCategoria() {
   return grupos;
 }
 
+/**
+ * Endereços gravados em parâmetro saem da plataforma para a internet: só
+ * aceitamos https, para o conteúdo do processo nunca trafegar em claro.
+ */
+function validarEndereco(chave, valor) {
+  const texto = String(valor || '').trim();
+  if (!texto) return texto;
+  if (!/^(WEBHOOK_|URL_)/.test(chave) && !/_URL$/.test(chave)) return texto;
+  if (!/^https:\/\//i.test(texto)) {
+    const erro = new Error(`${chave} precisa começar com https:// (endereço em http:// trafega sem criptografia).`);
+    erro.validacao = true;
+    throw erro;
+  }
+  return texto;
+}
+
 function definir(chave, valor) {
+  validarEndereco(chave, valor);
   const info = db.get().prepare('SELECT chave FROM parametros WHERE chave = ?').get(chave);
   if (!info) {
     db.get()
@@ -155,6 +172,7 @@ module.exports = {
   todos,
   porCategoria,
   definir,
+  validarEndereco,
   proximoCodigoProcesso,
   emailDoSetor,
   notificaSetor,

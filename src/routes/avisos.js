@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const seguranca = require('../lib/seguranca');
 const avisosDom = require('../domain/avisos');
 
 const router = express.Router();
@@ -16,12 +17,12 @@ router.get('/', (req, res) => {
 /** Dispensa um aviso — só para quem clicou, os demais continuam vendo. */
 router.post('/:id/lido', (req, res) => {
   avisosDom.marcarLido(Number(req.params.id), req.session.usuario.id);
-  res.redirect(req.body.retorno || '/avisos');
+  res.redirect(seguranca.destinoInterno(req.body.retorno, '/avisos'));
 });
 
 router.post('/lidos', (req, res) => {
   avisosDom.marcarTodosLidos(req.session.usuario.id);
-  res.redirect(req.body.retorno || '/avisos');
+  res.redirect(seguranca.destinoInterno(req.body.retorno, '/avisos'));
 });
 
 module.exports = router;

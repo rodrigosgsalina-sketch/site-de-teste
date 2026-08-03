@@ -12,7 +12,8 @@
     "seed:demo": "node --no-warnings=ExperimentalWarning scripts/seed.js --demo",
     "reset": "node scripts/reset.js",
     "postinstall": "node scripts/copy-vendor.js",
-    "test": "node --no-warnings=ExperimentalWarning --test tests/*.test.js"
+    "test": "node --no-warnings=ExperimentalWarning --test tests/*.test.js",
+    "certificado": "node scripts/gerar-certificado.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

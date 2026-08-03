@@ -4,6 +4,7 @@
   <div class="cartao">
     <h3>Tipos de processo</h3>
     <form method="post" action="/admin/tabelas/tipos" class="filtros" style="margin-bottom:1rem">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="campo" style="flex:1">
         <label for="novo-tipo">Novo tipo</label>
         <input type="text" id="novo-tipo" name="nome" required>
@@ -28,6 +29,7 @@
 
     <% tipos.forEach(function (t) { %>
       <form id="tipo-<%= t.id %>" method="post" action="/admin/tabelas/tipos" hidden>
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <input type="hidden" name="id" value="<%= t.id %>">
       </form>
     <% }) %>
@@ -37,6 +39,7 @@
   <div class="cartao">
     <h3>Setores</h3>
     <form method="post" action="/admin/tabelas/setores" class="filtros" style="margin-bottom:1rem">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="campo" style="flex:1">
         <label for="novo-setor">Novo setor</label>
         <input type="text" id="novo-setor" name="nome" required>
@@ -66,6 +69,7 @@
 
     <% setores.forEach(function (s) { %>
       <form id="setor-<%= s.id %>" method="post" action="/admin/tabelas/setores" hidden>
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <input type="hidden" name="id" value="<%= s.id %>">
       </form>
     <% }) %>

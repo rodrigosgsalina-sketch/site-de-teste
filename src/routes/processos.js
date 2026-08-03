@@ -7,6 +7,7 @@ const express = require('express');
 const multer = require('multer');
 
 const config = require('../config');
+const csrf = require('../lib/csrf');
 const db = require('../db');
 const acesso = require('../domain/acesso');
 const checklist = require('../domain/checklist');
@@ -23,16 +24,25 @@ const router = express.Router();
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
-      const dir = path.join(config.uploadsDir, String(req.params.id));
+      // O id vem da URL: força número para não virar caminho ("../").
+      const dir = path.join(config.uploadsDir, String(Number(req.params.id) || 0));
       fs.mkdirSync(dir, { recursive: true });
       cb(null, dir);
     },
     filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname).slice(0, 12);
-      cb(null, `${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`);
+      // Nome gravado é sempre gerado aqui; o nome enviado pelo usuário só é
+      // guardado no banco, para exibição e download.
+      const ext = path.extname(documentosDom.nomeSeguro(file.originalname)).toLowerCase().slice(0, 12);
+      cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`);
     },
   }),
-  limits: { fileSize: config.uploadMaxMb * 1024 * 1024 },
+  limits: { fileSize: config.uploadMaxMb * 1024 * 1024, files: 1, fields: 20 },
+  fileFilter: (req, file, cb) => {
+    if (!documentosDom.extensaoAceita(file.originalname)) {
+      return cb(new ErroValidacao(`Tipo de arquivo não aceito: ${path.extname(file.originalname) || 'sem extensão'}.`));
+    }
+    cb(null, true);
+  },
 });
 
 function flash(req, tipo, mensagem) {
@@ -273,7 +283,7 @@ router.post('/:id/reabrir', carregar, (req, res, next) => {
 });
 
 /* ---------------------------------------------------------- Documentos */
-router.post('/:id/documentos', carregar, upload.single('arquivo'), async (req, res, next) => {
+router.post('/:id/documentos', carregar, upload.single('arquivo'), csrf.verificar, async (req, res, next) => {
   try {
     if (!req.file) throw new ErroValidacao('Selecione um arquivo.');
     await documentosDom.registrar(req.processo, req.file, req.body.descricao, req.session.usuario);
@@ -297,7 +307,10 @@ router.get('/:id/documentos/:docId', carregar, (req, res) => {
   if (!fs.existsSync(caminho)) {
     return res.status(404).render('erro', { titulo: 'Arquivo indisponível', mensagem: 'O arquivo não está mais no servidor.' });
   }
-  res.download(caminho, doc.nome_original);
+  // Sempre como anexo e sem adivinhar o tipo: um arquivo enviado por um
+  // usuário nunca é executado no navegador de outro.
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.download(caminho, documentosDom.nomeSeguro(doc.nome_original));
 });
 
 router.post('/:id/documentos/:docId/excluir', carregar, (req, res, next) => {

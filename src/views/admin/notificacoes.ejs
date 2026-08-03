@@ -4,6 +4,7 @@
   <div class="cartao-titulo">
     <h3>Verificação de prazos</h3>
     <form method="post" action="/admin/alertas/executar">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <button class="botao botao-pequeno">Executar agora</button>
     </form>
   </div>

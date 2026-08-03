@@ -23,8 +23,46 @@ function obter(id) {
   return db.get().prepare('SELECT * FROM documentos WHERE id = ?').get(id);
 }
 
+/**
+ * Extensões aceitas nos anexos. A lista é fechada de propósito: nada de .html,
+ * .svg (que carrega script) nem de executáveis dentro da pasta servida.
+ */
+const EXTENSOES_ACEITAS = new Set([
+  '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.txt', '.csv',
+  '.doc', '.docx', '.xls', '.xlsx', '.ods', '.odt', '.ppt', '.pptx',
+  '.xml', '.zip', '.p7s', '.rtf',
+]);
+
+/** Nome de arquivo seguro para gravar e para devolver no download. */
+function nomeSeguro(original, padrao = 'arquivo') {
+  const base = path
+    .basename(String(original || ''))
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    // Fora tudo que possa virar caminho ou cabeçalho HTTP forjado.
+    .replace(/[^A-Za-z0-9._ -]+/g, '_')
+    .replace(/^[.\s]+/, '')
+    .slice(0, 120)
+    .trim();
+  return base || padrao;
+}
+
+/** Filtro do multer: recusa a extensão antes de o arquivo chegar ao disco. */
+function extensaoAceita(nomeOriginal) {
+  return EXTENSOES_ACEITAS.has(path.extname(String(nomeOriginal || '')).toLowerCase());
+}
+
+/**
+ * Resolve o caminho do anexo garantindo que ele fique dentro de uploads/ —
+ * um nome vindo do banco não pode escapar da pasta com "../".
+ */
 function caminhoAbsoluto(documento) {
-  return path.join(config.uploadsDir, String(documento.processo_id), documento.nome_arquivo);
+  const raiz = path.resolve(config.uploadsDir);
+  const alvo = path.resolve(raiz, String(documento.processo_id), path.basename(String(documento.nome_arquivo || '')));
+  if (alvo !== raiz && !alvo.startsWith(raiz + path.sep)) {
+    throw new ErroValidacao('Caminho de arquivo inválido.');
+  }
+  return alvo;
 }
 
 /** Registra o upload e tenta arquivar no Drive (quando a integração estiver pronta). */
@@ -37,7 +75,7 @@ async function registrar(processo, arquivo, descricao, usuario) {
     )
     .run(
       processo.id,
-      arquivo.originalname,
+      nomeSeguro(arquivo.originalname),
       arquivo.filename,
       arquivo.mimetype,
       arquivo.size,
@@ -76,4 +114,13 @@ function remover(id, processo, usuario) {
   });
 }
 
-module.exports = { doProcesso, obter, caminhoAbsoluto, registrar, remover };
+module.exports = {
+  doProcesso,
+  obter,
+  caminhoAbsoluto,
+  registrar,
+  remover,
+  nomeSeguro,
+  extensaoAceita,
+  EXTENSOES_ACEITAS,
+};

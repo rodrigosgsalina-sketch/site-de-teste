@@ -1,7 +1,15 @@
 'use strict';
 
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
+const multer = require('multer');
+
+const config = require('../config');
+const csrf = require('../lib/csrf');
 const db = require('../db');
+const backup = require('../domain/backup');
 const historico = require('../domain/historico');
 const integracoes = require('../domain/integracoes');
 const notificacoes = require('../domain/notificacoes');
@@ -40,37 +48,230 @@ router.get('/parametros', (req, res) => {
   res.render('admin/parametros', {
     titulo: 'Parâmetros do sistema',
     grupos: [...parametros.porCategoria().entries()],
+    conferencia: req.session.backupPendente ? req.session.backupPendente.resumo : null,
+    backupsSalvos: backupsNoServidor(),
   });
 });
 
-router.post('/parametros', (req, res) => {
+router.post('/parametros', (req, res, next) => {
   const lista = parametros.todos();
   let alterados = 0;
-  db.tx(() => {
-    for (const p of lista) {
-      if (!p.editavel) continue;
-      let novo;
-      if (p.tipo === 'booleano') {
-        novo = req.body[`campo__${p.chave}`] ? 'Sim' : 'Não';
-      } else if (Object.prototype.hasOwnProperty.call(req.body, `campo__${p.chave}`)) {
-        novo = String(req.body[`campo__${p.chave}`]).trim();
-      } else {
-        continue;
+  try {
+    db.tx(() => {
+      for (const p of lista) {
+        if (!p.editavel) continue;
+        let novo;
+        if (p.tipo === 'booleano') {
+          novo = req.body[`campo__${p.chave}`] ? 'Sim' : 'Não';
+        } else if (Object.prototype.hasOwnProperty.call(req.body, `campo__${p.chave}`)) {
+          novo = String(req.body[`campo__${p.chave}`]).trim();
+        } else {
+          continue;
+        }
+        if (novo !== (p.valor || '')) {
+          parametros.definir(p.chave, novo);
+          alterados += 1;
+          historico.registrar({
+            processoId: null,
+            acao: 'Parâmetro Alterado',
+            usuario: req.session.usuario,
+            observacao: `${p.chave}: "${p.valor}" → "${novo}"`,
+          });
+        }
       }
-      if (novo !== (p.valor || '')) {
-        parametros.definir(p.chave, novo);
-        alterados += 1;
-        historico.registrar({
-          processoId: null,
-          acao: 'Parâmetro Alterado',
-          usuario: req.session.usuario,
-          observacao: `${p.chave}: "${p.valor}" → "${novo}"`,
-        });
+    });
+    flash(req, 'sucesso', alterados ? `${alterados} parâmetro(s) atualizado(s).` : 'Nenhuma alteração.');
+    res.redirect('/admin/parametros');
+  } catch (err) {
+    // Endereço em http:// (ou outra validação) desfaz o lote inteiro.
+    if (err && err.validacao) {
+      flash(req, 'erro', `${err.message} Nenhum parâmetro foi alterado.`);
+      return res.redirect('/admin/parametros');
+    }
+    next(err);
+  }
+});
+
+/* --------------------------------------------------------- Backup / restauração */
+
+/* Os arquivos enviados ficam num diretório próprio até a confirmação. */
+const DIR_RESTAURACOES = path.join(config.backupsDir, 'enviados');
+
+const uploadBackup = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      fs.mkdirSync(DIR_RESTAURACOES, { recursive: true });
+      cb(null, DIR_RESTAURACOES);
+    },
+    filename: (req, file, cb) => cb(null, `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.json`),
+  }),
+  limits: { fileSize: 512 * 1024 * 1024, files: 1, fields: 10 },
+  fileFilter: (req, file, cb) => {
+    if (path.extname(file.originalname).toLowerCase() !== '.json') {
+      return cb(new ErroValidacao('Envie o arquivo .json gerado pelo botão "Baixar backup".'));
+    }
+    cb(null, true);
+  },
+});
+
+/** Últimas cópias guardadas em data/backups (as automáticas e as manuais). */
+function backupsNoServidor(limite = 5) {
+  try {
+    return fs
+      .readdirSync(config.backupsDir)
+      .filter((n) => n.endsWith('.json'))
+      .map((nome) => {
+        const info = fs.statSync(path.join(config.backupsDir, nome));
+        return { nome, tamanho: info.size, data: info.mtime.toISOString() };
+      })
+      .sort((a, b) => b.data.localeCompare(a.data))
+      .slice(0, limite);
+  } catch (_) {
+    return [];
+  }
+}
+
+function apagarPendente(req) {
+  const pendente = req.session.backupPendente;
+  if (pendente && pendente.arquivo) {
+    try {
+      fs.unlinkSync(pendente.arquivo);
+    } catch (_) {
+      /* já removido */
+    }
+  }
+  delete req.session.backupPendente;
+}
+
+/* Download do backup completo. */
+router.post('/backup', (req, res, next) => {
+  try {
+    const incluirArquivos = Boolean(req.body.incluir_arquivos);
+    const dados = backup.gerar({ usuario: req.session.usuario, incluirArquivos });
+    const nome = backup.nomeDoArquivo();
+
+    historico.registrar({
+      processoId: null,
+      acao: 'Backup Gerado',
+      usuario: req.session.usuario,
+      observacao:
+        `${nome} — ${Object.values(dados.totais).reduce((a, b) => a + b, 0)} registro(s)` +
+        (incluirArquivos ? `, ${dados.arquivos.length} anexo(s)` : ', sem anexos'),
+    });
+
+    const corpo = JSON.stringify(dados);
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${nome}"`);
+    res.setHeader('Content-Length', Buffer.byteLength(corpo));
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(corpo);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* Etapa 1 da restauração: lê o arquivo e mostra a conferência. Nada é gravado. */
+router.post('/backup/restaurar', uploadBackup.single('backup'), csrf.verificar, (req, res, next) => {
+  try {
+    if (!req.file) throw new ErroValidacao('Selecione o arquivo de backup (.json).');
+    apagarPendente(req);
+
+    const analise = backup.analisar(fs.readFileSync(req.file.path));
+    req.session.backupPendente = {
+      arquivo: req.file.path,
+      resumo: {
+        nomeEnviado: req.file.originalname,
+        geradoEm: analise.dados.gerado_em,
+        geradoPor: analise.dados.gerado_por,
+        versao: analise.dados.versao,
+        aplicacao: analise.dados.aplicacao,
+        conteudo: analise.conteudo,
+        arquivos: analise.arquivos,
+        bytesArquivos: analise.bytesArquivos,
+        avisos: analise.avisos,
+      },
+    };
+    res.redirect('/admin/parametros#backup');
+  } catch (err) {
+    if (req.file) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (_) {
+        /* nada a fazer */
       }
     }
-  });
-  flash(req, 'sucesso', alterados ? `${alterados} parâmetro(s) atualizado(s).` : 'Nenhuma alteração.');
-  res.redirect('/admin/parametros');
+    if (err instanceof ErroValidacao) {
+      flash(req, 'erro', err.message);
+      return res.redirect('/admin/parametros#backup');
+    }
+    next(err);
+  }
+});
+
+/* Etapa 2: confirmação explícita — aqui a plataforma é substituída. */
+router.post('/backup/confirmar', (req, res, next) => {
+  const pendente = req.session.backupPendente;
+  try {
+    if (!pendente) throw new ErroValidacao('Nenhum backup aguardando confirmação. Envie o arquivo novamente.');
+    if (String(req.body.confirmacao || '').trim().toUpperCase() !== 'RESTAURAR') {
+      throw new ErroValidacao('Digite RESTAURAR para confirmar a substituição dos dados.');
+    }
+
+    const analise = backup.analisar(fs.readFileSync(pendente.arquivo));
+    const usuarioAtual = req.session.usuario;
+    const resultado = backup.restaurar(analise.dados, {
+      usuario: usuarioAtual,
+      restaurarArquivos: !(req.body.ignorar_arquivos === 'on' || req.body.ignorar_arquivos === '1'),
+    });
+
+    historico.registrar({
+      processoId: null,
+      acao: 'Backup Restaurado',
+      usuario: usuarioAtual,
+      observacao:
+        `${pendente.resumo.nomeEnviado} (gerado em ${pendente.resumo.geradoEm}) — ` +
+        `${resultado.total} registro(s), ${resultado.arquivosRepostos} anexo(s). ` +
+        `Cópia do estado anterior: ${path.basename(resultado.copiaDeSeguranca)}.`,
+    });
+
+    apagarPendente(req);
+
+    // O usuário logado pode não existir mais no backup restaurado.
+    const aindaExiste = usuarios.porLogin(usuarioAtual.login);
+    if (!aindaExiste || aindaExiste.status !== 'Ativo') {
+      return req.session.destroy(() => res.redirect('/login'));
+    }
+    req.session.usuario = {
+      id: aindaExiste.id,
+      nome: aindaExiste.nome,
+      login: aindaExiste.login,
+      email: aindaExiste.email,
+      perfil: aindaExiste.perfil,
+      setor: aindaExiste.setor,
+      setor_id: aindaExiste.setor_id,
+    };
+
+    flash(
+      req,
+      'sucesso',
+      `Backup restaurado: ${resultado.total} registro(s) repostos` +
+        (resultado.arquivosRepostos ? ` e ${resultado.arquivosRepostos} anexo(s)` : '') +
+        `. O estado anterior foi guardado em ${path.basename(resultado.copiaDeSeguranca)}.`
+    );
+    res.redirect('/admin/parametros#backup');
+  } catch (err) {
+    if (err instanceof ErroValidacao) {
+      flash(req, 'erro', err.message);
+      return res.redirect('/admin/parametros#backup');
+    }
+    next(err);
+  }
+});
+
+router.post('/backup/cancelar', (req, res) => {
+  apagarPendente(req);
+  flash(req, 'sucesso', 'Restauração cancelada. Nenhum dado foi alterado.');
+  res.redirect('/admin/parametros#backup');
 });
 
 /* --------------------------------------------------------------- Usuários */

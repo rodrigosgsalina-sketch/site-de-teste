@@ -198,14 +198,14 @@
 </div>
 
 <% if (prefs.graficos) { %>
-  <script src="/static/vendor/chart.umd.js"></script>
-  <script>
+  <script src="/static/vendor/chart.umd.js" nonce="<%= nonce %>"></script>
+  <script nonce="<%= nonce %>">
     window.DADOS_DASHBOARD = {
-      porStatus: <%- JSON.stringify(porStatus) %>,
-      porTipo: <%- JSON.stringify(porTipo) %>
+      porStatus: <%- jsonSeguro(porStatus) %>,
+      porTipo: <%- jsonSeguro(porTipo) %>
     };
   </script>
-  <script src="/static/js/dashboard.js"></script>
+  <script src="/static/js/dashboard.js" nonce="<%= nonce %>"></script>
 <% } %>
 
 <%- include('partials/rodape') %>

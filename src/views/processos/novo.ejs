@@ -11,6 +11,7 @@
   <% if (erro) { %><div class="aviso aviso-erro"><%= erro %></div><% } %>
 
   <form method="post" action="/processos">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
     <fieldset>
       <legend>Processo</legend>
       <div class="linha-campos">

@@ -121,6 +121,7 @@
 
         <% if (grupo.editavel && !processo.status_final) { %>
           <form method="post" action="/checklist/<%= item.id %>/responder" class="item-form">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
             <input type="hidden" name="retorno" value="/processos/<%= processo.id %>#setor-<%= grupo.setor_id %>">
             <div class="campo">
               <label for="resposta-<%= item.id %>">Resposta</label>
@@ -179,6 +180,7 @@
       <div class="aviso aviso-sucesso">Todos os requisitos foram atendidos — o processo pode ser concluído.</div>
     <% } %>
     <form method="post" action="/processos/<%= processo.id %>/concluir" data-confirmar="Confirmar a conclusão deste processo?">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="campo">
         <label for="obs-conclusao">Observação da conclusão</label>
         <input type="text" id="obs-conclusao" name="observacao" placeholder="Opcional">
@@ -190,6 +192,7 @@
   <div class="cartao">
     <h3>Situação do processo</h3>
     <form method="post" action="/processos/<%= processo.id %>/status">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="campo">
         <label for="status">Definir status manualmente</label>
         <select id="status" name="status">
@@ -212,6 +215,7 @@
       <hr style="border:0;border-top:1px solid var(--borda);margin:1rem 0">
       <% if (processo.status_final) { %>
         <form method="post" action="/processos/<%= processo.id %>/reabrir" data-confirmar="Reabrir este processo?">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <div class="campo">
             <label for="motivo-reabrir">Motivo da reabertura</label>
             <input type="text" id="motivo-reabrir" name="motivo">
@@ -220,6 +224,7 @@
         </form>
       <% } else { %>
         <form method="post" action="/processos/<%= processo.id %>/cancelar" data-confirmar="Cancelar definitivamente este processo?">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <div class="campo">
             <label for="motivo-cancelar">Motivo do cancelamento <span class="obrig">*</span></label>
             <input type="text" id="motivo-cancelar" name="motivo" required>
@@ -255,6 +260,7 @@
               <td>
                 <% if (podeGerenciar) { %>
                   <form method="post" action="/processos/<%= processo.id %>/documentos/<%= doc.id %>/excluir" data-confirmar="Remover este documento?">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                     <button class="botao botao-secundario botao-pequeno">Remover</button>
                   </form>
                 <% } %>
@@ -267,6 +273,7 @@
   <% } %>
 
   <form method="post" action="/processos/<%= processo.id %>/documentos" enctype="multipart/form-data" style="margin-top:1rem">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
     <div class="linha-campos">
       <div class="campo">
         <label for="arquivo">Anexar documento</label>

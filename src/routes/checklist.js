@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const seguranca = require('../lib/seguranca');
 const acesso = require('../domain/acesso');
 const checklist = require('../domain/checklist');
 const historico = require('../domain/historico');
@@ -32,7 +33,7 @@ function carregarItem(req, res, next) {
 /** Responde um item do checklist. */
 router.post('/:id/responder', carregarItem, (req, res, next) => {
   const item = req.item;
-  const voltarPara = req.body.retorno || `/processos/${item.processo_id}#setor-${item.setor_id}`;
+  const voltarPara = seguranca.destinoInterno(req.body.retorno, `/processos/${item.processo_id}#setor-${item.setor_id}`);
   try {
     const atualizado = checklist.responder(item.id, req.body, req.session.usuario);
 
@@ -77,7 +78,7 @@ router.post('/:id/responder', carregarItem, (req, res, next) => {
 /** Dupla conferência (EXIGIR_DUPLA_CONFERENCIA). */
 router.post('/:id/conferir', carregarItem, (req, res, next) => {
   const item = req.item;
-  const voltarPara = req.body.retorno || `/processos/${item.processo_id}#setor-${item.setor_id}`;
+  const voltarPara = seguranca.destinoInterno(req.body.retorno, `/processos/${item.processo_id}#setor-${item.setor_id}`);
   try {
     checklist.conferir(item.id, req.session.usuario);
     historico.registrar({
@@ -101,7 +102,7 @@ router.post('/:id/conferir', carregarItem, (req, res, next) => {
 /** Reabre um item respondido. */
 router.post('/:id/reabrir', carregarItem, (req, res, next) => {
   const item = req.item;
-  const voltarPara = req.body.retorno || `/processos/${item.processo_id}#setor-${item.setor_id}`;
+  const voltarPara = seguranca.destinoInterno(req.body.retorno, `/processos/${item.processo_id}#setor-${item.setor_id}`);
   try {
     checklist.reabrir(item.id);
     historico.registrar({

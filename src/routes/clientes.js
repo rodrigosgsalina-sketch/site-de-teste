@@ -7,6 +7,7 @@ const express = require('express');
 const multer = require('multer');
 
 const config = require('../config');
+const csrf = require('../lib/csrf');
 const clientes = require('../domain/clientes');
 const historico = require('../domain/historico');
 const importacao = require('../domain/importacao-clientes');
@@ -26,7 +27,7 @@ const upload = multer({
     filename: (req, file, cb) =>
       cb(null, `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${path.extname(file.originalname).toLowerCase()}`),
   }),
-  limits: { fileSize: 40 * 1024 * 1024 },
+  limits: { fileSize: 40 * 1024 * 1024, files: 1, fields: 20 },
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (!EXTENSOES.includes(ext)) {
@@ -122,7 +123,7 @@ router.get('/importar', exigirAdministrador, (req, res) => {
   });
 });
 
-router.post('/importar', exigirAdministrador, upload.single('planilha'), (req, res, next) => {
+router.post('/importar', exigirAdministrador, upload.single('planilha'), csrf.verificar, (req, res, next) => {
   try {
     if (!req.file) throw new ErroValidacao('Selecione a planilha de empresas.');
     const analise = importacao.analisar(fs.readFileSync(req.file.path));

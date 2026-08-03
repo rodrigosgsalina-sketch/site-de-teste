@@ -45,7 +45,8 @@
         <strong><%= usuario.nome %></strong>
         <small><%= usuario.setor %> · <%= usuario.perfil %></small>
       </a>
-      <form method="post" action="/logout"><button class="btn-link">Sair</button></form>
+      <form method="post" action="/logout">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn-link">Sair</button></form>
     </div>
   </aside>
 
@@ -73,6 +74,7 @@
           <small><%= fmtDataHora(av.criado_em) %> · <%= av.usuario_nome || 'Sistema' %></small>
         </div>
         <form method="post" action="/avisos/<%= av.id %>/lido">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <input type="hidden" name="retorno" value="<%= caminhoAtual %>">
           <button class="botao-fechar" aria-label="Dispensar aviso" title="Dispensar">&times;</button>
         </form>

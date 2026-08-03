@@ -36,6 +36,10 @@ const googleChat = {
   async enviar(evento, processo, dados) {
     const url = parametros.texto('WEBHOOK_GOOGLE_CHAT', '');
     if (!url) return { enviado: false, motivo: 'WEBHOOK_GOOGLE_CHAT não configurado' };
+    // Notificação carrega dados do cliente: só sai por canal cifrado.
+    if (!/^https:\/\//i.test(url)) {
+      return { enviado: false, motivo: 'WEBHOOK_GOOGLE_CHAT precisa ser um endereço https://' };
+    }
     try {
       const resposta = await fetch(url, {
         method: 'POST',
