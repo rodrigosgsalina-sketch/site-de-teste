@@ -85,7 +85,8 @@ CREATE TABLE IF NOT EXISTS processos (
   status_id              INTEGER NOT NULL REFERENCES status_processo (id),
   status_manual          INTEGER NOT NULL DEFAULT 0 CHECK (status_manual IN (0, 1)),
   etapa_atual            TEXT,
-  razao_social           TEXT    NOT NULL,
+  cliente_id             INTEGER REFERENCES clientes (id),
+  razao_social           TEXT    NOT NULL,                 -- cópia do cadastro do cliente na abertura
   nome_fantasia          TEXT,
   cnpj                   TEXT,
   inscricao_estadual     TEXT,
@@ -105,6 +106,7 @@ CREATE TABLE IF NOT EXISTS processos (
 );
 CREATE INDEX IF NOT EXISTS idx_processos_status ON processos (status_id);
 CREATE INDEX IF NOT EXISTS idx_processos_tipo   ON processos (tipo_processo_id);
+CREATE INDEX IF NOT EXISTS idx_processos_cliente ON processos (cliente_id);
 
 -- -------------------------------------------------------------- CHECKLIST
 CREATE TABLE IF NOT EXISTS checklist (

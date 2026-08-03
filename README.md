@@ -136,7 +136,7 @@ tests/                   testes das regras de negócio (node:test)
 | `TIPOS_PROCESSO` | tabela `tipos_processo` · **Administração → Tipos e setores** |
 | `STATUS_PROCESSO` | tabela `status_processo` · aplicados automaticamente pelo motor de status |
 | `SETORES` | tabela `setores` · **Administração → Tipos e setores** |
-| `PROCESSOS` | tabela `processos` · **Abrir processo** e painel do processo |
+| `PROCESSOS` | tabela `processos` · **Abrir processo** (empresa escolhida no cadastro de clientes) e painel do processo |
 | `CHECKLIST_MODELO` | tabela `checklist_modelo` · **Administração → Checklist modelo** (com filtros por texto, tipo, setor, obrigatoriedade e situação) |
 | `CHECKLIST` | tabela `checklist` · gerada na abertura, respondida no painel do processo |
 | `USUÁRIOS` | tabela `usuarios` · **Administração → Usuários** |
@@ -165,6 +165,19 @@ sequência reinicia sozinha quando o ano vira.
 `PRAZO_PADRAO_PROCESSO_DIAS`; o checklist é clonado do modelo (itens do tipo escolhido **+**
 os itens da linha “Todos”), cada item recebendo o prazo do seu setor
 (`PRAZO_FISCAL_HORAS`, `PRAZO_DP_HORAS`, `PRAZO_CONTABIL_HORAS`, `PRAZO_JURIDICO_HORAS`).
+
+**Cliente vem do cadastro** — em **Abrir processo** os dados da empresa não são mais digitados:
+escolhe-se o cliente numa lista alimentada pela aba **Clientes**, com busca por código, nome,
+apelido, CNPJ ou município (tolerante a acento e a CNPJ com ou sem máscara; achando um único
+resultado, ele já fica selecionado). O resumo da empresa aparece embaixo da lista, com link para a
+ficha completa. Ao salvar, razão social, nome fantasia, CNPJ, inscrições, município/UF, responsável
+legal, telefone e e-mail são **copiados do cadastro** para o processo — a cópia é proposital: o
+processo guarda a foto da empresa no momento da abertura e continua legível mesmo que a ficha mude
+depois. Trocar o cliente na tela de edição regrava esses campos e registra a troca no histórico.
+Bancos criados antes dessa mudança ganham a coluna `cliente_id` na primeira abertura e os processos
+antigos são ligados automaticamente pelo CNPJ; os que não casarem exibem um aviso na edição pedindo
+para escolher a empresa. Um cliente com processos vinculados não pode ser excluído (use a situação
+`Inativa`).
 
 **Ordem de atendimento por tipo** — em **Administração → Checklist modelo**, ao escolher um tipo
 de processo é possível definir quem responde primeiro (por exemplo, Departamento Pessoal antes do
@@ -227,7 +240,11 @@ nome fantasia, CNPJ/CPF/CEI/CAEPF, inscrições (estadual, municipal, Junta, Suf
 tributária), endereço completo, contato, natureza jurídica, CNAE, CAE, ramo de atividade, capital
 social, responsável legal, contador, foro, duração do contrato, registro, situação e as datas de
 inscrição, início de atividades e "cliente desde". A ficha também lista os **processos daquela
-empresa**, casados pelo CNPJ.
+empresa** — os abertos pelo seletor de clientes e, por compatibilidade, os antigos que só guardavam
+o CNPJ como texto.
+
+O cadastro é a origem dos dados na abertura de processos: sem nenhuma empresa cadastrada, a tela
+**Abrir processo** avisa e aponta para cá.
 
 ### Importar empresas no modelo Domínio Sistemas
 

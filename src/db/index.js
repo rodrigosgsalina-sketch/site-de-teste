@@ -84,9 +84,40 @@ function migrarLoginDeUsuarios(conn) {
   console.log(`[migração] coluna "login" criada para ${comLogin.length} usuário(s).`);
 }
 
+/**
+ * Bancos anteriores ao seletor de clientes gravavam a empresa como texto livre
+ * no processo. Cria a coluna `cliente_id` e liga os processos existentes ao
+ * cadastro correspondente comparando os dígitos do CNPJ.
+ */
+function migrarClienteEmProcessos(conn) {
+  if (!tabelaExiste(conn, 'processos')) return;
+  if (colunas(conn, 'processos').includes('cliente_id')) return;
+
+  conn.exec('ALTER TABLE processos ADD COLUMN cliente_id INTEGER REFERENCES clientes (id);');
+
+  let ligados = 0;
+  if (tabelaExiste(conn, 'clientes')) {
+    const digitos = (coluna) => `REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(${coluna}, ''), '.', ''), '/', ''), '-', ''), ' ', '')`;
+    const casa = `${digitos('c.cnpj_cpf')} = ${digitos('processos.cnpj')} AND ${digitos('c.cnpj_cpf')} <> ''`;
+    const info = conn
+      .prepare(
+        `UPDATE processos
+            SET cliente_id = (SELECT c.id FROM clientes c WHERE ${casa} LIMIT 1)
+          WHERE cliente_id IS NULL
+            AND EXISTS (SELECT 1 FROM clientes c WHERE ${casa})`
+      )
+      .run();
+    ligados = Number(info.changes || 0);
+  }
+
+  // eslint-disable-next-line no-console
+  console.log(`[migração] coluna "cliente_id" criada em processos (${ligados} processo(s) ligados pelo CNPJ).`);
+}
+
 function migrate(conn) {
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   migrarLoginDeUsuarios(conn);
+  migrarClienteEmProcessos(conn);
   conn.exec(schema);
 }
 

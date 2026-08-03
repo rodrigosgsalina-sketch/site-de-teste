@@ -44,57 +44,7 @@
       </div>
     </fieldset>
 
-    <fieldset>
-      <legend>Empresa</legend>
-      <div class="linha-campos">
-        <div class="campo">
-          <label for="razao_social">Razão social <span class="obrig">*</span></label>
-          <input type="text" id="razao_social" name="razao_social" value="<%= valores.razao_social || '' %>" required>
-        </div>
-        <div class="campo">
-          <label for="nome_fantasia">Nome fantasia</label>
-          <input type="text" id="nome_fantasia" name="nome_fantasia" value="<%= valores.nome_fantasia || '' %>">
-        </div>
-        <div class="campo">
-          <label for="cnpj">CNPJ</label>
-          <input type="text" id="cnpj" name="cnpj" value="<%= valores.cnpj || '' %>" placeholder="00.000.000/0000-00">
-        </div>
-        <div class="campo">
-          <label for="inscricao_estadual">Inscrição estadual</label>
-          <input type="text" id="inscricao_estadual" name="inscricao_estadual" value="<%= valores.inscricao_estadual || '' %>">
-        </div>
-        <div class="campo">
-          <label for="inscricao_municipal">Inscrição municipal</label>
-          <input type="text" id="inscricao_municipal" name="inscricao_municipal" value="<%= valores.inscricao_municipal || '' %>">
-        </div>
-        <div class="campo">
-          <label for="municipio">Município</label>
-          <input type="text" id="municipio" name="municipio" value="<%= valores.municipio || '' %>">
-        </div>
-        <div class="campo">
-          <label for="uf">UF</label>
-          <input type="text" id="uf" name="uf" maxlength="2" value="<%= valores.uf || '' %>">
-        </div>
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>Contato do cliente</legend>
-      <div class="linha-campos">
-        <div class="campo">
-          <label for="cliente_responsavel">Cliente responsável</label>
-          <input type="text" id="cliente_responsavel" name="cliente_responsavel" value="<%= valores.cliente_responsavel || '' %>">
-        </div>
-        <div class="campo">
-          <label for="telefone">Telefone</label>
-          <input type="tel" id="telefone" name="telefone" value="<%= valores.telefone || '' %>">
-        </div>
-        <div class="campo">
-          <label for="email">E-mail</label>
-          <input type="email" id="email" name="email" value="<%= valores.email || '' %>">
-        </div>
-      </div>
-    </fieldset>
+    <%- include('../partials/seletor-cliente', { clientes: clientes, selecionado: valores.cliente_id }) %>
 
     <fieldset>
       <legend>Complemento</legend>

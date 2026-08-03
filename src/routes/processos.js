@@ -53,6 +53,19 @@ function listasAuxiliares() {
   };
 }
 
+/** Clientes cadastrados, para o seletor da abertura/edição do processo. */
+function clientesParaSelecao() {
+  return db
+    .get()
+    .prepare(
+      `SELECT id, codigo, apelido, nome, razao_social, nome_fantasia, cnpj_cpf,
+              municipio, uf, telefone, email, responsavel_legal, situacao
+         FROM clientes
+        ORDER BY situacao <> 'Ativa', nome`
+    )
+    .all();
+}
+
 /* ------------------------------------------------------------- Listagem */
 router.get('/', (req, res) => {
   const usuario = req.session.usuario;
@@ -83,6 +96,7 @@ router.get('/novo', (req, res) => {
     erro: null,
     valores: { data_abertura: new Date().toISOString().slice(0, 10) },
     prazoPadrao: parametros.num('PRAZO_PADRAO_PROCESSO_DIAS', 15),
+    clientes: clientesParaSelecao(),
     ...listasAuxiliares(),
   });
 });
@@ -104,6 +118,7 @@ router.post('/', async (req, res, next) => {
         erro: err.message,
         valores: req.body,
         prazoPadrao: parametros.num('PRAZO_PADRAO_PROCESSO_DIAS', 15),
+        clientes: clientesParaSelecao(),
         ...listasAuxiliares(),
       });
     }
@@ -170,6 +185,7 @@ router.get('/:id/editar', carregar, (req, res) => {
     titulo: `Editar ${req.processo.codigo}`,
     processo: req.processo,
     erro: null,
+    clientes: clientesParaSelecao(),
     ...listasAuxiliares(),
   });
 });
@@ -188,6 +204,7 @@ router.post('/:id/editar', carregar, (req, res, next) => {
         titulo: `Editar ${req.processo.codigo}`,
         processo: { ...req.processo, ...req.body },
         erro: err.message,
+        clientes: clientesParaSelecao(),
         ...listasAuxiliares(),
       });
     }

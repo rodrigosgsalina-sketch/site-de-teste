@@ -475,6 +475,17 @@ legend {
   letter-spacing: .08em; color: var(--tinta-4); padding: 0 .4rem;
 }
 .linha-campos { display: grid; gap: .85rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+/* Resumo do cliente escolhido no seletor da abertura do processo. */
+.cliente-resumo {
+  margin-top: .9rem; padding: .85rem .9rem;
+  border: 1px solid var(--linha); border-left: 3px solid var(--azul-500);
+  border-radius: var(--raio-sm); background: var(--superficie);
+  animation: surgir var(--medio) var(--suave) both;
+}
+.cliente-resumo[hidden] { display: none; }
+.cliente-resumo .grade { gap: .7rem 1rem; }
+.cliente-resumo .botao { margin-top: .75rem; }
+
 .checkbox { display: flex; align-items: flex-start; gap: .5rem; font-size: .88rem; }
 .checkbox input { margin-top: .2rem; accent-color: var(--azul-600); width: 15px; height: 15px; }
 .checkbox label { margin: 0; font-weight: 500; font-family: var(--corpo); color: var(--tinta-2); }

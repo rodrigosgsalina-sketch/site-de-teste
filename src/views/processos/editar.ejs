@@ -32,57 +32,15 @@
       </div>
     </fieldset>
 
-    <fieldset>
-      <legend>Empresa</legend>
-      <div class="linha-campos">
-        <div class="campo">
-          <label for="razao_social">Razão social <span class="obrig">*</span></label>
-          <input type="text" id="razao_social" name="razao_social" value="<%= processo.razao_social || '' %>" required>
-        </div>
-        <div class="campo">
-          <label for="nome_fantasia">Nome fantasia</label>
-          <input type="text" id="nome_fantasia" name="nome_fantasia" value="<%= processo.nome_fantasia || '' %>">
-        </div>
-        <div class="campo">
-          <label for="cnpj">CNPJ</label>
-          <input type="text" id="cnpj" name="cnpj" value="<%= processo.cnpj || '' %>">
-        </div>
-        <div class="campo">
-          <label for="inscricao_estadual">Inscrição estadual</label>
-          <input type="text" id="inscricao_estadual" name="inscricao_estadual" value="<%= processo.inscricao_estadual || '' %>">
-        </div>
-        <div class="campo">
-          <label for="inscricao_municipal">Inscrição municipal</label>
-          <input type="text" id="inscricao_municipal" name="inscricao_municipal" value="<%= processo.inscricao_municipal || '' %>">
-        </div>
-        <div class="campo">
-          <label for="municipio">Município</label>
-          <input type="text" id="municipio" name="municipio" value="<%= processo.municipio || '' %>">
-        </div>
-        <div class="campo">
-          <label for="uf">UF</label>
-          <input type="text" id="uf" name="uf" maxlength="2" value="<%= processo.uf || '' %>">
-        </div>
-      </div>
-    </fieldset>
+    <%- include('../partials/seletor-cliente', { clientes: clientes, selecionado: processo.cliente_id }) %>
 
-    <fieldset>
-      <legend>Contato do cliente</legend>
-      <div class="linha-campos">
-        <div class="campo">
-          <label for="cliente_responsavel">Cliente responsável</label>
-          <input type="text" id="cliente_responsavel" name="cliente_responsavel" value="<%= processo.cliente_responsavel || '' %>">
-        </div>
-        <div class="campo">
-          <label for="telefone">Telefone</label>
-          <input type="tel" id="telefone" name="telefone" value="<%= processo.telefone || '' %>">
-        </div>
-        <div class="campo">
-          <label for="email">E-mail</label>
-          <input type="email" id="email" name="email" value="<%= processo.email || '' %>">
-        </div>
+    <% if (!processo.cliente_id) { %>
+      <div class="aviso aviso-alerta">
+        Este processo foi aberto antes do seletor de clientes e ainda guarda a empresa
+        <strong><%= processo.razao_social %></strong> como texto. Escolha o cliente correspondente
+        para ligá-lo ao cadastro — os dados da empresa serão atualizados a partir da ficha.
       </div>
-    </fieldset>
+    <% } %>
 
     <fieldset>
       <legend>Complemento</legend>

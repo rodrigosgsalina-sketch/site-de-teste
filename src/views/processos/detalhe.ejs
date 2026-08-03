@@ -44,6 +44,16 @@
   <hr style="border:0;border-top:1px solid var(--borda);margin:1rem 0">
 
   <div class="grade grade-4">
+    <div>
+      <label>Cliente</label>
+      <div>
+        <% if (processo.cliente_id) { %>
+          <a href="/clientes/<%= processo.cliente_id %>"><%= processo.cliente_codigo %> — <%= processo.razao_social %></a>
+        <% } else { %>
+          <%= processo.razao_social %> <span class="etiqueta et-neutro">sem cadastro</span>
+        <% } %>
+      </div>
+    </div>
     <div><label>Nome fantasia</label><div><%= processo.nome_fantasia || '—' %></div></div>
     <div><label>CNPJ</label><div class="mono"><%= processo.cnpj || '—' %></div></div>
     <div><label>Inscrição estadual</label><div class="mono"><%= processo.inscricao_estadual || '—' %></div></div>

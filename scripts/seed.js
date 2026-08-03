@@ -98,6 +98,7 @@ function upsertUsuarios(conn) {
 function demo(conn) {
   const processos = require('../src/domain/processos');
   const checklist = require('../src/domain/checklist');
+  const clientes = require('../src/domain/clientes');
   const usuarios = require('../src/domain/usuarios');
 
   if (conn.prepare('SELECT COUNT(*) AS t FROM processos').get().t > 0) {
@@ -108,17 +109,20 @@ function demo(conn) {
   const tipos = conn.prepare('SELECT id, nome FROM tipos_processo ORDER BY id').all();
   const porNome = (n) => tipos.find((t) => t.nome === n);
 
+  // O processo é sempre aberto para um cliente do cadastro: as empresas de
+  // demonstração entram primeiro em CLIENTES.
   const amostras = [
-    { tipo: 'Baixa de Empresa', razao_social: 'Padaria Pão Quente Ltda', nome_fantasia: 'Pão Quente', cnpj: '12.345.678/0001-90', municipio: 'Teresina', uf: 'PI', cliente_responsavel: 'Marcos Andrade', telefone: '(86) 99999-1010', email: 'marcos@paoquente.com.br' },
-    { tipo: 'Constituição de Empresa', razao_social: 'Studio Vega Arquitetura Ltda', nome_fantasia: 'Studio Vega', cnpj: '', municipio: 'Teresina', uf: 'PI', cliente_responsavel: 'Renata Vega', telefone: '(86) 98888-2020', email: 'renata@studiovega.com.br' },
-    { tipo: 'Alteração de Endereço', razao_social: 'Transportes Rio Norte S.A.', nome_fantasia: 'Rio Norte', cnpj: '98.765.432/0001-10', municipio: 'Timon', uf: 'MA', cliente_responsavel: 'Paulo Rocha', telefone: '(99) 97777-3030', email: 'paulo@rionorte.com.br' },
-    { tipo: 'Entrada de Sócio', razao_social: 'Clínica Bem Viver Ltda', nome_fantasia: 'Bem Viver', cnpj: '11.222.333/0001-44', municipio: 'Teresina', uf: 'PI', cliente_responsavel: 'Dra. Helena Lima', telefone: '(86) 96666-4040', email: 'helena@bemviver.com.br' },
-    { tipo: 'Emissão de Certidões', razao_social: 'Mercantil Sertão Eireli', nome_fantasia: 'Sertão Distribuidora', cnpj: '22.333.444/0001-55', municipio: 'Picos', uf: 'PI', cliente_responsavel: 'Antônio Barros', telefone: '(89) 95555-5050', email: 'antonio@sertao.com.br' },
+    { tipo: 'Baixa de Empresa', codigo: '9001', nome: 'Padaria Pão Quente', razao_social: 'Padaria Pão Quente Ltda', nome_fantasia: 'Pão Quente', cnpj_cpf: '12.345.678/0001-90', municipio: 'Teresina', uf: 'PI', responsavel_legal: 'Marcos Andrade', telefone: '(86) 99999-1010', email: 'marcos@paoquente.com.br' },
+    { tipo: 'Constituição de Empresa', codigo: '9002', nome: 'Studio Vega Arquitetura', razao_social: 'Studio Vega Arquitetura Ltda', nome_fantasia: 'Studio Vega', cnpj_cpf: '', municipio: 'Teresina', uf: 'PI', responsavel_legal: 'Renata Vega', telefone: '(86) 98888-2020', email: 'renata@studiovega.com.br' },
+    { tipo: 'Alteração de Endereço', codigo: '9003', nome: 'Transportes Rio Norte', razao_social: 'Transportes Rio Norte S.A.', nome_fantasia: 'Rio Norte', cnpj_cpf: '98.765.432/0001-10', municipio: 'Timon', uf: 'MA', responsavel_legal: 'Paulo Rocha', telefone: '(99) 97777-3030', email: 'paulo@rionorte.com.br' },
+    { tipo: 'Entrada de Sócio', codigo: '9004', nome: 'Clínica Bem Viver', razao_social: 'Clínica Bem Viver Ltda', nome_fantasia: 'Bem Viver', cnpj_cpf: '11.222.333/0001-44', municipio: 'Teresina', uf: 'PI', responsavel_legal: 'Dra. Helena Lima', telefone: '(86) 96666-4040', email: 'helena@bemviver.com.br' },
+    { tipo: 'Emissão de Certidões', codigo: '9005', nome: 'Mercantil Sertão', razao_social: 'Mercantil Sertão Eireli', nome_fantasia: 'Sertão Distribuidora', cnpj_cpf: '22.333.444/0001-55', municipio: 'Picos', uf: 'PI', responsavel_legal: 'Antônio Barros', telefone: '(89) 95555-5050', email: 'antonio@sertao.com.br' },
   ];
 
   amostras.forEach((a) => {
+    const cliente = clientes.porCodigo(a.codigo) || clientes.criar(a, admin);
     const criado = processos.criar(
-      { ...a, tipo_processo_id: porNome(a.tipo).id, responsavel_interno_id: admin.id },
+      { tipo_processo_id: porNome(a.tipo).id, cliente_id: cliente.id, responsavel_interno_id: admin.id },
       admin
     );
     console.log(`  • ${criado.codigo} — ${criado.razao_social}`);

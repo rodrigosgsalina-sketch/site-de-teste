@@ -80,11 +80,28 @@ const fiscal = conn.prepare("SELECT u.*, s.nome AS setor FROM usuarios u JOIN se
 const tipoBaixa = conn.prepare("SELECT id FROM tipos_processo WHERE nome = 'Baixa de Empresa'").get();
 const tipoCertidoes = conn.prepare("SELECT id FROM tipos_processo WHERE nome = 'Emissão de Certidões'").get();
 
+/* O processo é sempre aberto a partir do cadastro de clientes. */
+const clientePadrao = clientesDom.criar(
+  {
+    codigo: '9001',
+    apelido: 'TESTE',
+    nome: 'Empresa Teste',
+    razao_social: 'Empresa Teste Ltda',
+    nome_fantasia: 'Loja Teste',
+    cnpj_cpf: '00.000.000/0001-00',
+    inscricao_estadual: '11.111.111-1',
+    municipio: 'Teresina',
+    uf: 'PI',
+    telefone: '(86) 3000-0000',
+    email: 'contato@empresateste.com.br',
+    responsavel_legal: 'Maria Souza',
+  },
+  admin
+);
+const clientesIniciais = clientesDom.resumo().total;
+
 function novoProcesso(tipoId = tipoBaixa.id, extra = {}) {
-  return processos.criar(
-    { tipo_processo_id: tipoId, razao_social: 'Empresa Teste Ltda', cnpj: '00.000.000/0001-00', ...extra },
-    admin
-  );
+  return processos.criar({ tipo_processo_id: tipoId, cliente_id: clientePadrao.id, ...extra }, admin);
 }
 
 /* ------------------------------------------------------------------ testes */
@@ -544,7 +561,7 @@ test('reimportar atualiza pelo código e preserva a observação interna', () =>
   assert.strictEqual(depois.nome, 'NOME ATUALIZADO');
   assert.strictEqual(depois.municipio, 'TERESINA');
   assert.strictEqual(depois.observacoes, 'Anotação do escritório.');
-  assert.strictEqual(clientesDom.resumo().total, 2, 'não pode duplicar o cadastro');
+  assert.strictEqual(clientesDom.resumo().total, clientesIniciais + 2, 'não pode duplicar o cadastro');
 });
 
 test('importação aceita também planilha em tabela e recusa arquivo sem empresas', () => {
@@ -599,21 +616,99 @@ test('cadastro de cliente valida código único e localiza por nome, CNPJ ou có
   assert.ok(clientesDom.listar({ situacao: 'Ativa' }).itens.every((c) => c.situacao === 'Ativa'));
 });
 
-test('ficha do cliente lista os processos da empresa pelo CNPJ', () => {
+test('ficha do cliente lista os processos vinculados e também os antigos, casados pelo CNPJ', () => {
   const cliente = clientesDom.criar(
-    { codigo: '950', nome: 'Transportes Rio Norte', cnpj_cpf: '98.765.432/0001-10' },
+    { codigo: '950', nome: 'Transportes Rio Norte', razao_social: 'Transportes Rio Norte S.A.',
+      cnpj_cpf: '98.765.432/0001-10' },
     admin
   );
   assert.deepStrictEqual(clientesDom.processosDoCliente(cliente), []);
 
-  // o processo grava o CNPJ com pontuação diferente — o vínculo ignora a máscara
-  const processo = novoProcesso(tipoCertidoes.id, {
-    razao_social: 'Transportes Rio Norte S.A.',
-    cnpj: '98765432000110',
-  });
+  const processo = processos.criar({ tipo_processo_id: tipoCertidoes.id, cliente_id: cliente.id }, admin);
   const vinculados = clientesDom.processosDoCliente(cliente);
   assert.strictEqual(vinculados.length, 1);
   assert.strictEqual(vinculados[0].codigo, processo.codigo);
+
+  // processo anterior ao seletor: sem cliente_id, o vínculo cai no CNPJ (sem máscara)
+  conn.prepare('UPDATE processos SET cliente_id = NULL, cnpj = ? WHERE id = ?').run('98765432000110', processo.id);
+  const legado = clientesDom.processosDoCliente(cliente);
+  assert.strictEqual(legado.length, 1);
+  assert.strictEqual(legado[0].codigo, processo.codigo);
+});
+
+test('abertura de processo copia os dados da empresa do cadastro de clientes', () => {
+  const processo = novoProcesso(tipoBaixa.id);
+
+  assert.strictEqual(processo.cliente_id, clientePadrao.id);
+  assert.strictEqual(processo.cliente_codigo, '9001');
+  assert.strictEqual(processo.razao_social, 'Empresa Teste Ltda');
+  assert.strictEqual(processo.nome_fantasia, 'Loja Teste');
+  assert.strictEqual(processo.cnpj, '00.000.000/0001-00');
+  assert.strictEqual(processo.inscricao_estadual, '11.111.111-1');
+  assert.strictEqual(processo.municipio, 'Teresina');
+  assert.strictEqual(processo.uf, 'PI');
+  assert.strictEqual(processo.cliente_responsavel, 'Maria Souza');
+  assert.strictEqual(processo.telefone, '(86) 3000-0000');
+  assert.strictEqual(processo.email, 'contato@empresateste.com.br');
+
+  // dados de empresa digitados no formulário são ignorados: valem os do cadastro
+  const forjado = processos.criar(
+    { tipo_processo_id: tipoBaixa.id, cliente_id: clientePadrao.id, razao_social: 'Outra Empresa', cnpj: '99' },
+    admin
+  );
+  assert.strictEqual(forjado.razao_social, 'Empresa Teste Ltda');
+  assert.strictEqual(forjado.cnpj, '00.000.000/0001-00');
+});
+
+test('abertura sem cliente do cadastro é recusada', () => {
+  assert.throws(() => processos.criar({ tipo_processo_id: tipoBaixa.id }, admin), /Selecione o cliente/i);
+  assert.throws(
+    () => processos.criar({ tipo_processo_id: tipoBaixa.id, cliente_id: '' }, admin),
+    /Selecione o cliente/i
+  );
+  assert.throws(
+    () => processos.criar({ tipo_processo_id: tipoBaixa.id, cliente_id: 999999 }, admin),
+    /não encontrado/i
+  );
+});
+
+test('trocar o cliente na edição atualiza os dados da empresa e registra no histórico', () => {
+  const outro = clientesDom.criar(
+    { codigo: '9002', nome: 'Comercial Aurora', razao_social: 'COMERCIAL AURORA LTDA',
+      cnpj_cpf: '22.333.444/0001-55', municipio: 'Parnaíba', uf: 'PI', responsavel_legal: 'João Lima' },
+    admin
+  );
+  const processo = novoProcesso(tipoCertidoes.id);
+  const editado = processos.atualizar(
+    processo.id,
+    { cliente_id: outro.id, observacoes: 'Cliente corrigido.' },
+    admin
+  );
+
+  assert.strictEqual(editado.cliente_id, outro.id);
+  assert.strictEqual(editado.razao_social, 'COMERCIAL AURORA LTDA');
+  assert.strictEqual(editado.cnpj, '22.333.444/0001-55');
+  assert.strictEqual(editado.municipio, 'Parnaíba');
+  assert.strictEqual(editado.cliente_responsavel, 'João Lima');
+
+  const registro = historico.doProcesso(processo.id).find((h) => h.acao === 'Cadastro Atualizado');
+  assert.match(registro.observacao, /Cliente alterado de Empresa Teste Ltda para COMERCIAL AURORA LTDA/);
+
+  // o processo sai da ficha do cliente anterior e entra na do novo
+  assert.ok(clientesDom.processosDoCliente(outro).some((p) => p.codigo === processo.codigo));
+  assert.ok(!clientesDom.processosDoCliente(clientePadrao).some((p) => p.codigo === processo.codigo));
+});
+
+test('cliente com processos abertos não pode ser excluído', () => {
+  const cliente = clientesDom.criar({ codigo: '9003', nome: 'Panificadora Sol' }, admin);
+  processos.criar({ tipo_processo_id: tipoCertidoes.id, cliente_id: cliente.id }, admin);
+
+  assert.throws(() => clientesDom.remover(cliente.id), /processo\(s\) abertos/i);
+  assert.ok(clientesDom.obter(cliente.id), 'o cadastro continua no lugar');
+
+  const semProcessos = clientesDom.criar({ codigo: '9004', nome: 'Sem Movimento' }, admin);
+  assert.ok(clientesDom.remover(semProcessos.id));
+  assert.strictEqual(clientesDom.obter(semProcessos.id), undefined);
 });
 
 test.after(() => {

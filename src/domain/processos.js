@@ -3,6 +3,7 @@
 const db = require('../db');
 const parametros = require('./parametros');
 const checklist = require('./checklist');
+const clientes = require('./clientes');
 const avisos = require('./avisos');
 const historico = require('./historico');
 const notificacoes = require('./notificacoes');
@@ -28,12 +29,14 @@ const STATUS_ANALISE = {
 
 const SELECT_PROCESSO = `
   SELECT p.*, t.nome AS tipo_processo, st.nome AS status, st.final AS status_final,
-         st.espera AS status_espera, u.nome AS responsavel_interno, uc.nome AS criado_por
+         st.espera AS status_espera, u.nome AS responsavel_interno, uc.nome AS criado_por,
+         cl.codigo AS cliente_codigo, cl.apelido AS cliente_apelido
     FROM processos p
     JOIN tipos_processo t ON t.id = p.tipo_processo_id
     JOIN status_processo st ON st.id = p.status_id
     LEFT JOIN usuarios u ON u.id = p.responsavel_interno_id
-    LEFT JOIN usuarios uc ON uc.id = p.criado_por_id`;
+    LEFT JOIN usuarios uc ON uc.id = p.criado_por_id
+    LEFT JOIN clientes cl ON cl.id = p.cliente_id`;
 
 function statusId(nome) {
   const row = db.get().prepare('SELECT id FROM status_processo WHERE nome = ?').get(nome);
@@ -53,7 +56,11 @@ function obterPorCodigo(codigo) {
  * Criação                                                            *
  * ------------------------------------------------------------------ */
 
-const CAMPOS_TEXTO = [
+/** Campos preenchidos pelo usuário no formulário do processo. */
+const CAMPOS_TEXTO = ['etapa_atual', 'observacoes'];
+
+/** Campos da empresa copiados do cadastro de clientes na abertura. */
+const CAMPOS_CLIENTE = [
   'razao_social',
   'nome_fantasia',
   'cnpj',
@@ -64,17 +71,48 @@ const CAMPOS_TEXTO = [
   'cliente_responsavel',
   'telefone',
   'email',
-  'etapa_atual',
-  'observacoes',
 ];
+
+function texto(valor) {
+  return valor === undefined || valor === null || String(valor).trim() === '' ? null : String(valor).trim();
+}
 
 function limpar(dados) {
   const saida = {};
-  for (const campo of CAMPOS_TEXTO) {
-    const v = dados[campo];
-    saida[campo] = v === undefined || v === null || String(v).trim() === '' ? null : String(v).trim();
-  }
+  for (const campo of CAMPOS_TEXTO) saida[campo] = texto(dados[campo]);
   return saida;
+}
+
+/**
+ * Localiza o cliente escolhido no formulário. O processo passou a referenciar
+ * o cadastro de clientes: nada de empresa é mais digitado na abertura.
+ */
+function clienteSelecionado(dados) {
+  const id = Number(dados.cliente_id);
+  if (!id) throw new ErroValidacao('Selecione o cliente do processo.');
+  const cliente = clientes.obter(id);
+  if (!cliente) throw new ErroValidacao('Cliente não encontrado. Atualize a página e selecione novamente.');
+  return cliente;
+}
+
+/**
+ * Copia os dados da empresa para o processo. A cópia é proposital: o processo
+ * guarda a foto do cadastro no momento em que foi aberto, e continua legível
+ * mesmo que o cliente seja alterado ou removido depois.
+ */
+function dadosDoCliente(cliente) {
+  return {
+    razao_social: texto(cliente.razao_social) || texto(cliente.nome) || `Cliente ${cliente.codigo}`,
+    nome_fantasia: texto(cliente.nome_fantasia) || texto(cliente.apelido),
+    cnpj: texto(cliente.cnpj_cpf),
+    inscricao_estadual: texto(cliente.inscricao_estadual),
+    inscricao_municipal: texto(cliente.inscricao_municipal),
+    municipio: texto(cliente.municipio),
+    uf: texto(cliente.uf),
+    cliente_responsavel: texto(cliente.responsavel_legal),
+    telefone: texto(cliente.telefone),
+    email: texto(cliente.email),
+  };
 }
 
 /**
@@ -83,9 +121,7 @@ function limpar(dados) {
  * As notificações são disparadas depois do commit (retorna uma promessa).
  */
 function criar(dados, usuario) {
-  if (!dados.razao_social || !String(dados.razao_social).trim()) {
-    throw new ErroValidacao('Informe a razão social.');
-  }
+  const cliente = clienteSelecionado(dados);
   const tipo = db
     .get()
     .prepare('SELECT id, nome, ativo FROM tipos_processo WHERE id = ?')
@@ -99,7 +135,7 @@ function criar(dados, usuario) {
     ? String(dados.data_previsao).slice(0, 10)
     : somarDias(`${abertura}T12:00:00`, prazoDias).toISOString().slice(0, 10);
 
-  const campos = limpar(dados);
+  const campos = { ...limpar(dados), ...dadosDoCliente(cliente) };
 
   const processoId = db.tx(() => {
     const codigo = parametros.proximoCodigoProcesso(new Date(`${abertura}T12:00:00`));
@@ -107,10 +143,10 @@ function criar(dados, usuario) {
       .get()
       .prepare(
         `INSERT INTO processos
-           (codigo, data_abertura, tipo_processo_id, status_id, etapa_atual, razao_social, nome_fantasia,
-            cnpj, inscricao_estadual, inscricao_municipal, municipio, uf, cliente_responsavel, telefone,
-            email, responsavel_interno_id, data_previsao, observacoes, criado_por_id, criado_em, atualizado_em)
-         VALUES (@codigo, @data_abertura, @tipo_processo_id, @status_id, @etapa_atual, @razao_social,
+           (codigo, data_abertura, tipo_processo_id, status_id, etapa_atual, cliente_id, razao_social,
+            nome_fantasia, cnpj, inscricao_estadual, inscricao_municipal, municipio, uf, cliente_responsavel,
+            telefone, email, responsavel_interno_id, data_previsao, observacoes, criado_por_id, criado_em, atualizado_em)
+         VALUES (@codigo, @data_abertura, @tipo_processo_id, @status_id, @etapa_atual, @cliente_id, @razao_social,
                  @nome_fantasia, @cnpj, @inscricao_estadual, @inscricao_municipal, @municipio, @uf,
                  @cliente_responsavel, @telefone, @email, @responsavel_interno_id, @data_previsao,
                  @observacoes, @criado_por_id, @agora, @agora)`
@@ -120,6 +156,7 @@ function criar(dados, usuario) {
         data_abertura: abertura,
         tipo_processo_id: tipo.id,
         status_id: statusId(STATUS.ABERTO),
+        cliente_id: cliente.id,
         responsavel_interno_id: dados.responsavel_interno_id ? Number(dados.responsavel_interno_id) : null,
         data_previsao: previsao,
         criado_por_id: usuario ? usuario.id : null,
@@ -134,7 +171,7 @@ function criar(dados, usuario) {
       processoId: id,
       acao: 'Processo Criado',
       usuario,
-      observacao: `${codigo} — ${tipo.nome}. ${itens.length} itens de checklist gerados.`,
+      observacao: `${codigo} — ${tipo.nome} para ${campos.razao_social} (cliente ${cliente.codigo}). ${itens.length} itens de checklist gerados.`,
     });
     return id;
   });
@@ -155,15 +192,15 @@ async function notificarAbertura(processoId) {
 function atualizar(id, dados, usuario) {
   const atual = obter(id);
   if (!atual) throw new ErroValidacao('Processo não encontrado.');
-  if (!dados.razao_social || !String(dados.razao_social).trim()) {
-    throw new ErroValidacao('Informe a razão social.');
-  }
-  const campos = limpar(dados);
+  const cliente = clienteSelecionado(dados);
+  const trocouCliente = Number(atual.cliente_id) !== cliente.id;
+  const campos = { ...limpar(dados), ...dadosDoCliente(cliente) };
+
   db.get()
     .prepare(
       `UPDATE processos
-          SET razao_social = @razao_social, nome_fantasia = @nome_fantasia, cnpj = @cnpj,
-              inscricao_estadual = @inscricao_estadual, inscricao_municipal = @inscricao_municipal,
+          SET cliente_id = @cliente_id, razao_social = @razao_social, nome_fantasia = @nome_fantasia,
+              cnpj = @cnpj, inscricao_estadual = @inscricao_estadual, inscricao_municipal = @inscricao_municipal,
               municipio = @municipio, uf = @uf, cliente_responsavel = @cliente_responsavel,
               telefone = @telefone, email = @email, etapa_atual = @etapa_atual,
               observacoes = @observacoes, responsavel_interno_id = @responsavel_interno_id,
@@ -172,6 +209,7 @@ function atualizar(id, dados, usuario) {
     )
     .run({
       id,
+      cliente_id: cliente.id,
       responsavel_interno_id: dados.responsavel_interno_id ? Number(dados.responsavel_interno_id) : null,
       data_previsao: dados.data_previsao ? String(dados.data_previsao).slice(0, 10) : atual.data_previsao,
       agora: agoraISO(),
@@ -182,7 +220,9 @@ function atualizar(id, dados, usuario) {
     processoId: id,
     acao: 'Cadastro Atualizado',
     usuario,
-    observacao: 'Dados cadastrais do processo alterados.',
+    observacao: trocouCliente
+      ? `Cliente alterado de ${atual.razao_social} para ${campos.razao_social} (cliente ${cliente.codigo}).`
+      : 'Dados cadastrais do processo alterados.',
   });
   return obter(id);
 }

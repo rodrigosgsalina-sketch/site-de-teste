@@ -57,6 +57,80 @@
     });
   }
 
+  /* Texto comparável: sem acento e sem caixa. */
+  function semAcento(texto) {
+    return String(texto || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+
+  /* Busca que filtra as opções de um <select> (data-filtra-lista="id-do-select"). */
+  function ligarFiltroDeLista(raiz) {
+    raiz.querySelectorAll('[data-filtra-lista]').forEach(function (campo) {
+      var select = document.getElementById(campo.dataset.filtraLista);
+      if (!select) return;
+      var opcoes = [].slice.call(select.options).map(function (opcao) {
+        return {
+          elemento: opcao,
+          texto: semAcento(opcao.dataset.busca || opcao.textContent),
+          digitos: opcao.dataset.digitos || '',
+        };
+      });
+
+      campo.addEventListener('input', function () {
+        var termo = campo.value.trim();
+        var digitos = termo.replace(/\D+/g, '');
+        var partes = semAcento(termo).split(/\s+/).filter(Boolean);
+        var visiveis = 0;
+
+        opcoes.forEach(function (opcao) {
+          if (!opcao.elemento.value) return; // "Selecione…" permanece
+          var casa =
+            !partes.length ||
+            partes.every(function (p) { return opcao.texto.indexOf(p) !== -1; }) ||
+            (digitos.length >= 3 && opcao.digitos.indexOf(digitos) !== -1);
+          opcao.elemento.hidden = !casa;
+          if (casa) visiveis += 1;
+        });
+
+        // Com um único resultado, já deixa selecionado.
+        if (termo && visiveis === 1) {
+          var unico = opcoes.filter(function (o) { return o.elemento.value && !o.elemento.hidden; })[0];
+          if (unico) {
+            select.value = unico.elemento.value;
+            select.dispatchEvent(new Event('change'));
+          }
+        }
+      });
+    });
+  }
+
+  /* Mostra o resumo do cliente escolhido (data-resumo-cliente="id-do-painel"). */
+  function ligarResumoDeCliente(raiz) {
+    raiz.querySelectorAll('[data-resumo-cliente]').forEach(function (select) {
+      var painel = document.getElementById(select.dataset.resumoCliente);
+      if (!painel) return;
+
+      function atualizar() {
+        var opcao = select.options[select.selectedIndex];
+        if (!opcao || !opcao.value) {
+          painel.hidden = true;
+          return;
+        }
+        painel.querySelectorAll('[data-campo]').forEach(function (el) {
+          var valor = opcao.dataset[el.dataset.campo] || '—';
+          if (el.tagName === 'A') el.href = valor;
+          else el.textContent = valor;
+        });
+        painel.hidden = false;
+      }
+
+      select.addEventListener('change', atualizar);
+      atualizar();
+    });
+  }
+
   /* O cabeçalho ganha borda e sombra assim que a página sai do topo. */
   function ligarTopo() {
     var topo = document.querySelector('.topo');
@@ -126,6 +200,8 @@
     ligarImpedimentos(document);
     ligarConfirmacoes(document);
     ligarFiltros(document);
+    ligarFiltroDeLista(document);
+    ligarResumoDeCliente(document);
     ligarTopo();
     ligarContadores();
     ligarMenuMovel();

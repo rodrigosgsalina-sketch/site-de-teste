@@ -180,10 +180,12 @@ function ufsCadastradas() {
     .all();
 }
 
-/** Processos abertos para a empresa, casados pelo CNPJ. */
+/**
+ * Processos da empresa: os abertos pelo seletor de clientes (cliente_id) e,
+ * por compatibilidade, os antigos que só guardavam o CNPJ como texto.
+ */
 function processosDoCliente(cliente) {
   const digitos = soDigitos(cliente.cnpj_cpf);
-  if (!digitos) return [];
   return db
     .get()
     .prepare(
@@ -192,10 +194,12 @@ function processosDoCliente(cliente) {
          FROM processos p
          JOIN tipos_processo t ON t.id = p.tipo_processo_id
          JOIN status_processo st ON st.id = p.status_id
-        WHERE REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(p.cnpj, ''), '.', ''), '/', ''), '-', ''), ' ', '') = ?
+        WHERE p.cliente_id = @id
+           OR (p.cliente_id IS NULL AND @digitos <> ''
+               AND REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(p.cnpj, ''), '.', ''), '/', ''), '-', ''), ' ', '') = @digitos)
         ORDER BY p.data_abertura DESC, p.id DESC`
     )
-    .all(digitos);
+    .all({ id: cliente.id, digitos });
 }
 
 /* ------------------------------------------------------------------ escrita */
@@ -250,6 +254,16 @@ function atualizar(id, dados) {
 function remover(id) {
   const cliente = obter(id);
   if (!cliente) throw new ErroValidacao('Cliente não encontrado.');
+  const vinculados = db
+    .get()
+    .prepare('SELECT COUNT(*) AS total FROM processos WHERE cliente_id = ?')
+    .get(id);
+  if (vinculados.total) {
+    throw new ErroValidacao(
+      `Não é possível excluir: existem ${vinculados.total} processo(s) abertos para este cliente. ` +
+        'Marque a empresa como Inativa se ela não deve mais receber processos.'
+    );
+  }
   db.get().prepare('DELETE FROM clientes WHERE id = ?').run(id);
   return cliente;
 }
