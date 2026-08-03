@@ -1,0 +1,159 @@
+<%- include('../partials/cabecalho', { titulo: titulo }) %>
+
+<% if (erro) { %><div class="aviso aviso-erro"><%= erro %></div><% } %>
+
+<% if (!analise) { %>
+  <div class="cartao">
+    <h3>Importar empresas no modelo Domínio Sistemas</h3>
+    <p class="dica" style="max-width:72ch">
+      Envie o relatório <strong>Empresas · Dados cadastrais</strong> exportado do Domínio Sistemas.
+      O arquivo é lido como vem: o sistema entende as fichas do relatório, ignora o cabeçalho que se
+      repete a cada página e aproveita todos os campos do cadastro — código, apelido, nome, razão
+      social, CNPJ, inscrições, endereço, contato, CNAE, capital social, situação e datas.
+    </p>
+
+    <form method="post" action="/clientes/importar" enctype="multipart/form-data" style="margin-top:1rem">
+      <div class="linha-campos">
+        <div class="campo" style="grid-column: span 2">
+          <label for="planilha">Planilha de empresas <span class="obrig">*</span></label>
+          <input type="file" id="planilha" name="planilha" accept=".xlsx,.xls,.csv" required>
+          <div class="dica">Aceita .xlsx, .xls e .csv, até 40 MB.</div>
+        </div>
+      </div>
+      <div class="acoes">
+        <button class="botao">Ler planilha</button>
+        <a class="botao botao-secundario" href="/clientes">Cancelar</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="cartao">
+    <h3>Como funciona</h3>
+    <ul class="limpa">
+      <li class="feito">Nada é gravado ao enviar: primeiro você confere o que foi lido.</li>
+      <li class="feito">As empresas são identificadas pelo <strong>código</strong> do Domínio.</li>
+      <li class="feito">Empresas já cadastradas podem ser atualizadas ou mantidas como estão — você escolhe.</li>
+      <li class="feito">As observações internas escritas na plataforma são preservadas na atualização.</li>
+      <li class="feito">A importação fica registrada na auditoria, com quem fez e o resultado.</li>
+    </ul>
+  </div>
+<% } else { %>
+  <div class="cartao">
+    <div class="cartao-titulo">
+      <div>
+        <h3>Conferência antes de importar</h3>
+        <p class="dica" style="margin:0">
+          Arquivo <strong><%= arquivo.nome %></strong> ·
+          <%= Math.max(1, Math.round(arquivo.tamanho / 1024)) %> KB ·
+          aba <strong><%= analise.aba %></strong> ·
+          formato reconhecido: <strong><%= analise.formato === 'ficha' ? 'relatório do Domínio (fichas)' : 'planilha em tabela' %></strong>
+        </p>
+      </div>
+    </div>
+
+    <div class="grade grade-4">
+      <div class="indicador">
+        <div class="valor"><%= analise.registros.length %></div>
+        <div class="rotulo">Empresas na planilha</div>
+      </div>
+      <div class="indicador ok">
+        <div class="valor"><%= analise.novos %></div>
+        <div class="rotulo">Serão cadastradas</div>
+      </div>
+      <div class="indicador">
+        <div class="valor"><%= analise.existentes %></div>
+        <div class="rotulo">Já existem (mesmo código)</div>
+      </div>
+      <div class="indicador <%= analise.erros.length ? 'alerta' : '' %>">
+        <div class="valor"><%= analise.erros.length %></div>
+        <div class="rotulo">Linhas descartadas</div>
+      </div>
+    </div>
+
+    <p class="dica" style="margin-top:.9rem">
+      <strong><%= analise.camposEncontrados.length %></strong> campos reconhecidos por empresa.
+      <% if (analise.naoReconhecidos.length) { %>
+        Rótulos não aproveitados: <span class="mono"><%= analise.naoReconhecidos.join(', ') %></span>.
+      <% } else { %>
+        Nenhum rótulo da planilha ficou de fora.
+      <% } %>
+    </p>
+  </div>
+
+  <% if (analise.erros.length) { %>
+    <div class="cartao">
+      <h3>Linhas que não serão importadas</h3>
+      <div class="tabela-scroll">
+        <table class="tabela">
+          <thead><tr><th>Registro</th><th>Motivo</th><th>Identificação</th></tr></thead>
+          <tbody>
+            <% analise.erros.slice(0, 50).forEach(function (e) { %>
+              <tr>
+                <td class="mono"><%= e.linha %></td>
+                <td><%= e.motivo %></td>
+                <td><%= e.nome || e.codigo || '—' %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% if (analise.erros.length > 50) { %>
+        <p class="dica">Mostrando as 50 primeiras de <%= analise.erros.length %>.</p>
+      <% } %>
+    </div>
+  <% } %>
+
+  <div class="cartao">
+    <h3>Amostra do que será gravado</h3>
+    <div class="tabela-scroll">
+      <table class="tabela">
+        <thead>
+          <tr><th>Código</th><th>Apelido</th><th>Nome</th><th>Razão social</th><th>CNPJ / CPF</th>
+              <th>Município</th><th>Situação</th><th>Situação no sistema</th></tr>
+        </thead>
+        <tbody>
+          <% analise.registros.slice(0, 15).forEach(function (r) { %>
+            <tr>
+              <td class="mono"><%= r.codigo %></td>
+              <td><%= r.apelido || '—' %></td>
+              <td><%= r.nome %></td>
+              <td><%= r.razao_social || '—' %></td>
+              <td class="mono"><%= r.cnpj_cpf || '—' %></td>
+              <td><%= [r.municipio, r.uf].filter(Boolean).join(' / ') || '—' %></td>
+              <td><%= r.situacao || '—' %></td>
+              <td>
+                <% if (r.__novo) { %>
+                  <span class="etiqueta et-verde">nova</span>
+                <% } else { %>
+                  <span class="etiqueta et-amarelo">já cadastrada</span>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <p class="dica">
+      Mostrando <%= Math.min(15, analise.registros.length) %> de <%= analise.registros.length %> empresas.
+    </p>
+  </div>
+
+  <div class="cartao">
+    <h3>Confirmar importação</h3>
+    <form method="post" action="/clientes/importar/confirmar">
+      <div class="checkbox" style="margin-bottom:.9rem">
+        <input type="checkbox" id="atualizar" name="atualizar" value="1" checked>
+        <label for="atualizar">
+          Atualizar as <strong><%= analise.existentes %></strong> empresa(s) já cadastradas com os dados da planilha
+          <div class="dica">Desmarque para cadastrar somente as novas. As observações internas são sempre preservadas.</div>
+        </label>
+      </div>
+      <div class="acoes">
+        <button class="botao">Importar <%= analise.registros.length %> empresa(s)</button>
+        <button class="botao botao-secundario" formaction="/clientes/importar/cancelar">Cancelar</button>
+      </div>
+    </form>
+  </div>
+<% } %>
+
+<%- include('../partials/rodape') %>

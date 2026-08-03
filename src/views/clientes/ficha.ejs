@@ -1,0 +1,145 @@
+<%- include('../partials/cabecalho', { titulo: titulo }) %>
+
+<div class="cartao">
+  <div class="cartao-titulo">
+    <div>
+      <h2 style="margin-bottom:.35rem"><span class="mono"><%= cliente.codigo %></span> — <%= cliente.nome %></h2>
+      <div>
+        <span class="etiqueta <%= cliente.situacao === 'Ativa' ? 'et-verde' : (cliente.situacao === 'Inativa' ? 'et-vermelho' : 'et-amarelo') %>"><%= cliente.situacao %></span>
+        <% if (cliente.apelido) { %><span class="etiqueta et-neutro"><%= cliente.apelido %></span><% } %>
+        <% if (cliente.origem === 'Importação') { %><span class="etiqueta et-neutro">importado do Domínio</span><% } %>
+      </div>
+    </div>
+    <div class="acoes">
+      <a class="botao botao-secundario botao-pequeno" href="/clientes">Voltar</a>
+      <% if (podeEditar) { %>
+        <a class="botao botao-secundario botao-pequeno" href="/clientes/<%= cliente.id %>/editar">Editar cadastro</a>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="grade grade-4">
+    <div><label>Razão social</label><div><%= cliente.razao_social || '—' %></div></div>
+    <div><label>Nome fantasia</label><div><%= cliente.nome_fantasia || '—' %></div></div>
+    <div><label>CNPJ / CPF / CEI / CAEPF</label><div class="mono"><%= cliente.cnpj_cpf || '—' %></div></div>
+    <div><label>Natureza jurídica</label><div><%= cliente.natureza_juridica || '—' %></div></div>
+  </div>
+</div>
+
+<div class="grade grade-2">
+  <div class="cartao">
+    <h3>Endereço</h3>
+    <div class="grade grade-3">
+      <div><label>Tipo</label><div><%= cliente.tipo_endereco || '—' %></div></div>
+      <div style="grid-column: span 2"><label>Logradouro</label><div><%= cliente.endereco || '—' %></div></div>
+      <div><label>Número</label><div><%= cliente.numero || '—' %></div></div>
+      <div><label>Complemento</label><div><%= cliente.complemento || '—' %></div></div>
+      <div><label>Bairro</label><div><%= cliente.bairro || '—' %></div></div>
+      <div><label>Município</label><div><%= cliente.municipio || '—' %></div></div>
+      <div><label>UF</label><div><%= cliente.uf || '—' %></div></div>
+      <div><label>CEP</label><div class="mono"><%= cliente.cep || '—' %></div></div>
+      <div><label>Caixa postal</label><div><%= cliente.caixa_postal || '—' %></div></div>
+      <div><label>País</label><div><%= cliente.pais || '—' %></div></div>
+    </div>
+  </div>
+
+  <div class="cartao">
+    <h3>Contato</h3>
+    <div class="grade grade-2">
+      <div><label>Telefone</label><div><%= cliente.telefone || '—' %></div></div>
+      <div><label>Fax</label><div><%= cliente.fax || '—' %></div></div>
+      <div><label>E-mail</label><div><%= cliente.email || '—' %></div></div>
+      <div><label>Página na internet</label><div><%= cliente.site || '—' %></div></div>
+      <div><label>Responsável legal</label><div><%= cliente.responsavel_legal || '—' %></div></div>
+      <div><label>Contador</label><div><%= cliente.contador || '—' %></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="grade grade-2">
+  <div class="cartao">
+    <h3>Inscrições</h3>
+    <div class="grade grade-2">
+      <div><label>Inscrição estadual</label><div class="mono"><%= cliente.inscricao_estadual || '—' %></div></div>
+      <div><label>Inscrição municipal</label><div class="mono"><%= cliente.inscricao_municipal || '—' %></div></div>
+      <div><label>Junta comercial</label><div class="mono"><%= cliente.inscricao_junta || '—' %></div></div>
+      <div><label>Suframa</label><div class="mono"><%= cliente.inscricao_suframa || '—' %></div></div>
+      <div><label>Substituição tributária</label><div class="mono"><%= cliente.inscricao_sub_trib || '—' %></div></div>
+    </div>
+  </div>
+
+  <div class="cartao">
+    <h3>Atividade e contrato</h3>
+    <div class="grade grade-2">
+      <div><label>CNAE</label><div class="mono"><%= cliente.cnae || '—' %></div></div>
+      <div><label>CAE</label><div class="mono"><%= cliente.cae || '—' %></div></div>
+      <div style="grid-column: span 2"><label>Ramo de atividade</label><div><%= cliente.ramo_atividade || '—' %></div></div>
+      <div><label>Capital social</label><div class="mono"><%= cliente.capital_social || '—' %></div></div>
+      <div><label>Data do capital</label><div><%= fmtData(cliente.data_capital) %></div></div>
+      <div><label>Duração do contrato</label><div><%= cliente.duracao_contrato || '—' %></div></div>
+      <div><label>Data da duração</label><div><%= fmtData(cliente.data_duracao) %></div></div>
+      <div><label>Foro / comarca</label><div><%= cliente.foro_comarca || '—' %></div></div>
+      <div><label>Registro</label><div><%= cliente.registro || '—' %></div></div>
+      <div><label>Outro registro</label><div><%= cliente.outro_registro || '—' %></div></div>
+      <div><label>Data de registro</label><div><%= fmtData(cliente.data_registro) %></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="cartao">
+  <h3>Situação e datas</h3>
+  <div class="grade grade-4">
+    <div><label>Situação</label><div><%= cliente.situacao || '—' %></div></div>
+    <div><label>Data da situação</label><div><%= fmtData(cliente.data_situacao) %></div></div>
+    <div><label>Motivo</label><div><%= cliente.motivo || '—' %></div></div>
+    <div><label>Data da inscrição</label><div><%= fmtData(cliente.data_inscricao) %></div></div>
+    <div><label>Início das atividades</label><div><%= fmtData(cliente.inicio_atividades) %></div></div>
+    <div><label>Cliente desde</label><div><%= fmtData(cliente.cliente_desde) %></div></div>
+    <div><label>Cadastrado em</label><div><%= fmtDataHora(cliente.criado_em) %></div></div>
+    <div><label>Última atualização</label><div><%= fmtDataHora(cliente.atualizado_em) %></div></div>
+  </div>
+  <% if (cliente.observacoes) { %>
+    <div style="margin-top:.9rem"><label>Observações internas</label><div><%= cliente.observacoes %></div></div>
+  <% } %>
+</div>
+
+<div class="cartao">
+  <div class="cartao-titulo">
+    <h3>Processos desta empresa</h3>
+    <span class="dica">vinculados pelo CNPJ informado no processo</span>
+  </div>
+  <% if (!processos.length) { %>
+    <p class="vazio">Nenhum processo aberto para esta empresa.</p>
+  <% } else { %>
+    <div class="tabela-scroll">
+      <table class="tabela">
+        <thead><tr><th>Número</th><th>Tipo</th><th>Status</th><th>Abertura</th><th>Previsão</th><th>Conclusão</th></tr></thead>
+        <tbody>
+          <% processos.forEach(function (p) { %>
+            <tr>
+              <td><a class="mono" href="/processos/<%= p.id %>"><%= p.codigo %></a></td>
+              <td><%= p.tipo_processo %></td>
+              <td><span class="etiqueta <%= classeStatus(p.status) %>"><%= p.status %></span></td>
+              <td><%= fmtData(p.data_abertura) %></td>
+              <td><%= fmtData(p.data_previsao) %></td>
+              <td><%= fmtData(p.data_conclusao) %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</div>
+
+<% if (podeEditar) { %>
+  <div class="cartao">
+    <h3>Remover cliente</h3>
+    <p class="dica">O cadastro sai da lista. Os processos já abertos para a empresa não são afetados.</p>
+    <form method="post" action="/clientes/<%= cliente.id %>/excluir"
+          data-confirmar="Remover o cliente <%= cliente.nome %> do cadastro?">
+      <button class="botao botao-perigo botao-pequeno">Remover cliente</button>
+    </form>
+  </div>
+<% } %>
+
+<%- include('../partials/rodape') %>

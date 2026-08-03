@@ -84,8 +84,12 @@ ID em Administração → Usuários; deixando o campo vazio, o sistema deriva do
 | Gráficos | Chart.js servido localmente | sem CDN |
 | PDF | PDFKit | checklist e relatório final gerados no servidor |
 | Sessão/senha | express-session + bcryptjs | store de sessão em SQLite (`src/lib/session-store.js`) |
+| Planilhas | SheetJS (`xlsx`) | leitura do relatório de empresas do Domínio em .xlsx, .xls e .csv |
 
-Não há dependência de CDN, serviço externo, etapa de compilação ou módulo nativo.
+Não há etapa de compilação nem módulo nativo, e a aplicação não busca nada na internet para
+funcionar. A única dependência que não vem do npm é a `xlsx` (SheetJS), instalada a partir do CDN
+oficial do próprio projeto — é lá que saem as versões atuais, sem as vulnerabilidades da última
+publicada no npm. Isso vale só no `npm install`; a aplicação em si continua offline.
 
 ---
 
@@ -114,6 +118,8 @@ src/
     usuarios.js          autenticação por ID de usuário e CRUD
     avisos.js            mural interno visível a todos os usuários
     ordem-setores.js     ordem de atendimento dos setores por tipo de processo
+    clientes.js          cadastro das empresas atendidas
+    importacao-clientes.js  leitura do relatório de empresas do Domínio Sistemas
   routes/                camada HTTP
   views/                 telas EJS
   public/                CSS, JS, Chart.js e as fontes (fonts/)
@@ -137,9 +143,9 @@ tests/                   testes das regras de negócio (node:test)
 | `HISTÓRICO` | tabela `historico` · linha do tempo do processo e **Auditoria** |
 | `PARAMETROS` | tabela `parametros` · **Administração → Parâmetros** |
 
-Além das abas da planilha, a plataforma mantém as tabelas `avisos` e `avisos_lidos` (mural interno),
-`ordem_setores_tipo` (ordem de atendimento por tipo), `documentos`, `notificacoes` (outbox de
-e-mail) e `sessoes`.
+Além das abas da planilha, a plataforma mantém as tabelas `clientes` (empresas atendidas),
+`avisos` e `avisos_lidos` (mural interno), `ordem_setores_tipo` (ordem de atendimento por tipo),
+`documentos`, `notificacoes` (outbox de e-mail) e `sessoes`.
 
 **Setores auxiliares.** O `CHECKLIST_MODELO` referencia cinco “setores” que não estão na aba
 `SETORES`: Sócios, Financeiro, Cliente, TI e Qualidade. Eles foram criados como setores
@@ -210,6 +216,37 @@ itens do próprio setor. O dashboard gerencial é restrito a gestores; a área d
 a administradores.
 
 ---
+
+## Clientes (empresas)
+
+A aba **Clientes** lista as empresas atendidas pelo escritório. Todos os usuários consultam;
+**somente administradores** cadastram, editam, removem e importam.
+
+A ficha traz todos os campos do cadastro do Domínio Sistemas: código, apelido, nome, razão social,
+nome fantasia, CNPJ/CPF/CEI/CAEPF, inscrições (estadual, municipal, Junta, Suframa, substituição
+tributária), endereço completo, contato, natureza jurídica, CNAE, CAE, ramo de atividade, capital
+social, responsável legal, contador, foro, duração do contrato, registro, situação e as datas de
+inscrição, início de atividades e "cliente desde". A ficha também lista os **processos daquela
+empresa**, casados pelo CNPJ.
+
+### Importar empresas no modelo Domínio Sistemas
+
+O botão na tela de clientes aceita o relatório **Empresas · Dados cadastrais** exportado do Domínio
+(`.xlsx`, `.xls` ou `.csv`). Esse relatório não vem em tabela: cada empresa ocupa um bloco de linhas
+com pares `Rótulo: valor` em duas colunas, e o cabeçalho se repete a cada página — o leitor entende
+esse formato, ignora os cabeçalhos e aproveita os 45 campos da ficha. Planilhas tabulares comuns
+(uma linha de títulos, uma empresa por linha) também são aceitas, com os nomes de coluna
+reconhecidos por sinônimos.
+
+O fluxo tem duas etapas: ao enviar o arquivo **nada é gravado** — a tela mostra quantas empresas
+foram lidas, quantas são novas, quantas já existem, o que foi descartado e uma amostra do que será
+gravado. Só depois da confirmação a importação acontece.
+
+- as empresas são identificadas pelo **código** do Domínio;
+- empresas já cadastradas podem ser atualizadas ou mantidas como estão (opção na confirmação);
+- as **observações internas** escritas na plataforma nunca são sobrescritas pela importação;
+- datas viram formato ISO e o capital social também é guardado como número, para ordenar e somar;
+- cada importação fica registrada na auditoria com o resultado.
 
 ## Avisos internos (mural para todos os usuários)
 

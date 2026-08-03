@@ -360,6 +360,7 @@ table.tabela tbody tr { transition: background var(--rapido) ease; }
 table.tabela tbody tr:hover { background: var(--azul-050); }
 table.tabela tbody tr:last-child td { border-bottom: 0; }
 table.tabela td.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.tabela td.mono { white-space: nowrap; }
 
 /* ------------------------------------------------------------- etiquetas */
 .etiqueta {

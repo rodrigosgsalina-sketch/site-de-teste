@@ -7,3 +7,4 @@ data/
 .DS_Store
 src/public/vendor/
 npm-debug.log*
+data/importacoes/

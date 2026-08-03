@@ -1,0 +1,132 @@
+<%- include('../partials/cabecalho', { titulo: titulo }) %>
+
+<div class="grade grade-4" style="margin-bottom:1rem">
+  <div class="indicador">
+    <div class="valor"><%= resumo.total %></div>
+    <div class="rotulo">Empresas cadastradas</div>
+  </div>
+  <div class="indicador ok">
+    <div class="valor"><%= resumo.ativas %></div>
+    <div class="rotulo">Ativas</div>
+  </div>
+  <div class="indicador">
+    <div class="valor"><%= resumo.inativas %></div>
+    <div class="rotulo">Inativas</div>
+  </div>
+  <div class="indicador">
+    <div class="valor"><%= resumo.outras %></div>
+    <div class="rotulo">Outras situações</div>
+  </div>
+</div>
+
+<div class="cartao">
+  <form method="get" action="/clientes">
+    <div class="linha-campos">
+      <div class="campo" style="grid-column: span 2">
+        <label for="q">Buscar empresa</label>
+        <input type="search" id="q" name="q" value="<%= filtros.busca %>"
+               placeholder="Código, apelido, nome, razão social, CNPJ, município…">
+      </div>
+      <div class="campo">
+        <label for="situacao">Situação</label>
+        <select id="situacao" name="situacao">
+          <option value="">Todas</option>
+          <% situacoes.forEach(function (s) { %>
+            <option value="<%= s.situacao %>" <%= filtros.situacao === s.situacao ? 'selected' : '' %>>
+              <%= s.situacao %> (<%= s.total %>)
+            </option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="uf">UF</label>
+        <select id="uf" name="uf">
+          <option value="">Todas</option>
+          <% ufs.forEach(function (u) { %>
+            <option value="<%= u.uf %>" <%= filtros.uf === u.uf ? 'selected' : '' %>><%= u.uf %> (<%= u.total %>)</option>
+          <% }) %>
+        </select>
+      </div>
+    </div>
+    <div class="acoes">
+      <button class="botao botao-pequeno">Filtrar</button>
+      <a class="botao botao-secundario botao-pequeno" href="/clientes">Limpar</a>
+      <% if (ehAdmin) { %>
+        <a class="botao botao-pequeno" href="/clientes/novo">Cadastrar empresa</a>
+        <a class="botao botao-secundario botao-pequeno" href="/clientes/importar">
+          Importar empresas no modelo Domínio Sistemas
+        </a>
+      <% } %>
+      <span class="dica" style="margin-left:auto"><strong><%= total %></strong> empresa(s) encontrada(s)</span>
+    </div>
+  </form>
+</div>
+
+<div class="cartao">
+  <% if (!lista.length) { %>
+    <p class="vazio">
+      Nenhuma empresa encontrada.
+      <% if (ehAdmin && !total) { %>
+        Comece <a href="/clientes/novo">cadastrando uma</a> ou
+        <a href="/clientes/importar">importando a planilha do Domínio Sistemas</a>.
+      <% } %>
+    </p>
+  <% } else { %>
+    <div class="tabela-scroll">
+      <table class="tabela">
+        <thead>
+          <tr>
+            <th>Código</th><th>Apelido</th><th>Nome / razão social</th><th>CNPJ / CPF</th>
+            <th>Município</th><th>Situação</th><th>Cliente desde</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% lista.forEach(function (c) { %>
+            <tr>
+              <td><a class="mono" href="/clientes/<%= c.id %>"><%= c.codigo %></a></td>
+              <td><%= c.apelido || '—' %></td>
+              <td>
+                <a href="/clientes/<%= c.id %>"><%= c.nome %></a>
+                <% if (c.razao_social && c.razao_social !== c.nome) { %>
+                  <div class="item-meta"><%= c.razao_social %></div>
+                <% } %>
+              </td>
+              <td class="mono"><%= c.cnpj_cpf || '—' %></td>
+              <td><%= [c.municipio, c.uf].filter(Boolean).join(' / ') || '—' %></td>
+              <td>
+                <span class="etiqueta <%= c.situacao === 'Ativa' ? 'et-verde' : (c.situacao === 'Inativa' ? 'et-vermelho' : 'et-amarelo') %>">
+                  <%= c.situacao %>
+                </span>
+              </td>
+              <td><%= fmtData(c.cliente_desde) %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <% if (paginas > 1) { %>
+      <%
+        var base = function (n) {
+          var p = [];
+          if (filtros.busca) p.push('q=' + encodeURIComponent(filtros.busca));
+          if (filtros.situacao) p.push('situacao=' + encodeURIComponent(filtros.situacao));
+          if (filtros.uf) p.push('uf=' + encodeURIComponent(filtros.uf));
+          p.push('pagina=' + n);
+          return '/clientes?' + p.join('&');
+        };
+      %>
+      <div class="acoes" style="margin-top:1rem">
+        <% if (pagina > 1) { %>
+          <a class="botao botao-secundario botao-pequeno" href="<%= base(pagina - 1) %>">&larr; Anterior</a>
+        <% } %>
+        <span class="dica">Página <%= pagina %> de <%= paginas %></span>
+        <% if (pagina < paginas) { %>
+          <a class="botao botao-secundario botao-pequeno" href="<%= base(pagina + 1) %>">Próxima &rarr;</a>
+        <% } %>
+      </div>
+    <% } %>
+  <% } %>
+</div>
+
+<%- include('../partials/rodape') %>

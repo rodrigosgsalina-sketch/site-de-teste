@@ -1,0 +1,240 @@
+<%- include('../partials/cabecalho', { titulo: titulo }) %>
+
+<div class="cartao">
+  <% if (erro) { %><div class="aviso aviso-erro"><%= erro %></div><% } %>
+
+  <form method="post" action="<%= novo ? '/clientes' : '/clientes/' + cliente.id + '/editar' %>">
+    <fieldset>
+      <legend>Identificação</legend>
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="codigo">Código <span class="obrig">*</span></label>
+          <input type="text" id="codigo" name="codigo" value="<%= cliente.codigo || '' %>" required>
+          <div class="dica">O mesmo código usado no Domínio Sistemas.</div>
+        </div>
+        <div class="campo">
+          <label for="apelido">Apelido</label>
+          <input type="text" id="apelido" name="apelido" value="<%= cliente.apelido || '' %>">
+        </div>
+        <div class="campo">
+          <label for="nome">Nome <span class="obrig">*</span></label>
+          <input type="text" id="nome" name="nome" value="<%= cliente.nome || '' %>" required>
+        </div>
+        <div class="campo">
+          <label for="razao_social">Razão social</label>
+          <input type="text" id="razao_social" name="razao_social" value="<%= cliente.razao_social || '' %>">
+        </div>
+        <div class="campo">
+          <label for="nome_fantasia">Nome fantasia</label>
+          <input type="text" id="nome_fantasia" name="nome_fantasia" value="<%= cliente.nome_fantasia || '' %>">
+        </div>
+        <div class="campo">
+          <label for="natureza_juridica">Natureza jurídica</label>
+          <input type="text" id="natureza_juridica" name="natureza_juridica" value="<%= cliente.natureza_juridica || '' %>">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Documentos e inscrições</legend>
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="cnpj_cpf">CNPJ / CPF / CEI / CAEPF</label>
+          <input type="text" id="cnpj_cpf" name="cnpj_cpf" value="<%= cliente.cnpj_cpf || '' %>">
+        </div>
+        <div class="campo">
+          <label for="inscricao_estadual">Inscrição estadual</label>
+          <input type="text" id="inscricao_estadual" name="inscricao_estadual" value="<%= cliente.inscricao_estadual || '' %>">
+        </div>
+        <div class="campo">
+          <label for="inscricao_municipal">Inscrição municipal</label>
+          <input type="text" id="inscricao_municipal" name="inscricao_municipal" value="<%= cliente.inscricao_municipal || '' %>">
+        </div>
+        <div class="campo">
+          <label for="inscricao_junta">Inscrição na Junta Comercial</label>
+          <input type="text" id="inscricao_junta" name="inscricao_junta" value="<%= cliente.inscricao_junta || '' %>">
+        </div>
+        <div class="campo">
+          <label for="inscricao_suframa">Inscrição Suframa</label>
+          <input type="text" id="inscricao_suframa" name="inscricao_suframa" value="<%= cliente.inscricao_suframa || '' %>">
+        </div>
+        <div class="campo">
+          <label for="inscricao_sub_trib">Inscrição substituição tributária</label>
+          <input type="text" id="inscricao_sub_trib" name="inscricao_sub_trib" value="<%= cliente.inscricao_sub_trib || '' %>">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Endereço</legend>
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="tipo_endereco">Tipo</label>
+          <input type="text" id="tipo_endereco" name="tipo_endereco" value="<%= cliente.tipo_endereco || '' %>" placeholder="Rua, Avenida…">
+        </div>
+        <div class="campo" style="grid-column: span 2">
+          <label for="endereco">Logradouro</label>
+          <input type="text" id="endereco" name="endereco" value="<%= cliente.endereco || '' %>">
+        </div>
+        <div class="campo">
+          <label for="numero">Número</label>
+          <input type="text" id="numero" name="numero" value="<%= cliente.numero || '' %>">
+        </div>
+        <div class="campo">
+          <label for="complemento">Complemento</label>
+          <input type="text" id="complemento" name="complemento" value="<%= cliente.complemento || '' %>">
+        </div>
+        <div class="campo">
+          <label for="bairro">Bairro</label>
+          <input type="text" id="bairro" name="bairro" value="<%= cliente.bairro || '' %>">
+        </div>
+        <div class="campo">
+          <label for="municipio">Município</label>
+          <input type="text" id="municipio" name="municipio" value="<%= cliente.municipio || '' %>">
+        </div>
+        <div class="campo">
+          <label for="uf">UF</label>
+          <input type="text" id="uf" name="uf" maxlength="2" value="<%= cliente.uf || '' %>">
+        </div>
+        <div class="campo">
+          <label for="cep">CEP</label>
+          <input type="text" id="cep" name="cep" value="<%= cliente.cep || '' %>">
+        </div>
+        <div class="campo">
+          <label for="caixa_postal">Caixa postal</label>
+          <input type="text" id="caixa_postal" name="caixa_postal" value="<%= cliente.caixa_postal || '' %>">
+        </div>
+        <div class="campo">
+          <label for="pais">País</label>
+          <input type="text" id="pais" name="pais" value="<%= cliente.pais || '' %>">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Contato</legend>
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="telefone">Telefone</label>
+          <input type="tel" id="telefone" name="telefone" value="<%= cliente.telefone || '' %>">
+        </div>
+        <div class="campo">
+          <label for="fax">Fax</label>
+          <input type="tel" id="fax" name="fax" value="<%= cliente.fax || '' %>">
+        </div>
+        <div class="campo">
+          <label for="email">E-mail</label>
+          <input type="email" id="email" name="email" value="<%= cliente.email || '' %>">
+        </div>
+        <div class="campo">
+          <label for="site">Página na internet</label>
+          <input type="text" id="site" name="site" value="<%= cliente.site || '' %>">
+        </div>
+        <div class="campo">
+          <label for="responsavel_legal">Responsável legal</label>
+          <input type="text" id="responsavel_legal" name="responsavel_legal" value="<%= cliente.responsavel_legal || '' %>">
+        </div>
+        <div class="campo">
+          <label for="contador">Contador</label>
+          <input type="text" id="contador" name="contador" value="<%= cliente.contador || '' %>">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Atividade e contrato</legend>
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="cnae">CNAE</label>
+          <input type="text" id="cnae" name="cnae" value="<%= cliente.cnae || '' %>">
+        </div>
+        <div class="campo">
+          <label for="cae">CAE</label>
+          <input type="text" id="cae" name="cae" value="<%= cliente.cae || '' %>">
+        </div>
+        <div class="campo" style="grid-column: span 2">
+          <label for="ramo_atividade">Ramo de atividade</label>
+          <input type="text" id="ramo_atividade" name="ramo_atividade" value="<%= cliente.ramo_atividade || '' %>">
+        </div>
+        <div class="campo">
+          <label for="capital_social">Capital social</label>
+          <input type="text" id="capital_social" name="capital_social" value="<%= cliente.capital_social || '' %>" placeholder="40.000,00">
+        </div>
+        <div class="campo">
+          <label for="data_capital">Data do capital</label>
+          <input type="date" id="data_capital" name="data_capital" value="<%= cliente.data_capital || '' %>">
+        </div>
+        <div class="campo">
+          <label for="duracao_contrato">Duração do contrato</label>
+          <input type="text" id="duracao_contrato" name="duracao_contrato" value="<%= cliente.duracao_contrato || '' %>">
+        </div>
+        <div class="campo">
+          <label for="data_duracao">Data da duração</label>
+          <input type="date" id="data_duracao" name="data_duracao" value="<%= cliente.data_duracao || '' %>">
+        </div>
+        <div class="campo">
+          <label for="foro_comarca">Foro / comarca</label>
+          <input type="text" id="foro_comarca" name="foro_comarca" value="<%= cliente.foro_comarca || '' %>">
+        </div>
+        <div class="campo">
+          <label for="registro">Registro</label>
+          <input type="text" id="registro" name="registro" value="<%= cliente.registro || '' %>">
+        </div>
+        <div class="campo">
+          <label for="outro_registro">Outro registro</label>
+          <input type="text" id="outro_registro" name="outro_registro" value="<%= cliente.outro_registro || '' %>">
+        </div>
+        <div class="campo">
+          <label for="data_registro">Data de registro</label>
+          <input type="date" id="data_registro" name="data_registro" value="<%= cliente.data_registro || '' %>">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Situação</legend>
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="situacao">Situação</label>
+          <select id="situacao" name="situacao">
+            <% situacoes.forEach(function (s) { %>
+              <option value="<%= s %>" <%= (cliente.situacao || 'Ativa') === s ? 'selected' : '' %>><%= s %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="data_situacao">Data da situação</label>
+          <input type="date" id="data_situacao" name="data_situacao" value="<%= cliente.data_situacao || '' %>">
+        </div>
+        <div class="campo">
+          <label for="motivo">Motivo</label>
+          <input type="text" id="motivo" name="motivo" value="<%= cliente.motivo || '' %>">
+        </div>
+        <div class="campo">
+          <label for="data_inscricao">Data da inscrição</label>
+          <input type="date" id="data_inscricao" name="data_inscricao" value="<%= cliente.data_inscricao || '' %>">
+        </div>
+        <div class="campo">
+          <label for="inicio_atividades">Início das atividades</label>
+          <input type="date" id="inicio_atividades" name="inicio_atividades" value="<%= cliente.inicio_atividades || '' %>">
+        </div>
+        <div class="campo">
+          <label for="cliente_desde">Cliente desde</label>
+          <input type="date" id="cliente_desde" name="cliente_desde" value="<%= cliente.cliente_desde || '' %>">
+        </div>
+      </div>
+      <div class="campo">
+        <label for="observacoes">Observações internas</label>
+        <textarea id="observacoes" name="observacoes"><%= cliente.observacoes || '' %></textarea>
+        <div class="dica">Este campo é da plataforma e não é sobrescrito pela importação.</div>
+      </div>
+    </fieldset>
+
+    <div class="acoes">
+      <button class="botao"><%= novo ? 'Cadastrar cliente' : 'Salvar alterações' %></button>
+      <a class="botao botao-secundario" href="<%= novo ? '/clientes' : '/clientes/' + cliente.id %>">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<%- include('../partials/rodape') %>

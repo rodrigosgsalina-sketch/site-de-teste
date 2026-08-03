@@ -91,6 +91,7 @@ function exigirLogin(req, res, next) {
 app.use('/', require('./routes/auth'));
 app.use('/', exigirLogin, require('./routes/painel'));
 app.use('/processos', exigirLogin, require('./routes/processos'));
+app.use('/clientes', exigirLogin, require('./routes/clientes'));
 app.use('/checklist', exigirLogin, require('./routes/checklist'));
 app.use('/avisos', exigirLogin, require('./routes/avisos'));
 app.use('/dashboard', exigirLogin, require('./routes/dashboard'));

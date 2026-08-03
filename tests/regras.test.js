@@ -33,6 +33,9 @@ const acesso = require('../src/domain/acesso');
 const avisos = require('../src/domain/avisos');
 const dashboard = require('../src/domain/dashboard');
 const ordemSetores = require('../src/domain/ordem-setores');
+const clientesDom = require('../src/domain/clientes');
+const importacao = require('../src/domain/importacao-clientes');
+const XLSX = require('xlsx');
 const usuariosDom = require('../src/domain/usuarios');
 
 /* ----------------------------------------------------------- preparação */
@@ -448,6 +451,169 @@ test('ordem personalizada de um tipo não interfere nos demais', () => {
     baixa.map((s) => s.nome).reverse()
   );
   ordemSetores.limpar(tipoBaixa.id);
+});
+
+/* ------------------------------------------------------- clientes/empresas */
+
+/** Monta uma planilha no formato de ficha do Domínio (rótulo: valor). */
+function planilhaFicha(empresas) {
+  const linhas = [];
+  empresas.forEach((e, i) => {
+    linhas.push(['Empresa:', '', 'J S GRILO & GALVAO', '', '', '', '', '', '', '', '', 'Página:', '', `${i + 1}/2`]);
+    linhas.push(['C.N.P.J.:', '05.605.572/0001-18', '', '', '', '', '', '', '', '', '', 'Emissão:', '', '03/08/2026']);
+    linhas.push(['EMPRESAS']);
+    linhas.push(['DADOS CADASTRAIS']);
+    linhas.push(['Código:', '', '', '', e.codigo, '', '', 'Data da inscrição:', '', '14/04/2003']);
+    linhas.push(['Apelido:', '', '', '', e.apelido, '', '', 'Insc. Suframa:', '', '']);
+    linhas.push(['Nome:', '', '', '', e.nome, '', '', 'Natureza Jurídica:', '', 'Sociedade Empresária Limitada']);
+    linhas.push(['Razão social:', '', '', '', e.razao, '', '', 'Contador:', '', 'JACQUELINE']);
+    linhas.push(['Município:', '', '', '', e.municipio, '', '', 'Situação:', '', e.situacao]);
+    linhas.push(['UF:', '', '', '', e.uf, '', '', 'Início atividades:', '', '01/09/2001']);
+    linhas.push(['Complemento:', '', '', '', '', '', '', 'Motivo:', '', 'Outras']);
+    linhas.push(['CNPJ/CPF/CEI/CAEPF:', '', '', '', e.cnpj, '', '', 'Capital social:', '', '40.000,00']);
+    linhas.push(['Insc. estadual:', '', '', '', '20.200.893-2', '', '', 'Data:', '', '09/10/2013']);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(linhas);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Empresas');
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+}
+
+test('importação lê o relatório de empresas do Domínio (formato de ficha)', () => {
+  const buffer = planilhaFicha([
+    { codigo: '1', apelido: 'JS GRILO', nome: 'J S GRILO & GALVAO SERVICOS CONTABEIS',
+      razao: 'J S GRILO & GALVAO SERVICOS CONTABEIS LTDA', municipio: 'GOIANINHA', uf: 'RN',
+      cnpj: '05.605.572/0001-18', situacao: 'Ativa' },
+    { codigo: '2', apelido: 'BRANDAO', nome: 'BRANDAO MATERIAL DE CONSTRUCAO LTDA ME',
+      razao: 'BRANDAO MATERIAL DE CONSTRUCAO LTDA ME', municipio: 'NATAL', uf: 'RN',
+      cnpj: '11.222.333/0001-44', situacao: 'Inativa' },
+  ]);
+
+  const analise = importacao.analisar(buffer);
+  assert.strictEqual(analise.formato, 'ficha');
+  assert.strictEqual(analise.registros.length, 2);
+  assert.strictEqual(analise.novos, 2);
+  assert.strictEqual(analise.erros.length, 0);
+  // o cabeçalho de página não vira empresa nem campo
+  assert.deepStrictEqual(analise.naoReconhecidos, []);
+
+  const primeiro = analise.registros[0];
+  assert.strictEqual(primeiro.apelido, 'JS GRILO');
+  assert.strictEqual(primeiro.razao_social, 'J S GRILO & GALVAO SERVICOS CONTABEIS LTDA');
+  assert.strictEqual(primeiro.cnpj_cpf, '05.605.572/0001-18');
+  assert.strictEqual(primeiro.capital_social, '40.000,00');
+  // "Complemento" vazio não pode capturar o rótulo seguinte
+  assert.ok(!primeiro.complemento);
+
+  const resultado = importacao.importar(analise.registros, admin);
+  assert.strictEqual(resultado.criados, 2);
+  assert.strictEqual(resultado.falhas.length, 0);
+
+  const gravado = clientesDom.porCodigo('1');
+  assert.strictEqual(gravado.nome, 'J S GRILO & GALVAO SERVICOS CONTABEIS');
+  assert.strictEqual(gravado.municipio, 'GOIANINHA');
+  assert.strictEqual(gravado.uf, 'RN');
+  assert.strictEqual(gravado.situacao, 'Ativa');
+  assert.strictEqual(gravado.origem, 'Importação');
+  // datas viram ISO e o capital vira número
+  assert.strictEqual(gravado.inicio_atividades, '2001-09-01');
+  assert.strictEqual(gravado.capital_social_valor, 40000);
+});
+
+test('reimportar atualiza pelo código e preserva a observação interna', () => {
+  const buffer = planilhaFicha([
+    { codigo: '1', apelido: 'JS GRILO', nome: 'NOME ATUALIZADO', razao: 'RAZAO ATUALIZADA',
+      municipio: 'TERESINA', uf: 'PI', cnpj: '05.605.572/0001-18', situacao: 'Ativa' },
+  ]);
+
+  const antes = clientesDom.porCodigo('1');
+  clientesDom.atualizar(antes.id, { ...antes, observacoes: 'Anotação do escritório.' });
+
+  const analise = importacao.analisar(buffer);
+  assert.strictEqual(analise.novos, 0);
+  assert.strictEqual(analise.existentes, 1);
+
+  // sem autorização para atualizar, nada muda
+  const ignorado = importacao.importar(analise.registros, admin, { atualizarExistentes: false });
+  assert.strictEqual(ignorado.ignorados, 1);
+  assert.strictEqual(clientesDom.porCodigo('1').nome, 'J S GRILO & GALVAO SERVICOS CONTABEIS');
+
+  const atualizado = importacao.importar(analise.registros, admin, { atualizarExistentes: true });
+  assert.strictEqual(atualizado.atualizados, 1);
+  const depois = clientesDom.porCodigo('1');
+  assert.strictEqual(depois.nome, 'NOME ATUALIZADO');
+  assert.strictEqual(depois.municipio, 'TERESINA');
+  assert.strictEqual(depois.observacoes, 'Anotação do escritório.');
+  assert.strictEqual(clientesDom.resumo().total, 2, 'não pode duplicar o cadastro');
+});
+
+test('importação aceita também planilha em tabela e recusa arquivo sem empresas', () => {
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['Código', 'Apelido', 'Nome', 'Razão Social', 'CNPJ', 'Cidade', 'UF', 'Situação'],
+    ['500', 'PADARIA', 'Padaria Pão Quente', 'PADARIA PAO QUENTE LTDA', '12.345.678/0001-90', 'Teresina', 'PI', 'Ativa'],
+    ['501', '', '', '', '', '', '', ''],
+  ]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Empresas');
+  const analise = importacao.analisar(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+
+  assert.strictEqual(analise.formato, 'tabela');
+  assert.strictEqual(analise.registros.length, 1);
+  assert.strictEqual(analise.erros.length, 1, 'linha sem nome é descartada com motivo');
+  assert.match(analise.erros[0].motivo, /sem nome/);
+
+  importacao.importar(analise.registros, admin);
+  const gravado = clientesDom.porCodigo('500');
+  assert.strictEqual(gravado.municipio, 'Teresina'); // "Cidade" é sinônimo de município
+  assert.strictEqual(gravado.cnpj_cpf, '12.345.678/0001-90');
+
+  const vazia = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(vazia, XLSX.utils.aoa_to_sheet([['Relatório qualquer'], ['sem empresas']]), 'X');
+  assert.throws(
+    () => importacao.analisar(XLSX.write(vazia, { type: 'buffer', bookType: 'xlsx' })),
+    /Não encontrei empresas/
+  );
+});
+
+test('cadastro de cliente valida código único e localiza por nome, CNPJ ou código', () => {
+  const criado = clientesDom.criar(
+    { codigo: '900', nome: 'Clínica Bem Viver', razao_social: 'CLINICA BEM VIVER LTDA',
+      cnpj_cpf: '11.222.333/0001-44', municipio: 'Teresina', uf: 'pi', situacao: 'Ativa' },
+    admin
+  );
+  assert.strictEqual(criado.uf, 'PI', 'UF é normalizada para maiúsculas');
+
+  assert.throws(() => clientesDom.criar({ codigo: '900', nome: 'Outra' }, admin), /já existe/i);
+  assert.throws(() => clientesDom.criar({ codigo: '', nome: 'Sem código' }, admin), /código/i);
+  assert.throws(() => clientesDom.criar({ codigo: '901' }, admin), /nome ou a razão social/i);
+
+  // busca tolerante: acento, caixa e CNPJ com ou sem pontuação
+  assert.ok(clientesDom.listar({ busca: 'clinica' }).itens.some((c) => c.codigo === '900'));
+  assert.ok(clientesDom.listar({ busca: 'BEM VIVER' }).itens.some((c) => c.codigo === '900'));
+  assert.ok(clientesDom.listar({ busca: '11222333' }).itens.some((c) => c.codigo === '900'));
+  assert.ok(clientesDom.listar({ busca: '900' }).itens.some((c) => c.codigo === '900'));
+  assert.strictEqual(clientesDom.listar({ busca: 'inexistente-xyz' }).itens.length, 0);
+
+  // filtro por situação e UF
+  assert.ok(clientesDom.listar({ uf: 'PI' }).itens.every((c) => c.uf === 'PI'));
+  assert.ok(clientesDom.listar({ situacao: 'Ativa' }).itens.every((c) => c.situacao === 'Ativa'));
+});
+
+test('ficha do cliente lista os processos da empresa pelo CNPJ', () => {
+  const cliente = clientesDom.criar(
+    { codigo: '950', nome: 'Transportes Rio Norte', cnpj_cpf: '98.765.432/0001-10' },
+    admin
+  );
+  assert.deepStrictEqual(clientesDom.processosDoCliente(cliente), []);
+
+  // o processo grava o CNPJ com pontuação diferente — o vínculo ignora a máscara
+  const processo = novoProcesso(tipoCertidoes.id, {
+    razao_social: 'Transportes Rio Norte S.A.',
+    cnpj: '98765432000110',
+  });
+  const vinculados = clientesDom.processosDoCliente(cliente);
+  assert.strictEqual(vinculados.length, 1);
+  assert.strictEqual(vinculados[0].codigo, processo.codigo);
 });
 
 test.after(() => {

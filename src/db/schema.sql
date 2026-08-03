@@ -188,6 +188,79 @@ CREATE TABLE IF NOT EXISTS notificacoes (
 );
 CREATE INDEX IF NOT EXISTS idx_notificacoes_processo ON notificacoes (processo_id);
 
+-- ---------------------------------------------------------------- CLIENTES
+-- Cadastro das empresas atendidas pelo escritório. Os campos espelham a ficha
+-- "Dados cadastrais" do relatório de empresas do Domínio Sistemas, de onde os
+-- dados podem ser importados.
+CREATE TABLE IF NOT EXISTS clientes (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  codigo                TEXT    NOT NULL UNIQUE,      -- código da empresa no Domínio
+  apelido               TEXT,
+  nome                  TEXT    NOT NULL,
+  razao_social          TEXT,
+  nome_fantasia         TEXT,
+
+  -- documentos e inscrições
+  cnpj_cpf              TEXT,                          -- CNPJ/CPF/CEI/CAEPF
+  inscricao_estadual    TEXT,
+  inscricao_municipal   TEXT,
+  inscricao_junta       TEXT,
+  inscricao_suframa     TEXT,
+  inscricao_sub_trib    TEXT,
+
+  -- endereço
+  tipo_endereco         TEXT,
+  endereco              TEXT,
+  numero                TEXT,
+  complemento           TEXT,
+  bairro                TEXT,
+  municipio             TEXT,
+  uf                    TEXT,
+  cep                   TEXT,
+  caixa_postal          TEXT,
+  pais                  TEXT,
+
+  -- contato
+  telefone              TEXT,
+  fax                   TEXT,
+  email                 TEXT,
+  site                  TEXT,
+
+  -- dados societários e fiscais
+  natureza_juridica     TEXT,
+  cnae                  TEXT,
+  cae                   TEXT,
+  ramo_atividade        TEXT,
+  capital_social        TEXT,                          -- como consta na planilha
+  capital_social_valor  REAL,                          -- mesmo valor, numérico
+  data_capital          TEXT,
+  responsavel_legal     TEXT,
+  contador              TEXT,
+  foro_comarca          TEXT,
+  duracao_contrato      TEXT,
+  data_duracao          TEXT,
+  registro              TEXT,
+  outro_registro        TEXT,
+  data_registro         TEXT,
+
+  -- situação e datas (ISO)
+  situacao              TEXT DEFAULT 'Ativa',
+  data_situacao         TEXT,
+  motivo                TEXT,
+  data_inscricao        TEXT,
+  inicio_atividades     TEXT,
+  cliente_desde         TEXT,
+
+  observacoes           TEXT,
+  origem                TEXT NOT NULL DEFAULT 'Manual' CHECK (origem IN ('Manual', 'Importação')),
+  criado_por_id         INTEGER REFERENCES usuarios (id),
+  criado_em             TEXT NOT NULL DEFAULT (datetime('now')),
+  atualizado_em         TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_clientes_nome     ON clientes (nome);
+CREATE INDEX IF NOT EXISTS idx_clientes_cnpj     ON clientes (cnpj_cpf);
+CREATE INDEX IF NOT EXISTS idx_clientes_situacao ON clientes (situacao);
+
 -- ----------------------------------------------------------------- AVISOS
 -- Comunicados exibidos dentro da plataforma para TODOS os usuários —
 -- hoje: processo concluído e processo impedido. Diferente de `notificacoes`,
