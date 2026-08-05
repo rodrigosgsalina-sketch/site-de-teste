@@ -14,7 +14,8 @@
     "postinstall": "node scripts/copy-vendor.js",
     "test": "node --no-warnings=ExperimentalWarning --test tests/*.test.js",
     "certificado": "node scripts/gerar-certificado.js",
-    "vapid": "node scripts/gerar-vapid.js"
+    "vapid": "node scripts/gerar-vapid.js",
+    "doutor": "node scripts/verificar-ambiente.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

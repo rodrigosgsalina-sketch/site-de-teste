@@ -1,0 +1,29 @@
+# Fim de linha normalizado no repositório.
+#
+# O Git for Windows converte LF para CRLF ao baixar e de volta ao enviar. Sem
+# uma regra explícita, cada máquina grava de um jeito e o histórico enche de
+# diferenças que não são mudança nenhuma. Aqui o repositório guarda sempre LF;
+# no disco do Windows o Git Bash e os editores lidam com isso sem reclamar.
+
+* text=auto eol=lf
+
+# Arquivos que não são texto: passam intactos, sem conversão.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.webp   binary
+*.ico    binary
+*.pdf    binary
+*.woff   binary
+*.woff2  binary
+*.zip    binary
+*.xlsx   binary
+*.xls    binary
+*.db     binary
+*.bundle binary
+
+# Certificados e chaves: texto, mas com quebra de linha significativa.
+*.pem    text eol=lf
+*.crt    text eol=lf
+*.key    text eol=lf

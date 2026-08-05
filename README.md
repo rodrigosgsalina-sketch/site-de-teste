@@ -20,8 +20,15 @@ Windows, macOS e Linux.
 
 ## Como rodar
 
+Os comandos deste README são para o **Git Bash** (Windows) ou para qualquer terminal
+Linux/macOS — a mesma sintaxe serve nos dois. No Windows, abra o **Git Bash** (menu Iniciar), não o
+Prompt de Comando: é ele que traz o `openssl` usado pelos certificados e entende `cp`, `export` e
+variáveis na frente do comando.
+
 ```bash
 npm install          # instala dependências e copia o Chart.js para public/vendor
+cp .env.example .env # configurações locais (edite depois, se precisar)
+npm run doutor       # confere Node, OpenSSL, .env, banco e certificado
 npm run seed         # carga inicial: setores, tipos, status, checklist modelo, usuários, parâmetros
 npm start            # http://localhost:3000
 ```
@@ -43,6 +50,35 @@ Zerar tudo (banco + uploads):
 ```bash
 npm run reset && npm run seed
 ```
+
+### Comandos do dia a dia
+
+| O que fazer | Comando |
+|---|---|
+| Conferir o ambiente | `npm run doutor` |
+| Subir a plataforma | `npm start` |
+| Subir recarregando a cada alteração | `npm run dev` |
+| Rodar com outra porta, só nesta vez | `PORT=8080 npm start` |
+| Rodar em modo produção, só nesta vez | `NODE_ENV=production npm start` |
+| Gerar autoridade + certificado TLS | `npm run certificado -- --nomes jsgriloprocessos` |
+| Gerar chaves de Web Push | `npm run vapid` |
+| Gerar um segredo de sessão | `openssl rand -hex 32` |
+
+### Detalhes do Git Bash no Windows
+
+Nada no projeto depende do terminal, mas quatro coisas mudam na hora de digitar:
+
+- **Variável só para um comando** vai na frente, sem `set`:
+  `NODE_ENV=production npm start` (no Prompt de Comando seria `set NODE_ENV=production && npm start`).
+- **Copiar arquivo** é `cp`, não `copy`: `cp .env.example .env`.
+- **Caminhos no `.env`**: prefira os relativos que já estão no exemplo (`./data/certificados/certificado.pem`).
+  Se precisar de um caminho absoluto, não cole o que o `pwd` mostra (`/c/Users/...`) — o Node no Windows não
+  entende esse formato. Use `pwd -W`, que devolve `C:/Users/...`.
+- **`openssl` só existe no Git Bash.** Se `npm run certificado` reclamar que não encontrou o OpenSSL, você
+  está no Prompt de Comando ou no PowerShell; abra o Git Bash e repita.
+
+Se algum comando interativo travar sem mostrar nada (raro), rode com `winpty` na frente:
+`winpty npm run certificado`.
 
 Configurações de ambiente ficam em `.env` (veja `.env.example`).
 
@@ -133,7 +169,7 @@ src/
   routes/                camada HTTP
   views/                 telas EJS
   public/                CSS, JS (notificacoes.js), sw.js (Service Worker), Chart.js e fontes
-scripts/                 seed, reset, assets, autoridade/certificado TLS, chaves VAPID
+scripts/                 seed, reset, assets, certificado TLS, chaves VAPID, doutor
 tests/                   regras de negócio, segurança, HTTPS, notificações e backup (node:test)
 ```
 
