@@ -300,4 +300,19 @@ CREATE TABLE IF NOT EXISTS avisos_lidos (
   PRIMARY KEY (aviso_id, usuario_id)
 );
 
+-- Inscrições de push do navegador (Web Push). Cada navegador/aparelho de um
+-- usuário gera uma inscrição própria, identificada pelo endpoint.
+CREATE TABLE IF NOT EXISTS push_inscricoes (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios (id) ON DELETE CASCADE,
+  endpoint   TEXT    NOT NULL UNIQUE,
+  p256dh     TEXT    NOT NULL,
+  auth       TEXT    NOT NULL,
+  navegador  TEXT,
+  criado_em  TEXT    NOT NULL DEFAULT (datetime('now')),
+  usado_em   TEXT,
+  falhas     INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_push_usuario ON push_inscricoes (usuario_id);
+
 -- Sessões do express-session ficam na tabela `sessoes` (src/lib/session-store.js).

@@ -1,23 +1,82 @@
-/* Notificações em tempo real.
+/* Notificações da plataforma — ponto único, válido em todas as telas.
 
-   Mantém uma conexão aberta com /eventos (Server-Sent Events) e, a cada aviso,
-   mostra um cartão no canto inferior direito — o mesmo formato de uma
-   notificação de desktop: título, texto, tempo e um "×" para dispensar.
+   Este arquivo é carregado no rodapé de toda página autenticada, então o
+   listener existe em qualquer rota; nada aqui depende da tela aberta.
 
-   O EventSource reconecta sozinho quando a rede cai ou o servidor reinicia;
-   ao reconectar, o servidor manda o total de não lidos e o contador do menu
-   volta a bater. */
+   Três caminhos de entrega, do mais forte para o mais fraco:
+
+     1. Web Push + Service Worker — chega mesmo com a plataforma fechada.
+        Exige permissão do navegador e chave VAPID no servidor.
+     2. Service Worker acionado pela aba — a aba recebe o aviso pelo canal SSE
+        e pede ao Service Worker que mostre a notificação do sistema. É o que
+        funciona no Android, onde `new Notification()` na página é proibido.
+     3. Cartão dentro da página — sempre acontece, com ou sem permissão.
+
+   Nenhum aviso se perde no caminho: ao (re)conectar, a tela informa o último
+   aviso que viu e o servidor repõe o que passou nesse intervalo. */
 (function () {
   'use strict';
 
-  if (!('EventSource' in window)) return;
-
   var TEMPO_VISIVEL = 12000; // ms que o cartão fica na tela
   var MAXIMO_NA_TELA = 4;
-  var reduzirMovimento = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var DIAS_PARA_PERGUNTAR_DE_NOVO = 7;
 
+  var CHAVES = {
+    ultimoId: 'jsgrilo.avisos.ultimoId',
+    convitAdiado: 'jsgrilo.avisos.conviteAdiadoEm',
+    bloqueioOculto: 'jsgrilo.avisos.bloqueioOculto',
+  };
+
+  var reduzirMovimento = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var depuracao = document.body && document.body.dataset.avisosDebug === '1';
+
+  var registroSw = null;
   var pilha = null;
   var abertas = [];
+
+  /* ------------------------------------------------------------------ apoio */
+
+  function log(etapa, detalhe) {
+    if (!depuracao) return;
+    // eslint-disable-next-line no-console
+    console.info('[avisos] ' + etapa, detalhe === undefined ? '' : detalhe);
+  }
+
+  function guardar(chave, valor) {
+    try {
+      window.localStorage.setItem(chave, String(valor));
+    } catch (_) {
+      /* navegação privativa: seguimos sem memória */
+    }
+  }
+
+  function ler(chave) {
+    try {
+      return window.localStorage.getItem(chave);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function token() {
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.content : '';
+  }
+
+  function suportaNotificacao() {
+    return 'Notification' in window;
+  }
+
+  /** Service Worker e Notification exigem contexto seguro (HTTPS ou localhost). */
+  function contextoSeguro() {
+    return window.isSecureContext !== false;
+  }
+
+  function permissao() {
+    return suportaNotificacao() ? Notification.permission : 'indisponivel';
+  }
+
+  /* ------------------------------------------------------- cartão na página */
 
   function areaDeNotificacoes() {
     if (pilha) return pilha;
@@ -29,15 +88,9 @@
     return pilha;
   }
 
-  function token() {
-    var meta = document.querySelector('meta[name="csrf-token"]');
-    return meta ? meta.content : '';
-  }
-
-  /** Atualiza o número ao lado de "Avisos" no menu. */
   function atualizarContador(total) {
     var alvo = document.querySelector('[data-contador-avisos]');
-    if (!alvo) return;
+    if (!alvo || typeof total !== 'number') return;
     if (total > 0) {
       alvo.textContent = total;
       alvo.hidden = false;
@@ -86,7 +139,7 @@
       });
   }
 
-  function montar(aviso) {
+  function montarCartao(aviso) {
     var cartao = document.createElement('div');
     cartao.className = 'notificacao notificacao-' + (aviso.cor || 'neutro');
 
@@ -129,7 +182,8 @@
     etiqueta.textContent = aviso.rotulo || 'Aviso';
     rodape.appendChild(etiqueta);
     var origem = document.createElement('span');
-    origem.textContent = (aviso.processoCodigo ? aviso.processoCodigo + ' · ' : '') + 'agora';
+    origem.textContent =
+      (aviso.processoCodigo ? aviso.processoCodigo + ' · ' : '') + (aviso.atrasado ? 'enquanto você navegava' : 'agora');
     rodape.appendChild(origem);
     cartao.appendChild(rodape);
 
@@ -156,69 +210,356 @@
     return cartao;
   }
 
-  function mostrar(aviso) {
-    var area = areaDeNotificacoes();
-    var cartao = montar(aviso);
-    area.appendChild(cartao);
-    abertas.push(cartao);
-    while (abertas.length > MAXIMO_NA_TELA) fechar(abertas[0]);
-    espelharNoSistema(aviso);
-  }
+  /* -------------------------------------------------- notificação do sistema */
 
   /**
-   * Com permissão concedida, repete o aviso como notificação do próprio
-   * navegador — útil quando a plataforma está em outra aba.
+   * Mostra a notificação do sistema operacional. Sempre pelo Service Worker
+   * quando ele existe: no Android o construtor `new Notification()` lança
+   * "Illegal constructor", e era esse o motivo de a notificação nunca aparecer
+   * em parte dos aparelhos.
    */
-  function espelharNoSistema(aviso) {
-    if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    if (!document.hidden) return;
+  function mostrarNoSistema(aviso) {
+    if (permissao() !== 'granted') {
+      log('sistema ignorado (sem permissão)', permissao());
+      return false;
+    }
+    // Com a plataforma na frente do usuário, o cartão já basta.
+    if (!document.hidden) {
+      log('sistema ignorado (aba visível)', aviso.id);
+      return false;
+    }
+
+    if (registroSw && registroSw.showNotification) {
+      registroSw
+        .showNotification(aviso.titulo, {
+          body: aviso.mensagem || '',
+          icon: '/static/img/notificacao.svg',
+          badge: '/static/img/notificacao.svg',
+          tag: 'jsgrilo-aviso-' + aviso.id,
+          data: { url: aviso.url || '/avisos', id: aviso.id },
+        })
+        .then(function () {
+          log('notificação do sistema exibida', aviso.id);
+        })
+        .catch(function (erro) {
+          log('falha ao exibir pelo Service Worker', erro && erro.message);
+        });
+      return true;
+    }
+
     try {
       var nativa = new Notification(aviso.titulo, {
-        body: aviso.mensagem,
-        tag: 'jsgrilo-aviso-' + aviso.id,
-        badge: '/static/img/notificacao.svg',
+        body: aviso.mensagem || '',
         icon: '/static/img/notificacao.svg',
+        tag: 'jsgrilo-aviso-' + aviso.id,
       });
       nativa.onclick = function () {
         window.focus();
         if (aviso.url) window.location.href = aviso.url;
         nativa.close();
       };
-    } catch (_) {
-      /* alguns navegadores exigem service worker; o cartão na tela já cobre */
+      log('notificação do sistema exibida (sem Service Worker)', aviso.id);
+      return true;
+    } catch (erro) {
+      log('navegador recusou new Notification()', erro && erro.message);
+      return false;
     }
   }
 
-  /** Botão opcional "Ativar avisos do navegador". */
-  function ligarPermissao() {
-    var botao = document.querySelector('[data-permitir-notificacoes]');
-    if (!botao) return;
-    if (!('Notification' in window)) {
-      botao.hidden = true;
+  /** Entrada única: todo aviso passa por aqui, venha de onde vier. */
+  function mostrar(aviso) {
+    if (!aviso || !aviso.id) return;
+    log('aviso recebido', aviso.id + ' · ' + aviso.tipo);
+
+    var visto = Number(ler(CHAVES.ultimoId) || 0);
+    if (aviso.id > visto) guardar(CHAVES.ultimoId, aviso.id);
+
+    var area = areaDeNotificacoes();
+    var cartao = montarCartao(aviso);
+    area.appendChild(cartao);
+    abertas.push(cartao);
+    while (abertas.length > MAXIMO_NA_TELA) fechar(abertas[0]);
+    log('cartão exibido na tela', aviso.id);
+
+    mostrarNoSistema(aviso);
+  }
+
+  /* ------------------------------------------------------------- permissão */
+
+  function navegadorProvavel() {
+    var ua = navigator.userAgent;
+    var ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (ios) return 'ios';
+    if (/Edg\//.test(ua)) return 'edge';
+    if (/OPR\//.test(ua)) return 'opera';
+    if (/Firefox\//.test(ua)) return 'firefox';
+    if (/Chrome\//.test(ua)) return /Android/.test(ua) ? 'android' : 'chrome';
+    if (/Safari\//.test(ua)) return 'safari';
+    return 'outro';
+  }
+
+  var INSTRUCOES = {
+    chrome:
+      'No Chrome: clique no cadeado (ou no ícone de ajustes) à esquerda do endereço → Notificações → ' +
+      'Permitir. Depois recarregue esta página.',
+    edge:
+      'No Edge: clique no cadeado à esquerda do endereço → Permissões para este site → Notificações → ' +
+      'Permitir. Depois recarregue esta página.',
+    firefox:
+      'No Firefox: clique no cadeado à esquerda do endereço → Conexão/Permissões → remova o bloqueio de ' +
+      '"Enviar notificações". Depois recarregue esta página.',
+    opera:
+      'No Opera: clique no cadeado à esquerda do endereço → Configurações do site → Notificações → ' +
+      'Permitir. Depois recarregue esta página.',
+    safari:
+      'No Safari: menu Safari → Ajustes → Sites → Notificações → localize este site e escolha Permitir.',
+    android:
+      'No Chrome do Android: toque nos três pontinhos → Informações do site (ou o cadeado) → Permissões → ' +
+      'Notificações → Permitir.',
+    ios:
+      'No iPhone/iPad: adicione a plataforma à Tela de Início (botão Compartilhar → "Adicionar à Tela de ' +
+      'Início") e abra por lá. O iOS só entrega notificações web assim, a partir do iOS 16.4.',
+    outro:
+      'Abra as configurações de site do seu navegador, encontre este endereço e libere as notificações.',
+  };
+
+  function removerFaixa() {
+    var atual = document.querySelector('[data-faixa-notificacoes]');
+    if (atual) atual.remove();
+  }
+
+  /**
+   * Faixa discreta no topo do conteúdo. `tipo` decide o texto e os botões:
+   * 'convite' (permissão nunca pedida) ou 'bloqueado' (usuário negou).
+   */
+  function mostrarFaixa(tipo) {
+    removerFaixa();
+    var conteudo = document.querySelector('.conteudo');
+    if (!conteudo) return;
+
+    var faixa = document.createElement('div');
+    faixa.className = 'aviso ' + (tipo === 'bloqueado' ? 'aviso-alerta' : 'aviso-info') + ' faixa-notificacoes';
+    faixa.setAttribute('data-faixa-notificacoes', tipo);
+
+    var texto = document.createElement('div');
+    texto.className = 'faixa-notificacoes-texto';
+
+    if (tipo === 'convite') {
+      texto.innerHTML =
+        '<strong>Ative as notificações.</strong> Com a permissão do navegador, os avisos de processo ' +
+        'aparecem mesmo quando a plataforma está em outra aba ou minimizada.';
+    } else {
+      texto.innerHTML =
+        '<strong>As notificações estão bloqueadas neste navegador.</strong> Os avisos continuam ' +
+        'aparecendo dentro da plataforma e no mural, mas não chegam quando ela está em segundo plano. ' +
+        '<span class="faixa-notificacoes-passos">' +
+        INSTRUCOES[navegadorProvavel()] +
+        '</span>';
+    }
+    faixa.appendChild(texto);
+
+    var acoes = document.createElement('div');
+    acoes.className = 'faixa-notificacoes-acoes';
+
+    if (tipo === 'convite') {
+      var ativar = document.createElement('button');
+      ativar.type = 'button';
+      ativar.className = 'botao botao-pequeno';
+      ativar.textContent = 'Ativar notificações';
+      // A permissão só é pedida a partir deste clique — nunca no carregamento.
+      ativar.addEventListener('click', function () {
+        pedirPermissao().then(function (estado) {
+          if (estado === 'granted') removerFaixa();
+          else if (estado === 'denied') mostrarFaixa('bloqueado');
+        });
+      });
+      acoes.appendChild(ativar);
+    }
+
+    var dispensar = document.createElement('button');
+    dispensar.type = 'button';
+    dispensar.className = 'botao botao-secundario botao-pequeno';
+    dispensar.textContent = tipo === 'convite' ? 'Agora não' : 'Não mostrar de novo';
+    dispensar.addEventListener('click', function () {
+      if (tipo === 'convite') guardar(CHAVES.convitAdiado, Date.now());
+      else guardar(CHAVES.bloqueioOculto, '1');
+      removerFaixa();
+    });
+    acoes.appendChild(dispensar);
+
+    faixa.appendChild(acoes);
+    conteudo.insertBefore(faixa, conteudo.children[1] || null);
+    log('faixa de permissão exibida', tipo);
+  }
+
+  function conviteAdiadoRecentemente() {
+    var quando = Number(ler(CHAVES.convitAdiado) || 0);
+    if (!quando) return false;
+    return Date.now() - quando < DIAS_PARA_PERGUNTAR_DE_NOVO * 24 * 3600 * 1000;
+  }
+
+  /** Pede a permissão. Sempre chamado a partir de um clique do usuário. */
+  function pedirPermissao() {
+    if (!suportaNotificacao()) return Promise.resolve('indisponivel');
+    return Notification.requestPermission()
+      .then(function (estado) {
+        log('permissão respondida', estado);
+        atualizarBotoes();
+        if (estado === 'granted') inscreverNoPush();
+        return estado;
+      })
+      .catch(function () {
+        return permissao();
+      });
+  }
+
+  /** Estado atual nos botões "Ativar avisos do navegador" (tela de Avisos). */
+  function atualizarBotoes() {
+    var botoes = document.querySelectorAll('[data-permitir-notificacoes]');
+    for (var i = 0; i < botoes.length; i += 1) {
+      var botao = botoes[i];
+      var estado = permissao();
+      if (estado === 'indisponivel' || !contextoSeguro()) {
+        botao.textContent = 'Notificações indisponíveis neste navegador';
+        botao.disabled = true;
+      } else if (estado === 'granted') {
+        botao.textContent = 'Avisos do navegador ativados';
+        botao.disabled = true;
+      } else if (estado === 'denied') {
+        botao.textContent = 'Avisos bloqueados — ver como liberar';
+        botao.disabled = false;
+      } else {
+        botao.textContent = 'Ativar avisos do navegador';
+        botao.disabled = false;
+      }
+    }
+  }
+
+  function ligarBotoes() {
+    var botoes = document.querySelectorAll('[data-permitir-notificacoes]');
+    for (var i = 0; i < botoes.length; i += 1) {
+      botoes[i].addEventListener('click', function () {
+        if (permissao() === 'denied') {
+          guardar(CHAVES.bloqueioOculto, '');
+          mostrarFaixa('bloqueado');
+          return;
+        }
+        pedirPermissao();
+      });
+    }
+    atualizarBotoes();
+  }
+
+  /** Decide o que fazer com o estado da permissão, em qualquer tela. */
+  function avaliarPermissao() {
+    var estado = permissao();
+    log('permissão atual', estado + (contextoSeguro() ? '' : ' (contexto inseguro)'));
+
+    if (!suportaNotificacao() || !contextoSeguro()) return;
+    if (estado === 'granted') {
+      inscreverNoPush();
       return;
     }
-    function pintar() {
-      var estado = Notification.permission;
-      botao.textContent =
-        estado === 'granted'
-          ? 'Avisos do navegador ativados'
-          : estado === 'denied'
-            ? 'Avisos bloqueados no navegador'
-            : 'Ativar avisos do navegador';
-      botao.disabled = estado !== 'default';
+    if (estado === 'denied') {
+      if (ler(CHAVES.bloqueioOculto) !== '1') mostrarFaixa('bloqueado');
+      return;
     }
-    botao.addEventListener('click', function () {
-      Notification.requestPermission().then(pintar);
-    });
-    pintar();
+    // 'default': convida, sem pedir nada de imediato.
+    if (!conviteAdiadoRecentemente()) mostrarFaixa('convite');
   }
 
+  /* ----------------------------------------------------- Service Worker/push */
+
+  function registrarServiceWorker() {
+    if (!('serviceWorker' in navigator) || !contextoSeguro()) {
+      log('Service Worker indisponível', contextoSeguro() ? 'sem suporte' : 'contexto inseguro (use HTTPS)');
+      return Promise.resolve(null);
+    }
+    return navigator.serviceWorker
+      .register('/sw.js', { scope: '/' })
+      .then(function (registro) {
+        log('Service Worker registrado', registro.scope);
+        return navigator.serviceWorker.ready;
+      })
+      .then(function (pronto) {
+        registroSw = pronto;
+        return pronto;
+      })
+      .catch(function (erro) {
+        log('falha ao registrar o Service Worker', erro && erro.message);
+        return null;
+      });
+  }
+
+  function base64ParaUint8(base64) {
+    var normalizado = (base64 + '==='.slice((base64.length + 3) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+    var bruto = window.atob(normalizado);
+    var saida = new Uint8Array(bruto.length);
+    for (var i = 0; i < bruto.length; i += 1) saida[i] = bruto.charCodeAt(i);
+    return saida;
+  }
+
+  /** Inscreve o navegador no Web Push (só com permissão concedida). */
+  function inscreverNoPush() {
+    if (!registroSw || !registroSw.pushManager || permissao() !== 'granted') return;
+
+    fetch('/push/chave', { credentials: 'same-origin', headers: { accept: 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (dados) {
+        if (!dados || !dados.habilitado || !dados.chavePublica) {
+          log('push não configurado no servidor', 'seguindo só com o canal da aba');
+          return null;
+        }
+        return registroSw.pushManager.getSubscription().then(function (atual) {
+          if (atual) return atual;
+          return registroSw.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: base64ParaUint8(dados.chavePublica),
+          });
+        });
+      })
+      .then(function (inscricao) {
+        if (!inscricao) return null;
+        return fetch('/push/inscrever', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'content-type': 'application/json',
+            accept: 'application/json',
+            'x-csrf-token': token(),
+          },
+          body: JSON.stringify({ inscricao: inscricao.toJSON ? inscricao.toJSON() : inscricao }),
+        }).then(function (r) {
+          log('inscrição de push enviada ao servidor', r.status);
+        });
+      })
+      .catch(function (erro) {
+        log('falha ao inscrever no push', erro && erro.message);
+      });
+  }
+
+  /* ------------------------------------------------------------ canal SSE */
+
   function conectar() {
-    var fonte = new EventSource('/eventos', { withCredentials: true });
+    if (!('EventSource' in window)) {
+      log('EventSource indisponível', 'sem tempo real neste navegador');
+      return;
+    }
+    // `desde` cobre o intervalo entre uma tela e outra: o servidor repõe o que
+    // aconteceu enquanto a página anterior estava sendo trocada.
+    var desde = Number(ler(CHAVES.ultimoId) || 0);
+    var fonte = new EventSource('/eventos?desde=' + desde, { withCredentials: true });
 
     fonte.addEventListener('conectado', function (evento) {
       try {
-        atualizarContador(JSON.parse(evento.data).naoLidos);
+        var dados = JSON.parse(evento.data);
+        atualizarContador(dados.naoLidos);
+        // Primeira visita neste navegador: marca o ponto de partida para não
+        // despejar de uma vez tudo o que já estava acumulado no mural.
+        if (ler(CHAVES.ultimoId) === null && typeof dados.ultimoAviso === 'number') {
+          guardar(CHAVES.ultimoId, dados.ultimoAviso);
+        }
+        log('canal conectado', dados.usuario + ' · ' + dados.naoLidos + ' não lido(s)');
       } catch (_) {
         /* quadro malformado: ignora */
       }
@@ -228,20 +569,40 @@
       var aviso;
       try {
         aviso = JSON.parse(evento.data);
-      } catch (_) {
+      } catch (erro) {
+        log('aviso malformado', erro && erro.message);
         return;
       }
       atualizarContador(aviso.naoLidos);
       mostrar(aviso);
     });
 
-    // O próprio EventSource reabre a conexão; nada a fazer no erro além de
-    // deixar o navegador tentar de novo (retry vem do servidor).
-    fonte.addEventListener('error', function () {});
+    fonte.addEventListener('open', function () {
+      log('canal aberto', '/eventos');
+    });
+
+    // O EventSource reabre sozinho (o servidor manda o intervalo em `retry`).
+    fonte.addEventListener('error', function () {
+      log('canal caiu', 'reconectando — nada se perde, o servidor repõe');
+    });
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
-    ligarPermissao();
+  /* --------------------------------------------------------------- partida */
+
+  function iniciar() {
+    depuracao = document.body && document.body.dataset.avisosDebug === '1';
+    log('iniciando', window.location.pathname);
+
+    ligarBotoes();
+    registrarServiceWorker().then(function () {
+      avaliarPermissao();
+    });
     conectar();
-  });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', iniciar);
+  } else {
+    iniciar();
+  }
 })();

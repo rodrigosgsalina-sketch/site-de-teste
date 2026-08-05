@@ -13,7 +13,8 @@
     "reset": "node scripts/reset.js",
     "postinstall": "node scripts/copy-vendor.js",
     "test": "node --no-warnings=ExperimentalWarning --test tests/*.test.js",
-    "certificado": "node scripts/gerar-certificado.js"
+    "certificado": "node scripts/gerar-certificado.js",
+    "vapid": "node scripts/gerar-vapid.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

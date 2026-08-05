@@ -425,6 +425,18 @@ table.tabela td.mono { white-space: nowrap; }
 .comunicado-vermelho .comunicado-texto { color: #8d211a; }
 .comunicado-azul .comunicado-texto { color: var(--azul-700); }
 .comunicado-amarelo .comunicado-texto { color: #77500b; }
+/* Faixa de permissão de notificações: aparece em qualquer tela, discreta,
+   e some quando o usuário resolve (ou dispensa). */
+.faixa-notificacoes {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap;
+}
+.faixa-notificacoes-texto { flex: 1 1 320px; min-width: 0; }
+.faixa-notificacoes-passos {
+  display: block; margin-top: .35rem; font-size: .82rem; opacity: .9;
+}
+.faixa-notificacoes-acoes { display: flex; gap: .45rem; align-items: center; flex-shrink: 0; }
+
 /* ------------------------------------------------- notificações em tempo real */
 /* Cartões que surgem no canto inferior direito quando um processo é aberto,
    impedido, concluído (etc.), no formato de uma notificação de desktop. */

@@ -19,6 +19,8 @@
 
 const db = require('../db');
 const eventos = require('../lib/eventos');
+const registro = require('../lib/registro');
+const push = require('./push');
 
 const TIPOS = {
   CONCLUIDO: 'concluido',
@@ -144,11 +146,9 @@ function publicar({ tipo, titulo, mensagem, processoId, usuario, destinatarios =
   return avisoId;
 }
 
-/** Empurra o aviso recém-gravado para as abas abertas. */
-function entregarEmTempoReal(avisoId, escopo, destinatarios) {
-  const aviso = obter(avisoId);
-  if (!aviso) return 0;
-  const carga = {
+/** Dados que viajam para a tela (SSE) e para o Service Worker (push). */
+function cargaDoAviso(aviso) {
+  return {
     id: aviso.id,
     tipo: aviso.tipo,
     rotulo: rotulo(aviso.tipo),
@@ -161,20 +161,93 @@ function entregarEmTempoReal(avisoId, escopo, destinatarios) {
     autor: aviso.usuario_nome || 'Sistema',
     criadoEm: aviso.criado_em,
   };
+}
 
-  // Quem já está com a tela aberta recebe também o novo total de não lidos.
-  const alvos = escopo === 'todos' ? null : [...new Set(destinatarios)];
-  const lista = alvos === null ? eventos.usuariosConectados() : alvos;
+/** Todos os usuários ativos — alvo dos avisos de escopo 'todos'. */
+function todosOsUsuarios() {
+  return db
+    .get()
+    .prepare("SELECT id FROM usuarios WHERE status = 'Ativo'")
+    .all()
+    .map((linha) => linha.id);
+}
+
+/**
+ * Empurra o aviso recém-gravado: para as abas abertas (SSE) e para os
+ * navegadores inscritos em push — estes recebem mesmo com a plataforma
+ * fechada. Os dois caminhos são independentes; nenhum depende da tela em que
+ * o usuário está.
+ */
+function entregarEmTempoReal(avisoId, escopo, destinatarios) {
+  const aviso = obter(avisoId);
+  if (!aviso) return 0;
+  const carga = cargaDoAviso(aviso);
+
+  // 'todos' vale para a plataforma inteira, esteja quem estiver conectado.
+  const alvos = escopo === 'todos' ? todosOsUsuarios() : [...new Set(destinatarios)];
+
+  registro.notificacao('publicado', {
+    aviso: aviso.id,
+    tipo: aviso.tipo,
+    escopo,
+    destinatarios: alvos.length,
+    processo: aviso.processo_codigo,
+  });
+
   let entregues = 0;
-  for (const usuarioId of lista) {
-    entregues += eventos.enviarPara(
+  let semCanal = 0;
+  for (const usuarioId of alvos) {
+    const enviados = eventos.enviarPara(
       usuarioId,
       'aviso',
       { ...carga, naoLidos: contarNaoLidos(usuarioId) },
       aviso.id
     );
+    entregues += enviados;
+    if (!enviados) semCanal += 1;
   }
+
+  registro.notificacao('entregue por SSE', {
+    aviso: aviso.id,
+    canais: entregues,
+    usuariosSemAbaAberta: semCanal,
+  });
+
+  // Push é assíncrono e não pode segurar (nem derrubar) quem publicou o aviso.
+  if (push.habilitado()) {
+    push
+      .enviarPara(alvos, carga)
+      .catch((err) => registro.notificacao('push falhou', { aviso: aviso.id, motivo: err.message }));
+  }
+
   return entregues;
+}
+
+/**
+ * Avisos que o usuário deveria ter recebido e não recebeu — usados quando a
+ * tela (re)conecta: troca de página, rede que caiu, servidor reiniciado.
+ * É o que garante que nenhum evento se perca entre uma tela e outra.
+ */
+function pendentesDesde(usuarioId, ultimoId = 0, limite = 10) {
+  return db
+    .get()
+    .prepare(
+      `${SELECT}
+        WHERE ${CONDICAO_DESTINO} AND ${CONDICAO_NAO_LIDO} AND a.id > @desde
+        ORDER BY a.id
+        LIMIT @limite`
+    )
+    .all({ usuario: usuarioId, desde: Number(ultimoId) || 0, limite })
+    .map(cargaDoAviso);
+}
+
+/** Maior id de aviso que este usuário pode ver — marco inicial da tela. */
+function ultimoIdVisivel(usuarioId) {
+  const linha = db
+    .get()
+    .prepare(`SELECT MAX(a.id) AS ultimo FROM avisos a WHERE ${CONDICAO_DESTINO}`)
+    .get({ usuario: usuarioId });
+  return (linha && linha.ultimo) || 0;
 }
 
 /* ------------------------------------------------- avisos de cada evento */
@@ -365,6 +438,9 @@ function marcarTodosLidos(usuarioId) {
 
 module.exports = {
   TIPOS,
+  cargaDoAviso,
+  pendentesDesde,
+  ultimoIdVisivel,
   ROTULOS,
   CORES,
   rotulo,

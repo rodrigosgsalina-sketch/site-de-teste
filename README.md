@@ -109,6 +109,8 @@ src/
     seguranca.js         HTTPS obrigatório, cabeçalhos/CSP, freio de força bruta
     csrf.js              token por sessão em todo formulário
     eventos.js           canal SSE dos avisos em tempo real
+    webpush.js           Web Push (VAPID + aes128gcm) com o crypto do Node
+    registro.js          log de diagnóstico das notificações
     session-store.js     sessões no mesmo SQLite da aplicação
     datas.js, pdf.js     utilidades de data e geração de PDF
   domain/                regras de negócio (testáveis, sem Express)
@@ -123,13 +125,14 @@ src/
     dashboard.js         indicadores gerenciais
     usuarios.js          autenticação por ID de usuário e CRUD
     avisos.js            avisos em tempo real (quem recebe cada evento) e mural
+    push.js              inscrições de push por navegador/aparelho
     ordem-setores.js     ordem de atendimento dos setores por tipo de processo
     clientes.js          cadastro das empresas atendidas
     importacao-clientes.js  leitura do relatório de empresas do Domínio Sistemas
     backup.js            backup completo em JSON e restauração transacional
   routes/                camada HTTP
   views/                 telas EJS
-  public/                CSS, JS (inclui notificacoes.js), Chart.js e as fontes (fonts/)
+  public/                CSS, JS (notificacoes.js), sw.js (Service Worker), Chart.js e fontes
 scripts/                 seed, reset, cópia de assets, certificado TLS de teste
 tests/                   regras de negócio, segurança, notificações e backup (node:test)
 ```
@@ -151,8 +154,9 @@ tests/                   regras de negócio, segurança, notificações e backup
 | `PARAMETROS` | tabela `parametros` · **Administração → Parâmetros** |
 
 Além das abas da planilha, a plataforma mantém as tabelas `clientes` (empresas atendidas),
-`avisos`, `avisos_destinos` e `avisos_lidos` (avisos em tempo real e mural), `ordem_setores_tipo`
-(ordem de atendimento por tipo), `documentos`, `notificacoes` (outbox de e-mail) e `sessoes`.
+`avisos`, `avisos_destinos` e `avisos_lidos` (avisos em tempo real e mural), `push_inscricoes`
+(navegadores inscritos para receber notificação), `ordem_setores_tipo` (ordem de atendimento por
+tipo), `documentos`, `notificacoes` (outbox de e-mail) e `sessoes`.
 
 **Setores auxiliares.** O `CHECKLIST_MODELO` referencia cinco “setores” que não estão na aba
 `SETORES`: Sócios, Financeiro, Cliente, TI e Qualidade. Eles foram criados como setores
@@ -278,40 +282,100 @@ Todo movimento de processo publica um aviso que **aparece na hora**, sem recarre
 cartão no canto inferior direito, no formato de uma notificação de desktop — título, texto, o
 número do processo e um “×” para dispensar. Clicar no título abre o processo.
 
-| Evento | Quem recebe |
-|---|---|
-| Processo **aberto** | os usuários dos setores que estão no checklist, mais quem abriu e quem conduz |
-| Chegou a **vez do setor** | os usuários daquele setor |
-| Processo **cancelado** / **reaberto** | os setores do processo |
-| **Prazo** vencido ou a vencer | os setores do processo |
-| Processo **concluído** | **todos os usuários** da plataforma |
-| Processo **impedido** | **todos os usuários** da plataforma |
+### Quais ações geram aviso
 
-Conclusão e impedimento continuam valendo para o escritório inteiro — são os dois fatos que
-interessam a todo mundo. Os demais vão só para quem participa daquele processo, para ninguém
-receber aviso de trabalho que não é seu. O **Administrativo** também é avisado pelos setores
-auxiliares (Sócios, Cliente, TI, Qualidade), que é ele quem responde.
+| Evento | Onde nasce | Quem recebe |
+|---|---|---|
+| Processo **aberto** | `POST /processos` | usuários dos setores no checklist + quem abriu + quem conduz |
+| Item de checklist com **impedimento** | resposta do item | **todos os usuários** |
+| Chegou a **vez do setor** | recálculo de status após uma resposta | usuários daquele setor |
+| Processo **concluído** | botão Concluir | **todos os usuários** |
+| Processo **cancelado** | ação de gestor | setores do processo |
+| Processo **reaberto** | ação de gestor | setores do processo |
+| **Prazo** vencido ou a vencer | varredura automática de prazos | setores do processo |
 
-Como funciona por dentro: cada aba mantém uma conexão aberta em `GET /eventos`
-(**Server-Sent Events**) e o servidor empurra o aviso assim que ele acontece. Escolhemos SSE em
-vez de WebSocket porque o fluxo é de mão única (servidor → tela), viaja no mesmo HTTPS da
-aplicação, reconecta sozinho quando a rede oscila e não traz dependência nova. Ao reconectar, o
-servidor manda o total de não lidos e o contador do menu volta a bater sozinho.
+Conclusão e impedimento valem para o escritório inteiro — são os dois fatos que interessam a todo
+mundo. Os demais vão só para quem participa daquele processo, para ninguém receber aviso de
+trabalho que não é seu. O **Administrativo** também é avisado pelos setores auxiliares (Sócios,
+Cliente, TI, Qualidade), que é ele quem responde.
 
-Detalhes de uso:
+### Três caminhos de entrega
 
-- o cartão some sozinho em 12 segundos; passar o mouse por cima segura;
-- até 4 cartões ficam empilhados, o mais novo por cima;
-- fechar no “×” dispensa o aviso também no servidor — ele não volta na próxima página;
-- a faixa no topo das telas mostra só os avisos de escritório inteiro (concluído/impedido), para
-  não empilhar cartão sobre cartão; os dirigidos ao setor ficam no cartão e no mural;
-- **Avisos** guarda o histórico completo, com o tipo, o alcance de cada um e o que já foi lido;
-- o botão **“Ativar avisos do navegador”**, no mural, pede a permissão do Chrome/Edge/Firefox: com
-  ela, quando a plataforma estiver em outra aba, o aviso também aparece como notificação do
-  sistema operacional;
-- quem dispensa um aviso não muda a tela de ninguém;
-- a entrega em tempo real vive na memória do processo Node (a plataforma roda em um processo só).
-  `src/lib/eventos.js` é o ponto onde entraria um repasse entre processos, se um dia forem vários.
+A entrega é global por construção: o código vive em `src/public/js/notificacoes.js`, carregado no
+rodapé de **toda** página autenticada, e no Service Worker — nada depende da tela aberta.
+
+1. **Web Push + Service Worker** — chega com a plataforma **fechada**. Exige permissão do
+   navegador e o par de chaves VAPID no servidor (veja abaixo).
+2. **Service Worker acionado pela aba** — a aba recebe o aviso pelo canal SSE e pede ao Service
+   Worker que mostre a notificação do sistema. É o caminho que funciona no **Android**, onde
+   `new Notification()` dentro da página é proibido pelo navegador.
+3. **Cartão dentro da página** — sempre acontece, com ou sem permissão concedida.
+
+O canal em tempo real é **Server-Sent Events** (`GET /eventos`): mão única (servidor → tela), no
+mesmo HTTPS da aplicação, reconectando sozinho. **Nenhum aviso se perde no caminho**: a tela guarda
+o último aviso que viu e informa ao (re)conectar (`?desde=` e o cabeçalho `Last-Event-ID`); o
+servidor repõe o que passou nesse intervalo — a troca de página, a rede que oscilou, o servidor que
+reiniciou. O cartão reposto vem marcado como “enquanto você navegava”.
+
+### Permissão do navegador
+
+A permissão **nunca** é pedida no carregamento da página — isso faz o usuário negar por reflexo, e
+navegador nenhum pergunta de novo depois. O fluxo é:
+
+- **`default`** (nunca perguntada): depois do login aparece uma faixa discreta em qualquer tela —
+  *“Ative as notificações”* — com os botões **Ativar notificações** e **Agora não**. A permissão só
+  é solicitada a partir desse clique. “Agora não” silencia a faixa por 7 dias.
+- **`granted`**: a faixa some e o navegador é inscrito no push (quando há VAPID configurado).
+- **`denied`**: a faixa explica que as notificações estão bloqueadas e traz **o passo a passo do
+  navegador em uso** (Chrome, Edge, Firefox, Opera, Safari, Chrome no Android e iOS têm textos
+  próprios), com **Não mostrar de novo**. Mesmo bloqueado, o cartão dentro da plataforma e o mural
+  continuam funcionando.
+
+A escolha fica guardada no navegador (`localStorage`), então a faixa não volta a cada tela.
+
+### Web Push (notificação com o navegador fechado)
+
+Opcional e **desligado por padrão** — sem as chaves, a plataforma não conversa com nenhum serviço
+externo. Para ligar:
+
+```bash
+npm run vapid     # gera o par de chaves e mostra as linhas do .env
+```
+
+```env
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_SUBJECT=mailto:contato@seudominio.com.br
+```
+
+O conteúdo do aviso viaja **cifrado ponta a ponta** (aes128gcm, RFC 8291) com a chave que o próprio
+navegador gerou: o serviço de push (Google/Mozilla/Apple) encaminha, mas não lê o aviso. A
+assinatura VAPID (RFC 8292) e a criptografia são feitas com o `crypto` do próprio Node, em
+`src/lib/webpush.js` — sem dependência nova. Inscrição que o navegador descartou (404/410) é
+apagada sozinha.
+
+Limites que valem conhecer:
+
+- **iOS/iPadOS**: só entrega notificação web se a plataforma for adicionada à Tela de Início
+  (PWA), a partir do iOS 16.4. A faixa de bloqueio já explica isso quando detecta iPhone/iPad.
+- **HTTPS é obrigatório** para Service Worker e notificações (em `http://localhost` o navegador
+  abre exceção, para desenvolvimento).
+- Sem VAPID, tudo continua funcionando **com a plataforma aberta em alguma aba** — o que cobre o
+  uso normal do escritório.
+
+### Diagnóstico
+
+Com `LOG_NOTIFICACOES` ligado (padrão fora de produção), servidor e tela registram cada etapa:
+
+```
+[avisos] 2026-08-05T16:44:11.580Z publicado · aviso=8 tipo=aberto escopo=setores destinatarios=8 processo=PR-2026-0012
+[avisos] 2026-08-05T16:44:11.612Z entregue por SSE · aviso=8 canais=2 usuariosSemAbaAberta=6
+[avisos] 2026-08-05T16:44:12.004Z push enviado · aviso=8 enviados=3 falhas=0 removidos=0
+```
+
+E no console do navegador: `iniciando` → `Service Worker registrado` → `permissão atual` →
+`canal conectado` → `aviso recebido` → `cartão exibido na tela` / `notificação do sistema exibida`
+(ou o motivo de não ter exibido). É por essas linhas que se descobre em qual etapa um aviso parou.
 
 Isso é diferente das notificações por e-mail, que são dirigidas ao setor responsável e ficam
 registradas na tabela `notificacoes`.
@@ -522,6 +586,8 @@ O parâmetro `BACKUP_AUTOMATICO` segue previsto na tela de parâmetros; a rotina
 - WhatsApp, Onvio, Domínio Sistemas e e-CAC — previstos e desligados, conforme combinado.
 - Rotina agendada de backup automático (o backup manual, pela tela de Parâmetros, está pronto).
 - Segundo fator de autenticação e expiração periódica de senha.
+- Envio de push a partir de vários processos Node ao mesmo tempo (hoje a plataforma roda em um
+  processo só; `src/lib/eventos.js` é o ponto de extensão se um dia forem vários).
 
 ---
 

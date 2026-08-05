@@ -69,6 +69,21 @@ const config = {
   loginJanelaMinutos: Number(process.env.LOGIN_JANELA_MINUTOS || 15),
   // Duração da sessão em horas.
   sessaoHoras: Number(process.env.SESSAO_HORAS || 12),
+
+  /* ---------------------------------------------------------- notificações */
+
+  // Linhas de diagnóstico dos avisos no console (evento → destinatários →
+  // entrega). Ligado fora de produção, onde o log não deve conter nome de
+  // cliente.
+  logNotificacoes: bool('LOG_NOTIFICACOES', env !== 'production'),
+
+  // Web Push (notificação com o navegador fechado). Sem o par de chaves a
+  // plataforma não fala com nenhum serviço externo — gere com `npm run vapid`.
+  vapid: {
+    publica: process.env.VAPID_PUBLIC_KEY || '',
+    privada: process.env.VAPID_PRIVATE_KEY || '',
+    contato: process.env.VAPID_SUBJECT || 'mailto:contato@jsgrilo.com.br',
+  },
 };
 
 /** Certificado e chave configurados = a aplicação sobe em HTTPS sozinha. */

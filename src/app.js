@@ -98,6 +98,8 @@ app.use((req, res, next) => {
   res.locals.classeItem = classeItem;
   res.locals.rotuloAviso = avisosDom.rotulo;
   res.locals.corAviso = avisosDom.cor;
+  // Liga os logs de diagnóstico das notificações no console da tela.
+  res.locals.debugAvisos = config.logNotificacoes;
   res.locals.flash = req.session ? req.session.flash : null;
   if (req.session) delete req.session.flash;
 
@@ -121,12 +123,29 @@ app.use((req, res, next) => {
 
 function exigirLogin(req, res, next) {
   if (req.session && req.session.usuario) return next();
-  if (req.accepts('html')) {
+
+  // Chamada feita por JavaScript (inscrição de push, dispensar aviso) recebe
+  // 401 e trata; navegação normal vai para a tela de login.
+  const querJson =
+    req.xhr ||
+    Boolean(req.is('application/json')) ||
+    String(req.headers.accept || '').includes('application/json');
+
+  if (!querJson && req.accepts('html')) {
     req.session.destinoPosLogin = req.originalUrl;
     return res.redirect('/login');
   }
   return res.status(401).json({ erro: 'Não autenticado' });
 }
+
+/* O Service Worker precisa ser servido na raiz para valer em todas as rotas —
+   um arquivo em /static/js/ só teria escopo dentro de /static/js. */
+app.get('/sw.js', (req, res) => {
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.type('application/javascript; charset=utf-8');
+  res.sendFile(path.join(__dirname, 'public', 'sw.js'));
+});
 
 app.use('/', require('./routes/auth'));
 app.use('/', exigirLogin, require('./routes/painel'));
@@ -135,6 +154,7 @@ app.use('/clientes', exigirLogin, require('./routes/clientes'));
 app.use('/checklist', exigirLogin, require('./routes/checklist'));
 app.use('/avisos', exigirLogin, require('./routes/avisos'));
 app.use('/eventos', exigirLogin, require('./routes/eventos'));
+app.use('/push', exigirLogin, require('./routes/push'));
 app.use('/dashboard', exigirLogin, require('./routes/dashboard'));
 app.use('/admin', exigirLogin, acesso.exigirAdministrador, require('./routes/admin'));
 
