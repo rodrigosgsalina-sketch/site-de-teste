@@ -78,9 +78,13 @@ function arquivoEnv() {
   linha('ok', '.env encontrado');
 
   if (config.producao && config.segredoPadrao) {
-    linha('erro', 'SESSION_SECRET está no valor de exemplo', 'Gere um novo:  openssl rand -hex 32');
+    linha('erro', 'SESSION_SECRET é de exemplo ou curto demais', 'Gere um novo:  openssl rand -hex 32');
   } else if (config.segredoPadrao) {
-    linha('alerta', 'SESSION_SECRET ainda é o de exemplo', 'Aceitável em desenvolvimento; troque antes de publicar.');
+    linha(
+      'alerta',
+      'SESSION_SECRET ainda é o de exemplo (ou tem menos de 24 caracteres)',
+      'Aceitável em desenvolvimento; troque antes de publicar:  openssl rand -hex 32'
+    );
   } else {
     linha('ok', 'SESSION_SECRET próprio configurado');
   }

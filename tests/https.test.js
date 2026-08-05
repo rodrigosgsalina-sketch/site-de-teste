@@ -226,6 +226,23 @@ test('em produção, subir sem HTTPS declarado é recusado', () => {
   }
 });
 
+test('o segredo de sessão que vem no .env.example é tratado como inseguro', () => {
+  const exemplo = fs.readFileSync(path.join(__dirname, '..', '.env.example'), 'utf8');
+  const valor = (exemplo.match(/^SESSION_SECRET=(.*)$/m) || [])[1];
+
+  assert.ok(valor, 'o .env.example precisa trazer uma linha SESSION_SECRET');
+  assert.equal(
+    config.segredoInseguro(valor),
+    true,
+    'copiar o .env.example sem trocar o segredo não pode passar pela validação de produção'
+  );
+
+  // Um valor de verdade (openssl rand -hex 32 dá 64 caracteres) passa.
+  assert.equal(config.segredoInseguro('a'.repeat(64)), false);
+  // Curto demais não passa, mesmo sendo próprio.
+  assert.equal(config.segredoInseguro('senha-do-escritorio'), true);
+});
+
 test.after(() => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });

@@ -19,6 +19,19 @@ const producao = env === 'production';
 const SEGREDO_PADRAO = 'jsgrilo-dev-secret-troque-em-producao';
 const sessionSecret = process.env.SESSION_SECRET || SEGREDO_PADRAO;
 
+/**
+ * Segredo que não protege nada: o embutido aqui, o texto que vem no
+ * .env.example e qualquer valor curto demais para resistir a força bruta.
+ * Copiar o .env.example e esquecer de trocar é o caminho mais provável para
+ * publicar com sessão forjável, então esse caso conta como padrão.
+ */
+const SEGREDOS_DE_EXEMPLO = [SEGREDO_PADRAO, 'troque-este-valor', 'changeme', 'secret'];
+
+function segredoInseguro(valor) {
+  const limpo = String(valor || '').trim();
+  return SEGREDOS_DE_EXEMPLO.includes(limpo) || limpo.length < 24;
+}
+
 const dataDir = process.env.DATA_DIR || path.join(root, 'data');
 
 const config = {
@@ -27,7 +40,7 @@ const config = {
   producao,
   port: Number(process.env.PORT || 3000),
   sessionSecret,
-  segredoPadrao: sessionSecret === SEGREDO_PADRAO,
+  segredoPadrao: segredoInseguro(sessionSecret),
   dataDir,
   dbFile: process.env.DB_FILE || path.join(dataDir, 'processos.db'),
   uploadsDir: process.env.UPLOADS_DIR || path.join(dataDir, 'uploads'),
@@ -100,7 +113,9 @@ config.httpsProprio = Boolean(config.tlsCert && config.tlsKey);
 function validarProducao() {
   const problemas = [];
   if (config.segredoPadrao) {
-    problemas.push('defina SESSION_SECRET com um valor longo e aleatório (ex.: openssl rand -hex 32)');
+    problemas.push(
+      'defina SESSION_SECRET com um valor longo e aleatório, próprio deste servidor (gere com: openssl rand -hex 32)'
+    );
   }
   if (!config.httpsProprio && !config.trustProxy) {
     problemas.push(
@@ -116,5 +131,6 @@ function validarProducao() {
 }
 
 config.validarProducao = validarProducao;
+config.segredoInseguro = segredoInseguro;
 
 module.exports = config;

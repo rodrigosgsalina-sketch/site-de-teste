@@ -518,9 +518,11 @@ A plataforma foi preparada para ficar exposta na internet. O que já vem ligado:
 | **Saída para a internet** | Parâmetros de webhook (`WEBHOOK_*`) só aceitam `https://`. |
 | **Outros cabeçalhos** | `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, `Origin-Agent-Cluster`, e o `X-Powered-By` desligado. |
 
-Em `NODE_ENV=production` a aplicação **se recusa a subir** com `SESSION_SECRET` no valor de
-exemplo ou sem HTTPS declarado (nem certificado próprio, nem proxy). É proposital: essas duas
-falhas não dão erro visível, só deixam a porta aberta.
+Em `NODE_ENV=production` a aplicação **se recusa a subir** com `SESSION_SECRET` fraco — o valor
+que vem no `.env.example`, um placeholder conhecido ou qualquer segredo com menos de 24
+caracteres — ou sem HTTPS declarado (nem certificado próprio, nem proxy). É proposital: essas duas
+falhas não dão erro visível, só deixam a porta aberta. O `npm run doutor` avisa antes disso, ainda
+em desenvolvimento.
 
 ### HTTPS: tirando o aviso de "site não seguro"
 

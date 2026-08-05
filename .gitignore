@@ -8,3 +8,5 @@ data/
 src/public/vendor/
 npm-debug.log*
 data/importacoes/
+*.bundle
+*.zip
