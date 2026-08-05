@@ -3,6 +3,7 @@
 const express = require('express');
 const seguranca = require('../lib/seguranca');
 const acesso = require('../domain/acesso');
+const avisosDom = require('../domain/avisos');
 const checklist = require('../domain/checklist');
 const historico = require('../domain/historico');
 const notificacoes = require('../domain/notificacoes');
@@ -55,6 +56,8 @@ router.post('/:id/responder', carregarItem, (req, res, next) => {
       const setoresPendentes = checklist.setoresPendentes(item.processo_id);
       if (setoresPendentes.length) {
         notificacoes.vezDoSetor(processo, setoresPendentes[0].nome).catch(() => {});
+        // Aviso em tempo real para o setor que assume a vez.
+        avisosDom.vezDoSetor(processo, setoresPendentes[0].nome);
       }
     }
 

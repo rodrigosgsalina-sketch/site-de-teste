@@ -5,10 +5,16 @@
     <div>
       <h2>Mural de avisos</h2>
       <p class="dica" style="margin:0">
-        Todo processo concluído com sucesso ou impedido gera um aviso para todos os usuários da
-        plataforma. Dispensar um aviso afeta apenas a sua tela.
+        Cada movimento de processo gera um aviso: ele aparece na hora, como um cartão no canto
+        inferior direito, e fica registrado aqui. Conclusão e impedimento valem para todo o
+        escritório; abertura, cancelamento, reabertura, vez do setor e alerta de prazo vão para
+        quem participa do processo. Dispensar um aviso afeta apenas a sua tela.
       </p>
     </div>
+    <div class="acoes">
+      <button type="button" class="botao botao-secundario botao-pequeno" data-permitir-notificacoes>
+        Ativar avisos do navegador
+      </button>
     <% if (avisosTotal) { %>
       <form method="post" action="/avisos/lidos">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
@@ -16,6 +22,7 @@
         <button class="botao botao-secundario botao-pequeno">Marcar todos como lidos</button>
       </form>
     <% } %>
+    </div>
   </div>
 
   <% if (!lista.length) { %>
@@ -31,9 +38,12 @@
             <tr>
               <td><%= fmtDataHora(av.criado_em) %></td>
               <td>
-                <span class="etiqueta <%= av.tipo === 'concluido' ? 'et-verde' : 'et-vermelho' %>">
-                  <%= av.tipo === 'concluido' ? 'Concluído' : 'Impedido' %>
-                </span>
+                <span class="etiqueta et-<%= corAviso(av.tipo) %>"><%= rotuloAviso(av.tipo) %></span>
+                <% if (av.escopo === 'todos') { %>
+                  <div class="item-meta">todos os usuários</div>
+                <% } else { %>
+                  <div class="item-meta">setores do processo</div>
+                <% } %>
               </td>
               <td>
                 <strong><%= av.titulo %></strong>

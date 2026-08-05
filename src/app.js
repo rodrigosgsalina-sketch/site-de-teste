@@ -96,13 +96,17 @@ app.use((req, res, next) => {
   res.locals.fmtDataHora = datas.formatarDataHora;
   res.locals.classeStatus = classeStatus;
   res.locals.classeItem = classeItem;
+  res.locals.rotuloAviso = avisosDom.rotulo;
+  res.locals.corAviso = avisosDom.cor;
   res.locals.flash = req.session ? req.session.flash : null;
   if (req.session) delete req.session.flash;
 
-  // Avisos internos (processo concluído/impedido) valem para todos os usuários.
+  // A faixa no topo mostra os avisos que valem para o escritório inteiro
+  // (processo concluído ou impedido). Os dirigidos aos setores do processo
+  // chegam como notificação no canto da tela e ficam no mural em /avisos.
   if (usuario) {
     try {
-      res.locals.avisos = avisosDom.naoLidos(usuario.id, 4);
+      res.locals.avisos = avisosDom.naoLidos(usuario.id, 3, { escopo: 'todos' });
       res.locals.avisosTotal = avisosDom.contarNaoLidos(usuario.id);
     } catch (err) {
       res.locals.avisos = [];
@@ -130,6 +134,7 @@ app.use('/processos', exigirLogin, require('./routes/processos'));
 app.use('/clientes', exigirLogin, require('./routes/clientes'));
 app.use('/checklist', exigirLogin, require('./routes/checklist'));
 app.use('/avisos', exigirLogin, require('./routes/avisos'));
+app.use('/eventos', exigirLogin, require('./routes/eventos'));
 app.use('/dashboard', exigirLogin, require('./routes/dashboard'));
 app.use('/admin', exigirLogin, acesso.exigirAdministrador, require('./routes/admin'));
 

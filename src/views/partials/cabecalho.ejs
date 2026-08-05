@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><%= titulo %> · JS Grilo Processos</title>
+  <%# O token vai também no cabeçalho para as ações feitas por JavaScript (dispensar aviso). %>
+  <meta name="csrf-token" content="<%= csrfToken %>">
   <link rel="preload" as="font" type="font/woff2" href="/static/fonts/manrope-latin-wght-normal.woff2" crossorigin>
   <link rel="preload" as="font" type="font/woff2" href="/static/fonts/ibm-plex-sans-latin-wght-normal.woff2" crossorigin>
   <link rel="stylesheet" href="/static/css/app.css">
@@ -25,7 +27,7 @@
       <a href="/checklist/fila" class="<%= caminhoAtual.startsWith('/checklist') ? 'ativo' : '' %>">Fila do setor</a>
       <a href="/avisos" class="<%= caminhoAtual.startsWith('/avisos') ? 'ativo' : '' %>">
         Avisos
-        <% if (avisosTotal) { %><span class="contador"><%= avisosTotal %></span><% } %>
+        <span class="contador" data-contador-avisos <%= avisosTotal ? '' : 'hidden' %>><%= avisosTotal %></span>
       </a>
       <% if (ehGestor) { %>
         <a href="/dashboard" class="<%= caminhoAtual.startsWith('/dashboard') ? 'ativo' : '' %>">Dashboard</a>
@@ -60,10 +62,12 @@
       <div class="aviso aviso-<%= flash.tipo %>"><%= flash.mensagem %></div>
     <% } %>
 
-    <%# Comunicados visíveis para todos os usuários: processo concluído ou impedido %>
+    <%# Comunicados do usuário: concluído/impedido valem para todos; os demais,
+        para quem participa do processo. Em tempo real eles chegam como cartão
+        no canto inferior direito (public/js/notificacoes.js). %>
     <% avisos.forEach(function (av) { %>
-      <div class="comunicado comunicado-<%= av.tipo %>">
-        <span class="comunicado-marca"><%= av.tipo === 'concluido' ? 'Concluído' : 'Impedido' %></span>
+      <div class="comunicado comunicado-<%= corAviso(av.tipo) %>">
+        <span class="comunicado-marca"><%= rotuloAviso(av.tipo) %></span>
         <div class="comunicado-texto">
           <strong>
             <% if (av.processo_id) { %>

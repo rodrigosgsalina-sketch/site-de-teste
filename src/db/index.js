@@ -114,10 +114,52 @@ function migrarClienteEmProcessos(conn) {
   console.log(`[migração] coluna "cliente_id" criada em processos (${ligados} processo(s) ligados pelo CNPJ).`);
 }
 
+/**
+ * O mural nasceu só com "concluído" e "impedido", presos por um CHECK, e todo
+ * aviso valia para todos. Com as notificações em tempo real ele passou a ter
+ * mais tipos e escopo por setor — e um CHECK não se altera no SQLite, então a
+ * tabela é reconstruída preservando os avisos já publicados.
+ */
+function migrarEscopoDeAvisos(conn) {
+  if (!tabelaExiste(conn, 'avisos')) return;
+  if (colunas(conn, 'avisos').includes('escopo')) return;
+
+  const antigos = conn.prepare('SELECT * FROM avisos').all();
+
+  conn.pragma('foreign_keys = OFF');
+  conn.transaction(() => {
+    conn.exec(`
+      CREATE TABLE avisos_novo (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        tipo        TEXT    NOT NULL CHECK (tipo IN ('concluido', 'impedido', 'aberto', 'cancelado',
+                                                     'reaberto', 'vez_setor', 'prazo', 'documento')),
+        escopo      TEXT    NOT NULL DEFAULT 'todos' CHECK (escopo IN ('todos', 'setores')),
+        titulo      TEXT    NOT NULL,
+        mensagem    TEXT    NOT NULL,
+        processo_id INTEGER REFERENCES processos (id) ON DELETE CASCADE,
+        usuario_id  INTEGER REFERENCES usuarios (id),
+        usuario_nome TEXT,
+        criado_em   TEXT    NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    const inserir = conn.prepare(
+      `INSERT INTO avisos_novo (id, tipo, escopo, titulo, mensagem, processo_id, usuario_id, usuario_nome, criado_em)
+       VALUES (@id, @tipo, 'todos', @titulo, @mensagem, @processo_id, @usuario_id, @usuario_nome, @criado_em)`
+    );
+    antigos.forEach((a) => inserir.run(a));
+    conn.exec('DROP TABLE avisos; ALTER TABLE avisos_novo RENAME TO avisos;');
+  })();
+  conn.pragma('foreign_keys = ON');
+
+  // eslint-disable-next-line no-console
+  console.log(`[migração] avisos ganharam escopo e novos tipos (${antigos.length} preservado(s)).`);
+}
+
 function migrate(conn) {
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   migrarLoginDeUsuarios(conn);
   migrarClienteEmProcessos(conn);
+  migrarEscopoDeAvisos(conn);
   conn.exec(schema);
 }
 

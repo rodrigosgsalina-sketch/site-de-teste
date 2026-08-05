@@ -115,7 +115,7 @@ router.post('/', async (req, res, next) => {
   try {
     const processo = processos.criar(req.body, req.session.usuario);
     // Notificação fora da transação: falha de e-mail não desfaz o processo.
-    processos.notificarAbertura(processo.id).catch((err) => {
+    processos.notificarAbertura(processo.id, req.session.usuario).catch((err) => {
       // eslint-disable-next-line no-console
       console.error('[notificações] falha ao avisar abertura:', err.message);
     });

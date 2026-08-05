@@ -32,7 +32,7 @@ Para subir também alguns processos de demonstração:
 npm run seed:demo
 ```
 
-Testes (regras de negócio, segurança e backup):
+Testes (regras de negócio, segurança, notificações e backup):
 
 ```bash
 npm test
@@ -108,6 +108,7 @@ src/
   lib/
     seguranca.js         HTTPS obrigatório, cabeçalhos/CSP, freio de força bruta
     csrf.js              token por sessão em todo formulário
+    eventos.js           canal SSE dos avisos em tempo real
     session-store.js     sessões no mesmo SQLite da aplicação
     datas.js, pdf.js     utilidades de data e geração de PDF
   domain/                regras de negócio (testáveis, sem Express)
@@ -121,16 +122,16 @@ src/
     documentos.js        upload/registro de anexos
     dashboard.js         indicadores gerenciais
     usuarios.js          autenticação por ID de usuário e CRUD
-    avisos.js            mural interno visível a todos os usuários
+    avisos.js            avisos em tempo real (quem recebe cada evento) e mural
     ordem-setores.js     ordem de atendimento dos setores por tipo de processo
     clientes.js          cadastro das empresas atendidas
     importacao-clientes.js  leitura do relatório de empresas do Domínio Sistemas
     backup.js            backup completo em JSON e restauração transacional
   routes/                camada HTTP
   views/                 telas EJS
-  public/                CSS, JS, Chart.js e as fontes (fonts/)
+  public/                CSS, JS (inclui notificacoes.js), Chart.js e as fontes (fonts/)
 scripts/                 seed, reset, cópia de assets, certificado TLS de teste
-tests/                   regras de negócio, segurança e backup (node:test)
+tests/                   regras de negócio, segurança, notificações e backup (node:test)
 ```
 
 ---
@@ -150,8 +151,8 @@ tests/                   regras de negócio, segurança e backup (node:test)
 | `PARAMETROS` | tabela `parametros` · **Administração → Parâmetros** |
 
 Além das abas da planilha, a plataforma mantém as tabelas `clientes` (empresas atendidas),
-`avisos` e `avisos_lidos` (mural interno), `ordem_setores_tipo` (ordem de atendimento por tipo),
-`documentos`, `notificacoes` (outbox de e-mail) e `sessoes`.
+`avisos`, `avisos_destinos` e `avisos_lidos` (avisos em tempo real e mural), `ordem_setores_tipo`
+(ordem de atendimento por tipo), `documentos`, `notificacoes` (outbox de e-mail) e `sessoes`.
 
 **Setores auxiliares.** O `CHECKLIST_MODELO` referencia cinco “setores” que não estão na aba
 `SETORES`: Sócios, Financeiro, Cliente, TI e Qualidade. Eles foram criados como setores
@@ -206,7 +207,7 @@ processo. Alterar manualmente para um status de análise exige `PERMITIR_PULAR_E
 
 **Impedimento** — marcar impedimento exige descrição (`EXIGIR_OBSERVACAO_IMPEDIMENTO`), muda o
 item para `Impedido`, joga o processo para `Impedido`, notifica Diretoria e Administrativo
-(`ENVIAR_EMAIL_IMPEDIMENTO`) e publica um aviso interno para todos os usuários.
+(`ENVIAR_EMAIL_IMPEDIMENTO`) e publica um aviso em tempo real para todos os usuários.
 
 **Bloqueio de conclusão** — com `BLOQUEAR_CONCLUSAO_COM_PENDENCIA` ligado, o botão “Concluir
 processo” fica desabilitado e a tela lista exatamente o que falta:
@@ -271,18 +272,49 @@ gravado. Só depois da confirmação a importação acontece.
 - datas viram formato ISO e o capital social também é guardado como número, para ordenar e somar;
 - cada importação fica registrada na auditoria com o resultado.
 
-## Avisos internos (mural para todos os usuários)
+## Avisos em tempo real
 
-Quando um processo é **concluído com sucesso** ou fica **impedido**, a plataforma publica um aviso
-que aparece para **todos os usuários**, independentemente de setor ou perfil — em faixa no topo de
-qualquer tela e no mural em **Avisos**, com contador de não lidos no menu.
+Todo movimento de processo publica um aviso que **aparece na hora**, sem recarregar a tela: um
+cartão no canto inferior direito, no formato de uma notificação de desktop — título, texto, o
+número do processo e um “×” para dispensar. Clicar no título abre o processo.
 
-- o aviso de conclusão informa o processo, o cliente e quem concluiu;
-- o aviso de impedimento traz o setor e o motivo registrado;
-- cada pessoa dispensa o seu aviso no “×”; isso não afeta o que os outros veem;
-- o mural guarda o histórico, marcando o que já foi lido.
+| Evento | Quem recebe |
+|---|---|
+| Processo **aberto** | os usuários dos setores que estão no checklist, mais quem abriu e quem conduz |
+| Chegou a **vez do setor** | os usuários daquele setor |
+| Processo **cancelado** / **reaberto** | os setores do processo |
+| **Prazo** vencido ou a vencer | os setores do processo |
+| Processo **concluído** | **todos os usuários** da plataforma |
+| Processo **impedido** | **todos os usuários** da plataforma |
 
-É diferente das notificações por e-mail, que são dirigidas ao setor responsável.
+Conclusão e impedimento continuam valendo para o escritório inteiro — são os dois fatos que
+interessam a todo mundo. Os demais vão só para quem participa daquele processo, para ninguém
+receber aviso de trabalho que não é seu. O **Administrativo** também é avisado pelos setores
+auxiliares (Sócios, Cliente, TI, Qualidade), que é ele quem responde.
+
+Como funciona por dentro: cada aba mantém uma conexão aberta em `GET /eventos`
+(**Server-Sent Events**) e o servidor empurra o aviso assim que ele acontece. Escolhemos SSE em
+vez de WebSocket porque o fluxo é de mão única (servidor → tela), viaja no mesmo HTTPS da
+aplicação, reconecta sozinho quando a rede oscila e não traz dependência nova. Ao reconectar, o
+servidor manda o total de não lidos e o contador do menu volta a bater sozinho.
+
+Detalhes de uso:
+
+- o cartão some sozinho em 12 segundos; passar o mouse por cima segura;
+- até 4 cartões ficam empilhados, o mais novo por cima;
+- fechar no “×” dispensa o aviso também no servidor — ele não volta na próxima página;
+- a faixa no topo das telas mostra só os avisos de escritório inteiro (concluído/impedido), para
+  não empilhar cartão sobre cartão; os dirigidos ao setor ficam no cartão e no mural;
+- **Avisos** guarda o histórico completo, com o tipo, o alcance de cada um e o que já foi lido;
+- o botão **“Ativar avisos do navegador”**, no mural, pede a permissão do Chrome/Edge/Firefox: com
+  ela, quando a plataforma estiver em outra aba, o aviso também aparece como notificação do
+  sistema operacional;
+- quem dispensa um aviso não muda a tela de ninguém;
+- a entrega em tempo real vive na memória do processo Node (a plataforma roda em um processo só).
+  `src/lib/eventos.js` é o ponto onde entraria um repasse entre processos, se um dia forem vários.
+
+Isso é diferente das notificações por e-mail, que são dirigidas ao setor responsável e ficam
+registradas na tabela `notificacoes`.
 
 ## Notificações, prazos e integrações
 

@@ -403,20 +403,117 @@ table.tabela td.mono { white-space: nowrap; }
   box-shadow: var(--sombra-1);
   animation: descer var(--medio) var(--suave) both;
 }
-.comunicado-concluido { border-color: var(--verde-borda); border-left-color: var(--verde); background: var(--verde-claro); }
-.comunicado-impedido { border-color: var(--vermelho-borda); border-left-color: var(--vermelho); background: var(--vermelho-claro); }
+.comunicado-verde { border-color: var(--verde-borda); border-left-color: var(--verde); background: var(--verde-claro); }
+.comunicado-vermelho { border-color: var(--vermelho-borda); border-left-color: var(--vermelho); background: var(--vermelho-claro); }
+.comunicado-azul { border-color: #c6dcee; border-left-color: var(--azul-500); background: var(--azul-050); }
+.comunicado-amarelo { border-color: var(--ambar-borda); border-left-color: var(--ambar); background: var(--ambar-claro); }
+.comunicado-neutro { border-color: var(--linha); border-left-color: var(--tinta-4); background: var(--superficie-2); }
 .comunicado-marca {
   font-family: var(--display); font-size: .66rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: .07em;
   padding: .2rem .55rem; border-radius: var(--raio-full); white-space: nowrap; margin-top: .1rem;
 }
-.comunicado-concluido .comunicado-marca { background: var(--verde); color: #fff; }
-.comunicado-impedido .comunicado-marca { background: var(--vermelho); color: #fff; }
+.comunicado-verde .comunicado-marca { background: var(--verde); color: #fff; }
+.comunicado-vermelho .comunicado-marca { background: var(--vermelho); color: #fff; }
+.comunicado-azul .comunicado-marca { background: var(--azul-600); color: #fff; }
+.comunicado-amarelo .comunicado-marca { background: var(--ambar); color: #fff; }
+.comunicado-neutro .comunicado-marca { background: var(--tinta-3); color: #fff; }
 .comunicado-texto { flex: 1; min-width: 0; font-size: .89rem; }
 .comunicado-texto strong { display: block; font-family: var(--display); font-size: .93rem; }
 .comunicado-texto small { color: var(--tinta-4); font-size: .76rem; }
-.comunicado-concluido .comunicado-texto { color: #0e5c3c; }
-.comunicado-impedido .comunicado-texto { color: #8d211a; }
+.comunicado-verde .comunicado-texto { color: #0e5c3c; }
+.comunicado-vermelho .comunicado-texto { color: #8d211a; }
+.comunicado-azul .comunicado-texto { color: var(--azul-700); }
+.comunicado-amarelo .comunicado-texto { color: #77500b; }
+/* ------------------------------------------------- notificações em tempo real */
+/* Cartões que surgem no canto inferior direito quando um processo é aberto,
+   impedido, concluído (etc.), no formato de uma notificação de desktop. */
+.notificacoes {
+  position: fixed;
+  right: 1.1rem; bottom: 1.1rem;
+  z-index: 60;
+  display: flex; flex-direction: column-reverse; gap: .6rem;
+  width: min(380px, calc(100vw - 2.2rem));
+  pointer-events: none;
+}
+.notificacao {
+  pointer-events: auto;
+  position: relative;
+  display: grid; grid-template-columns: auto 1fr auto; gap: .1rem .7rem;
+  align-items: start;
+  background: var(--superficie);
+  border: 1px solid var(--linha-forte);
+  border-radius: var(--raio);
+  box-shadow: var(--sombra-3);
+  padding: .8rem .85rem .85rem;
+  overflow: hidden;
+  animation: entrarNotificacao var(--medio) var(--elastico) both;
+}
+.notificacao.saindo { animation: sairNotificacao 200ms var(--suave) both; }
+.notificacao::after {
+  /* faixa de cor identificando o tipo, como a barra lateral do comunicado */
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--tinta-4);
+}
+.notificacao-verde::after { background: var(--verde); }
+.notificacao-vermelho::after { background: var(--vermelho); }
+.notificacao-azul::after { background: var(--azul-500); }
+.notificacao-amarelo::after { background: var(--ambar); }
+
+.notificacao-icone {
+  grid-row: span 2;
+  width: 34px; height: 34px; border-radius: var(--raio-sm);
+  display: grid; place-items: center;
+  font-family: var(--display); font-size: .72rem; font-weight: 800; letter-spacing: -.02em;
+  background: var(--azul-800); color: #fff;
+  box-shadow: var(--sombra-1);
+}
+.notificacao-titulo {
+  font-family: var(--display); font-size: .92rem; font-weight: 700; color: var(--tinta);
+  line-height: 1.25; margin: 0;
+}
+.notificacao-corpo {
+  grid-column: 2; font-size: .84rem; color: var(--tinta-3); margin: .15rem 0 0;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.notificacao-rodape {
+  grid-column: 2; display: flex; align-items: center; gap: .45rem; margin-top: .45rem;
+  font-size: .72rem; color: var(--tinta-4);
+}
+.notificacao-etiqueta {
+  font-family: var(--display); font-size: .62rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .07em;
+  padding: .12rem .45rem; border-radius: var(--raio-full);
+  background: var(--azul-100); color: var(--azul-700);
+}
+.notificacao-verde .notificacao-etiqueta { background: var(--verde-claro); color: var(--verde); }
+.notificacao-vermelho .notificacao-etiqueta { background: var(--vermelho-claro); color: var(--vermelho); }
+.notificacao-amarelo .notificacao-etiqueta { background: var(--ambar-claro); color: var(--ambar); }
+.notificacao-fechar {
+  grid-row: span 2; align-self: start;
+  background: none; border: 0; cursor: pointer; font-size: 1.1rem; line-height: 1;
+  color: var(--tinta-4); padding: .1rem .25rem; border-radius: var(--raio-xs);
+  transition: color var(--rapido) ease, background var(--rapido) ease;
+}
+.notificacao-fechar:hover { color: var(--tinta-2); background: var(--linha); }
+.notificacao-progresso {
+  position: absolute; left: 0; bottom: 0; height: 2px; width: 100%;
+  background: var(--azul-500); opacity: .35;
+  transform-origin: left center;
+  animation: escoarNotificacao linear both;
+}
+.notificacao a.notificacao-titulo { text-decoration: none; }
+.notificacao a.notificacao-titulo:hover { text-decoration: underline; }
+
+@keyframes entrarNotificacao {
+  from { opacity: 0; transform: translate3d(18px, 8px, 0) scale(.97); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes sairNotificacao {
+  from { opacity: 1; transform: none; max-height: 220px; }
+  to   { opacity: 0; transform: translate3d(24px, 0, 0); max-height: 0; padding-top: 0; padding-bottom: 0; }
+}
+@keyframes escoarNotificacao { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
 .botao-fechar {
   background: none; border: 0; cursor: pointer; font-size: 1.25rem; line-height: 1;
   color: inherit; opacity: .5; padding: 0 .2rem; border-radius: var(--raio-xs);
@@ -750,10 +847,13 @@ a.mono { font-weight: 500; white-space: nowrap; }
     transition-duration: .01ms !important;
     scroll-behavior: auto !important;
   }
+  /* A barrinha de tempo da notificação é informação, não enfeite: continua
+     escoando, apenas sem animação de entrada. */
+  .notificacao-progresso { animation-duration: inherit !important; }
 }
 
 @media print {
-  .lateral, .topo, .acoes, .rodape-app, form, .comunicado { display: none !important; }
+  .lateral, .topo, .acoes, .rodape-app, form, .comunicado, .notificacoes { display: none !important; }
   .cartao, .setor-bloco { box-shadow: none; border-color: #ccc; break-inside: avoid; animation: none; }
   body { background: #fff; }
 }

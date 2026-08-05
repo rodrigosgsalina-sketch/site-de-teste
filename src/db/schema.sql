@@ -269,7 +269,10 @@ CREATE INDEX IF NOT EXISTS idx_clientes_situacao ON clientes (situacao);
 -- que é o outbox de e-mail dirigido a um destinatário específico.
 CREATE TABLE IF NOT EXISTS avisos (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  tipo        TEXT    NOT NULL CHECK (tipo IN ('concluido', 'impedido')),
+  tipo        TEXT    NOT NULL CHECK (tipo IN ('concluido', 'impedido', 'aberto', 'cancelado',
+                                               'reaberto', 'vez_setor', 'prazo', 'documento')),
+  -- 'todos' vale para a plataforma inteira; 'setores' só para quem está em avisos_destinos.
+  escopo      TEXT    NOT NULL DEFAULT 'todos' CHECK (escopo IN ('todos', 'setores')),
   titulo      TEXT    NOT NULL,
   mensagem    TEXT    NOT NULL,
   processo_id INTEGER REFERENCES processos (id) ON DELETE CASCADE,
@@ -279,7 +282,16 @@ CREATE TABLE IF NOT EXISTS avisos (
 );
 CREATE INDEX IF NOT EXISTS idx_avisos_criado ON avisos (id DESC);
 
--- Marcação de leitura por usuário: o aviso vale para todos, mas cada um
+-- Destinatários de um aviso de escopo 'setores': os usuários dos setores que
+-- participam do processo, mais quem o abriu e quem o conduz.
+CREATE TABLE IF NOT EXISTS avisos_destinos (
+  aviso_id   INTEGER NOT NULL REFERENCES avisos (id) ON DELETE CASCADE,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios (id) ON DELETE CASCADE,
+  PRIMARY KEY (aviso_id, usuario_id)
+);
+CREATE INDEX IF NOT EXISTS idx_avisos_destinos_usuario ON avisos_destinos (usuario_id, aviso_id);
+
+-- Marcação de leitura por usuário: o aviso vale para vários, mas cada um
 -- dispensa o seu.
 CREATE TABLE IF NOT EXISTS avisos_lidos (
   aviso_id   INTEGER NOT NULL REFERENCES avisos (id) ON DELETE CASCADE,

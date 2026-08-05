@@ -81,10 +81,10 @@ function criarCliente(base) {
     get: (caminho, opcoes) => pedir(caminho, { method: 'GET', ...opcoes }),
     post: (caminho, corpo, opcoes = {}) =>
       pedir(caminho, {
+        ...opcoes,
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded', ...(opcoes.headers || {}) },
         body: new URLSearchParams(corpo).toString(),
-        ...opcoes,
       }),
     /** Lê o token CSRF publicado em uma tela. */
     async token(caminho = '/login') {

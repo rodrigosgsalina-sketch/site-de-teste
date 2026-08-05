@@ -182,10 +182,12 @@ function criar(dados, usuario) {
 }
 
 /** Dispara as notificações de abertura (fora da transação). */
-async function notificarAbertura(processoId) {
+async function notificarAbertura(processoId, usuario) {
   const processo = obter(processoId);
   if (!processo) return [];
   const setores = checklist.setoresDoProcesso(processoId);
+  // Aviso interno em tempo real para quem participa do processo.
+  avisos.processoAberto(processo, setores, usuario);
   return notificacoes.processoAberto(processo, setores);
 }
 
@@ -431,7 +433,9 @@ function cancelar(processoId, usuario, motivo) {
     .prepare(`UPDATE processos SET status_id = ?, status_manual = 1, etapa_atual = 'Cancelado', atualizado_em = ? WHERE id = ?`)
     .run(statusId(STATUS.CANCELADO), agoraISO(), processoId);
   historico.registrar({ processoId, acao: 'Processo Cancelado', usuario, observacao: motivo.trim() });
-  return obter(processoId);
+  const cancelado = obter(processoId);
+  avisos.processoCancelado(cancelado, motivo.trim(), usuario);
+  return cancelado;
 }
 
 function reabrir(processoId, usuario, motivo) {
@@ -448,7 +452,9 @@ function reabrir(processoId, usuario, motivo) {
     observacao: motivo || 'Reabertura solicitada.',
   });
   recalcularStatus(processoId, usuario, { silencioso: true });
-  return obter(processoId);
+  const reaberto = obter(processoId);
+  avisos.processoReaberto(reaberto, motivo, usuario);
+  return reaberto;
 }
 
 /* ------------------------------------------------------------------ *
@@ -549,6 +555,7 @@ async function verificarPrazos() {
       .get(processo.id);
     if (jaAvisado) continue;
     await notificacoes.processoAtrasado(processo, processo.dias_restantes);
+    avisos.prazoDoProcesso(processo, processo.dias_restantes);
     historico.registrar({
       processoId: processo.id,
       acao: 'Alerta de Prazo',
