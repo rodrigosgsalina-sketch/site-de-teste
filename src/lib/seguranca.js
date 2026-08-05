@@ -10,6 +10,8 @@
  */
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const config = require('../config');
 
 /** Requisição chegou por HTTPS? Considera o proxy quando ele é confiável. */
@@ -89,6 +91,53 @@ function destinoInterno(valor, padrao = '/') {
 }
 
 /* ------------------------------------------------------------------------ *
+ * Redirecionador HTTP → HTTPS                                               *
+ * ------------------------------------------------------------------------ */
+
+const CAMINHO_ACME = '/.well-known/acme-challenge/';
+
+/**
+ * Tratador da porta 80 quando a própria aplicação serve o HTTPS. Faz três
+ * coisas, nesta ordem:
+ *
+ *   1. entrega o desafio do Let's Encrypt (certbot --webroot), para a
+ *      renovação do certificado não exigir parar a plataforma;
+ *   2. recusa envio de formulário em HTTP puro — os dados já viajaram em
+ *      claro, e um 308 faria o navegador reenviá-los como se nada tivesse
+ *      acontecido;
+ *   3. redireciona o resto para https, com 308 (preserva o caminho).
+ */
+function tratadorDeRedirecionamento({ portaHttps = 443, acmeWebroot = '' } = {}) {
+  return function tratar(req, res) {
+    if (acmeWebroot && req.url.startsWith(CAMINHO_ACME)) {
+      const nome = path.basename(decodeURIComponent(req.url.slice(CAMINHO_ACME.length).split('?')[0]));
+      const raiz = path.resolve(acmeWebroot);
+      const arquivo = path.resolve(raiz, '.well-known', 'acme-challenge', nome);
+      if (!nome || !arquivo.startsWith(raiz + path.sep) || !fs.existsSync(arquivo)) {
+        res.writeHead(404).end('Desafio não encontrado.');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/plain' }).end(fs.readFileSync(arquivo));
+      return;
+    }
+
+    const host = String(req.headers.host || '').replace(/:\d+$/, '').replace(/[^a-zA-Z0-9.\-[\]]/g, '');
+    if (!host) {
+      res.writeHead(400).end('Host inválido.');
+      return;
+    }
+    const porta = Number(portaHttps) === 443 ? '' : `:${portaHttps}`;
+
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' })
+        .end(`Esta aplicação só aceita envios por HTTPS. Acesse https://${host}${porta} e repita a operação.`);
+      return;
+    }
+    res.writeHead(308, { Location: `https://${host}${porta}${req.url}` }).end();
+  };
+}
+
+/* ------------------------------------------------------------------------ *
  * Freio de força bruta                                                      *
  * ------------------------------------------------------------------------ */
 
@@ -156,6 +205,8 @@ function zerarFreio() {
 module.exports = {
   ehSeguro,
   destinoInterno,
+  tratadorDeRedirecionamento,
+  CAMINHO_ACME,
   exigirHttps,
   cabecalhos,
   freioDeLogin,

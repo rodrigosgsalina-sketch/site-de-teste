@@ -54,6 +54,10 @@ const config = {
   tlsPassphrase: process.env.TLS_PASSPHRASE || '',
   // Porta que responde em HTTP só para redirecionar ao HTTPS (0 desliga).
   redirectPort: Number(process.env.HTTP_REDIRECT_PORT || 0),
+  // Pasta onde o certbot (--webroot) deixa o desafio do Let's Encrypt. A porta
+  // de redirecionamento entrega /.well-known/acme-challenge/ a partir daqui,
+  // para a renovação acontecer sem tirar a plataforma do ar.
+  acmeWebroot: process.env.ACME_WEBROOT || path.join(dataDir, 'acme'),
 
   // Atrás de proxy/balanceador (nginx, Caddy, Cloudflare) o Express precisa
   // confiar no X-Forwarded-Proto para saber que a origem era HTTPS. Fica

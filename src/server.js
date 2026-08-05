@@ -6,6 +6,7 @@ const https = require('https');
 
 const app = require('./app');
 const config = require('./config');
+const seguranca = require('./lib/seguranca');
 const db = require('./db');
 const processos = require('./domain/processos');
 
@@ -51,18 +52,16 @@ servidor.listen(config.port, () => {
   }
 });
 
-/* Porta 80 respondendo só com o redirecionamento para HTTPS. */
+/* Porta 80 respondendo só com o redirecionamento para HTTPS (e com o desafio
+   do Let's Encrypt, quando houver). A lógica fica em src/lib/seguranca.js. */
 let redirecionador = null;
 if (config.httpsProprio && config.redirectPort > 0) {
-  redirecionador = http.createServer((req, res) => {
-    const host = String(req.headers.host || '').replace(/:\d+$/, '').replace(/[^a-zA-Z0-9.\-[\]]/g, '');
-    const porta = config.port === 443 ? '' : `:${config.port}`;
-    if (!host) {
-      res.writeHead(400).end('Host inválido.');
-      return;
-    }
-    res.writeHead(308, { Location: `https://${host}${porta}${req.url}` }).end();
-  });
+  redirecionador = http.createServer(
+    seguranca.tratadorDeRedirecionamento({
+      portaHttps: config.port,
+      acmeWebroot: config.acmeWebroot,
+    })
+  );
   redirecionador.listen(config.redirectPort, () => {
     // eslint-disable-next-line no-console
     console.log(`Redirecionando http://localhost:${config.redirectPort} → https`);

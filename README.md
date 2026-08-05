@@ -32,7 +32,7 @@ Para subir também alguns processos de demonstração:
 npm run seed:demo
 ```
 
-Testes (regras de negócio, segurança, notificações e backup):
+Testes (regras de negócio, segurança, HTTPS, notificações e backup):
 
 ```bash
 npm test
@@ -133,8 +133,8 @@ src/
   routes/                camada HTTP
   views/                 telas EJS
   public/                CSS, JS (notificacoes.js), sw.js (Service Worker), Chart.js e fontes
-scripts/                 seed, reset, cópia de assets, certificado TLS de teste
-tests/                   regras de negócio, segurança, notificações e backup (node:test)
+scripts/                 seed, reset, assets, autoridade/certificado TLS, chaves VAPID
+tests/                   regras de negócio, segurança, HTTPS, notificações e backup (node:test)
 ```
 
 ---
@@ -467,7 +467,7 @@ A plataforma foi preparada para ficar exposta na internet. O que já vem ligado:
 
 | Defesa | Como funciona |
 |---|---|
-| **HTTPS obrigatório** | Com `FORCE_HTTPS` (padrão em produção), toda requisição em HTTP puro é redirecionada com 308 para `https://` — e um POST em HTTP é recusado, nunca redirecionado, para a senha não viajar em claro. |
+| **HTTPS obrigatório** | Com `FORCE_HTTPS` (padrão em produção), toda requisição em HTTP puro é redirecionada com 308 para `https://` — e um POST em HTTP é recusado, nunca redirecionado, para a senha não ser reenviada às cegas depois de já ter viajado em claro. Vale tanto no middleware quanto na porta de redirecionamento (`HTTP_REDIRECT_PORT`). |
 | **HSTS** | `Strict-Transport-Security` de 180 dias, enviado só nas respostas que já vieram por HTTPS. |
 | **Cookie de sessão** | `HttpOnly` (o JavaScript da página não lê), `SameSite=Lax` e `Secure` sempre que houver HTTPS. Nome próprio (`jsgrilo.sid`), sem revelar a tecnologia. |
 | **CSRF** | Todo formulário carrega um token ligado à sessão; sem ele — ou com o token de outra sessão — a escrita é recusada com 403. Vale inclusive para o envio de arquivos e para a restauração de backup. |
@@ -486,47 +486,184 @@ Em `NODE_ENV=production` a aplicação **se recusa a subir** com `SESSION_SECRET
 exemplo ou sem HTTPS declarado (nem certificado próprio, nem proxy). É proposital: essas duas
 falhas não dão erro visível, só deixam a porta aberta.
 
-### Como publicar com HTTPS
+### HTTPS: tirando o aviso de "site não seguro"
 
-Há dois caminhos; escolha um.
+O aviso do navegador não é sobre a criptografia — ela já funciona com qualquer
+certificado. O aviso diz que **ninguém conhecido assinou** aquele certificado. Quem assina é uma
+autoridade certificadora, e há dois tipos: as **públicas** (Let's Encrypt e afins), em que todo
+navegador já confia, e as **privadas**, em que só confia quem as instalar. A escolha entre elas
+depende de uma única pergunta: *existe um domínio público apontando para o servidor?*
 
-**Opção A — a própria plataforma serve o HTTPS.** Aponte o certificado e a chave no `.env`:
+| Situação | Solução | Aviso do navegador |
+|---|---|---|
+| Rede interna, sem domínio (`jsgriloprocessos` no arquivo hosts) | **autoridade local do escritório** (abaixo) | some nos aparelhos onde a autoridade for instalada |
+| Domínio público real, portas 80/443 abertas | **Let's Encrypt** via Caddy (ou certbot) | some em qualquer aparelho, sem instalar nada |
 
-```env
-NODE_ENV=production
-SESSION_SECRET=<troque: openssl rand -hex 32>
-TLS_CERT=/etc/letsencrypt/live/processos.seudominio.com.br/fullchain.pem
-TLS_KEY=/etc/letsencrypt/live/processos.seudominio.com.br/privkey.pem
-PORT=443
-HTTP_REDIRECT_PORT=80     # porta 80 só redireciona para https
-```
+> **Let's Encrypt não emite certificado para rede local.** Para assinar, ele precisa provar que
+> você controla um **domínio público** — e não existe dono comprovável de `jsgriloprocessos` nem
+> de `192.168.0.10`. Nenhuma autoridade pública emite certificado para nome inventado ou IP
+> privado; é regra do setor, não limitação da plataforma.
 
-O certificado gratuito sai do [Let's Encrypt](https://letsencrypt.org) com o `certbot`.
-Para **testar HTTPS na sua máquina** antes de publicar, gere um certificado local:
+---
+
+#### Cenário 1 — rede interna do escritório (autoridade local)
+
+É o caso de hoje: a plataforma é acessada por um nome amigável configurado no arquivo `hosts`,
+sem domínio registrado. A saída é o escritório ter **a própria autoridade certificadora**: um
+arquivo que você instala uma vez em cada aparelho e que passa a valer como "assinatura conhecida"
+naqueles aparelhos.
+
+**1. Gere a autoridade e o certificado** (na máquina que roda a plataforma):
 
 ```bash
-npm run certificado      # cria data/certificados/ e mostra as linhas do .env
-npm start                # https://localhost:3000
+npm run certificado -- --nomes jsgriloprocessos --ips 192.168.0.10
 ```
 
-(O navegador vai avisar que o certificado é autoassinado — normal em teste.)
+Troque o IP pelo endereço da máquina na rede. O comando cria, em `data/certificados/`:
 
-**Opção B — um proxy à frente termina o HTTPS** (nginx, Caddy, Cloudflare Tunnel). É o caminho
-mais simples de manter, porque a renovação do certificado fica com o proxy. Nesse caso:
+| Arquivo | Para que serve |
+|---|---|
+| `autoridade.pem` | **instalar nos aparelhos** — é o que remove o aviso |
+| `autoridade-chave.pem` | **segredo do servidor.** Quem tiver essa chave forja certificado de qualquer site nos aparelhos onde a autoridade estiver instalada |
+| `certificado.pem` / `chave.pem` | o que a plataforma serve |
+| `COMO-INSTALAR.txt` | o passo a passo por sistema, gerado com os nomes que você escolheu |
+
+**2. Aponte o `.env`:**
 
 ```env
 NODE_ENV=production
-SESSION_SECRET=<troque>
-TRUST_PROXY=1             # faz a aplicação reconhecer X-Forwarded-Proto e o IP real
+SESSION_SECRET=<gere com: openssl rand -hex 32>
+TLS_CERT=./data/certificados/certificado.pem
+TLS_KEY=./data/certificados/chave.pem
+PORT=443
+HTTP_REDIRECT_PORT=80
 ```
 
-Um `Caddyfile` completo, com certificado automático, cabe em três linhas:
+No Linux, portas abaixo de 1024 exigem privilégio: rode como serviço (systemd) ou libere o Node
+com `sudo setcap 'cap_net_bind_service=+ep' $(which node)`. No Windows, basta rodar como
+administrador. Se preferir não mexer nisso, use `PORT=8443` e `HTTP_REDIRECT_PORT=8080` e acesse
+`https://jsgriloprocessos:8443`.
+
+**3. Instale `autoridade.pem` em cada aparelho.** O passo a passo completo está em
+`data/certificados/COMO-INSTALAR.txt`; em resumo:
+
+- **Windows** — renomeie para `.crt`, clique duas vezes → Instalar Certificado → *Computador
+  Local* → "Colocar todos os certificados no repositório a seguir" → **Autoridades de Certificação
+  Raiz Confiáveis**. Vale para Chrome e Edge.
+- **macOS** — arraste para o *Acesso às Chaves* → chaveira **Sistema** → duplo clique no
+  certificado → Confiar → **Confiar sempre**.
+- **Firefox** (qualquer sistema, ele tem lista própria) — Ajustes → Privacidade e Segurança →
+  Certificados → Ver certificados → aba **Autoridades** → Importar → marcar "Confiar nesta CA
+  para identificar sites".
+- **Android** — Ajustes → Segurança → Criptografia e credenciais → Instalar um certificado →
+  **Certificado CA**.
+- **iPhone/iPad** — abra o arquivo → Ajustes → *Perfil Baixado* → Instalar; **e depois**
+  Ajustes → Geral → Sobre → **Ajustes de Confiança em Certificados** → ative a chave. Sem esse
+  segundo passo o iOS ignora a autoridade.
+
+**Alternativa: mkcert.** O [mkcert](https://github.com/FiloSottile/mkcert) faz exatamente o mesmo
+trabalho e instala a autoridade no aparelho onde roda, com um comando:
+
+```bash
+mkcert -install                                    # cria e instala a autoridade local
+mkcert jsgriloprocessos localhost 192.168.0.10     # emite o certificado
+```
+
+Depois aponte `TLS_CERT`/`TLS_KEY` para os arquivos que ele gerar. Nos **outros** aparelhos ainda
+é preciso instalar a autoridade do mkcert (`mkcert -CAROOT` mostra onde ela está) — o trabalho por
+aparelho é o mesmo dos dois jeitos.
+
+**Renovação.** A autoridade vale 10 anos; o certificado do servidor, 825 dias. Para reemitir só o
+certificado (sem tocar em aparelho nenhum):
+
+```bash
+npm run certificado -- --forcar
+```
+
+---
+
+#### Cenário 2 — domínio público, com proxy na frente (recomendado quando houver domínio)
+
+É o caminho mais simples de manter: o **Caddy** obtém e renova o certificado do Let's Encrypt
+sozinho, e a plataforma continua em HTTP no `localhost:3000`, sem nunca mexer em certificado.
+
+Pré-requisitos: domínio registrado (ex.: `processos.jsgrilo.com.br`), **registro DNS apontando
+para o IP público do servidor** e **portas 80 e 443 abertas** até a máquina.
+
+`.env`:
+
+```env
+NODE_ENV=production
+SESSION_SECRET=<openssl rand -hex 32>
+TRUST_PROXY=1
+PORT=3000
+```
+
+`Caddyfile` (o arquivo inteiro):
 
 ```
-processos.seudominio.com.br {
+processos.jsgrilo.com.br {
     reverse_proxy localhost:3000
 }
 ```
+
+`sudo caddy run --config Caddyfile` — e pronto: certificado emitido, HTTP redirecionado para
+HTTPS e renovação automática a cada 60 dias. `TRUST_PROXY=1` é o que faz a aplicação entender que
+a origem era HTTPS (pelo `X-Forwarded-Proto`) e enxergar o IP real de quem acessa, o que importa
+para o freio de força bruta no login.
+
+#### Cenário 3 — domínio público, sem proxy
+
+Se preferir que a própria plataforma sirva o TLS, gere o certificado com o certbot e aponte:
+
+```bash
+sudo certbot certonly --webroot -w ./data/acme -d processos.jsgrilo.com.br
+```
+
+```env
+NODE_ENV=production
+SESSION_SECRET=<openssl rand -hex 32>
+TLS_CERT=/etc/letsencrypt/live/processos.jsgrilo.com.br/fullchain.pem
+TLS_KEY=/etc/letsencrypt/live/processos.jsgrilo.com.br/privkey.pem
+PORT=443
+HTTP_REDIRECT_PORT=80
+ACME_WEBROOT=./data/acme
+```
+
+A porta 80 continua servindo `/.well-known/acme-challenge/` a partir de `ACME_WEBROOT`, então
+`certbot renew` funciona **sem parar a plataforma**. Só falta reiniciar o serviço depois da
+renovação (`--deploy-hook "systemctl restart jsgrilo"`), porque o Node lê o certificado ao subir.
+
+---
+
+#### O que muda quando o HTTPS entra
+
+Medido nesta plataforma, antes e depois:
+
+| | `http://jsgriloprocessos` | `https://jsgriloprocessos` |
+|---|---|---|
+| Contexto seguro (`isSecureContext`) | `false` | `true` |
+| Service Worker | **API indisponível** | registrado |
+| `Notification.permission` | `denied` (o navegador nem pergunta) | pode ser concedida |
+| Notificação do sistema / Web Push | impossível | funciona |
+| Cartão de aviso dentro da página (SSE) | funciona | funciona |
+
+Ou seja: **as notificações do sistema operacional só passam a existir depois do HTTPS.** Em HTTP,
+fora de `localhost`, o navegador esconde a API inteira — os avisos ficam limitados ao cartão
+dentro da página e ao mural.
+
+Duas consequências práticas da migração:
+
+- **O cookie de sessão passa a ser `Secure`.** Quem continuar acessando pelo endereço antigo
+  (`http://…` ou `http://IP:3000`) não consegue mais entrar — o navegador descarta o cookie.
+  Avise a equipe para usar só o endereço `https://`.
+- **HSTS.** Depois da primeira visita em HTTPS, o navegador passa a exigir HTTPS naquele endereço
+  por 180 dias (`HSTS_MAX_AGE`) e não aceita mais voltar para HTTP nem clicar em "prosseguir".
+  É proteção real, mas dificulta voltar atrás: nas primeiras semanas, considere
+  `HSTS_MAX_AGE=86400` (1 dia) e só depois volte ao padrão.
+- **Web Push continua exigindo internet.** Com a rede interna isolada, o navegador não alcança o
+  serviço de push do fornecedor: a inscrição falha em silêncio e a plataforma segue com o cartão
+  na tela e a notificação do sistema disparada pela aba aberta.
 
 ### Antes de abrir para a internet
 
