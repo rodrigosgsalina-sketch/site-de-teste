@@ -18,7 +18,10 @@
 
 const INTERVALO_PULSO_MS = 25000;
 const RECONEXAO_MS = 4000;
-const MAX_CONEXOES_POR_USUARIO = 6;
+/* Com as abas dividindo uma conexão só (ver src/public/js/notificacoes.js), um
+   usuário precisa de UMA. A folga aqui cobre a troca de aba líder e o navegador
+   antigo que abre uma por aba; passou disso, a mais antiga sai. */
+const MAX_CONEXOES_POR_USUARIO = 4;
 
 /** usuarioId -> Set de conexões (uma por aba aberta). */
 const conexoes = new Map();
@@ -105,6 +108,20 @@ function assinar(usuarioId, req, res) {
   return encerrar;
 }
 
+/**
+ * Envia um evento por UMA conexão específica. É o que o estado inicial e a
+ * reposição de avisos perdidos usam: eles interessam a quem acabou de conectar,
+ * não às outras abas do mesmo usuário — que já receberam tudo no seu momento.
+ */
+function enviarNesta(res, evento, dados, id) {
+  try {
+    res.write(bloco({ evento, dados, id }));
+    return 1;
+  } catch (_) {
+    return 0;
+  }
+}
+
 /** Envia um evento para as abas de um usuário. */
 function enviarPara(usuarioId, evento, dados, id) {
   const grupo = conexoes.get(Number(usuarioId));
@@ -151,6 +168,7 @@ module.exports = {
   assinar,
   publicar,
   enviarPara,
+  enviarNesta,
   contar,
   usuariosConectados,
   encerrarTodas,

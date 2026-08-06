@@ -65,7 +65,8 @@
       .toLowerCase();
   }
 
-  /* Busca que filtra as opções de um <select> (data-filtra-lista="id-do-select"). */
+  /* Busca que filtra as opções de um <select> (data-filtra-lista="id-do-select").
+     Usada onde a lista é curta e já vem inteira no HTML. */
   function ligarFiltroDeLista(raiz) {
     raiz.querySelectorAll('[data-filtra-lista]').forEach(function (campo) {
       var select = document.getElementById(campo.dataset.filtraLista);
@@ -102,6 +103,115 @@
             select.dispatchEvent(new Event('change'));
           }
         }
+      });
+    });
+  }
+
+  /* Busca de cliente contra o servidor (data-busca-cliente="id-do-select").
+
+     O cadastro tem quase mil empresas; mandar todas no HTML custava 676 KB por
+     carregamento da tela. A lista agora é montada com o que o servidor devolve
+     para o que foi digitado — mesmas regras de antes: sem acento, sem caixa,
+     CNPJ com ou sem pontuação, e seleção automática quando sobra uma só. */
+  function ligarBuscaDeCliente(raiz) {
+    raiz.querySelectorAll('[data-busca-cliente]').forEach(function (campo) {
+      var select = document.getElementById(campo.dataset.buscaCliente);
+      if (!select) return;
+      var situacao = campo.parentNode.querySelector('[data-busca-situacao]');
+      var relogio = null;
+      var pedidoAtual = 0;
+
+      function dizer(texto) {
+        if (situacao) situacao.textContent = texto;
+      }
+
+      function montarOpcao(cliente) {
+        var opcao = document.createElement('option');
+        opcao.value = String(cliente.id);
+        var apelido = cliente.apelido && cliente.apelido !== cliente.titulo ? ' (' + cliente.apelido + ')' : '';
+        var local = cliente.local ? ' · ' + cliente.local : '';
+        var marca = cliente.situacao && cliente.situacao !== 'Ativa' ? ' · ' + cliente.situacao : '';
+        opcao.textContent = cliente.codigo + ' — ' + cliente.titulo + apelido + local + marca;
+        opcao.dataset.razao = cliente.titulo;
+        opcao.dataset.cnpj = cliente.cnpj || '—';
+        opcao.dataset.local = cliente.local || '—';
+        opcao.dataset.responsavel = cliente.responsavel || '—';
+        opcao.dataset.telefone = cliente.telefone || '—';
+        opcao.dataset.email = cliente.email || '—';
+        opcao.dataset.ficha = '/clientes/' + cliente.id;
+        return opcao;
+      }
+
+      function preencher(dados, termo) {
+        // A empresa já escolhida não some da lista enquanto se procura outra.
+        var escolhida = select.options[select.selectedIndex];
+        var manter = escolhida && escolhida.value ? escolhida.cloneNode(true) : null;
+
+        select.innerHTML = '';
+        var vazia = document.createElement('option');
+        vazia.value = '';
+        vazia.textContent = 'Selecione…';
+        select.appendChild(vazia);
+
+        var jaTem = {};
+        if (manter) {
+          select.appendChild(manter);
+          jaTem[manter.value] = true;
+        }
+        dados.itens.forEach(function (cliente) {
+          if (jaTem[String(cliente.id)]) return;
+          select.appendChild(montarOpcao(cliente));
+        });
+
+        if (manter) select.value = manter.value;
+
+        // Com um único resultado, já deixa selecionado.
+        if (termo && dados.itens.length === 1) {
+          select.value = String(dados.itens[0].id);
+        }
+        select.dispatchEvent(new Event('change'));
+
+        if (!termo) {
+          dizer(dados.total + ' empresa(s) cadastrada(s). Digite para localizar.');
+        } else if (!dados.total) {
+          dizer('Nenhuma empresa encontrada para “' + termo + '”.');
+        } else if (dados.parcial) {
+          dizer(dados.total + ' encontradas — mostrando as ' + dados.itens.length + ' primeiras. Refine a busca.');
+        } else {
+          dizer(dados.total + ' empresa(s) encontrada(s).');
+        }
+      }
+
+      function procurar() {
+        var termo = campo.value.trim();
+        var meu = (pedidoAtual += 1);
+        fetch('/clientes/buscar?q=' + encodeURIComponent(termo), {
+          credentials: 'same-origin',
+          headers: { accept: 'application/json' },
+        })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (dados) {
+            // Resposta de uma digitação anterior não pode sobrescrever a atual.
+            if (!dados || meu !== pedidoAtual) return;
+            preencher(dados, termo);
+          })
+          .catch(function () {
+            dizer('Não consegui consultar o cadastro agora. Verifique a conexão e digite de novo.');
+          });
+      }
+
+      // Espera a digitação parar: uma consulta por palavra, não por tecla.
+      campo.addEventListener('input', function () {
+        if (relogio) clearTimeout(relogio);
+        relogio = setTimeout(procurar, 180);
+      });
+
+      // Enter na busca escolhe e não envia o formulário sem querer.
+      campo.addEventListener('keydown', function (evento) {
+        if (evento.key !== 'Enter') return;
+        evento.preventDefault();
+        if (relogio) clearTimeout(relogio);
+        procurar();
       });
     });
   }
@@ -201,6 +311,7 @@
     ligarConfirmacoes(document);
     ligarFiltros(document);
     ligarFiltroDeLista(document);
+    ligarBuscaDeCliente(document);
     ligarResumoDeCliente(document);
     ligarTopo();
     ligarContadores();

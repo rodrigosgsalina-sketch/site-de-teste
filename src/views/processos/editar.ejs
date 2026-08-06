@@ -33,7 +33,7 @@
       </div>
     </fieldset>
 
-    <%- include('../partials/seletor-cliente', { clientes: clientes, selecionado: processo.cliente_id }) %>
+    <%- include('../partials/seletor-cliente', { totalClientes: totalClientes, clienteAtual: clienteAtual, selecionado: processo.cliente_id }) %>
 
     <% if (!processo.cliente_id) { %>
       <div class="aviso aviso-alerta">

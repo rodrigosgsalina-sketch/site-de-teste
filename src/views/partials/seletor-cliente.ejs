@@ -1,51 +1,59 @@
 <%
 /* Seletor de cliente usado na abertura e na edição do processo.
-   Espera: clientes (lista) e selecionado (id atual, pode ser vazio). */
+
+   Espera: totalClientes (quantas empresas existem), clienteAtual (a empresa já
+   escolhida, ou null) e selecionado (id atual, pode ser vazio).
+
+   A lista NÃO vem pronta no HTML. Antes vinham as 945 empresas de uma vez, com
+   nove atributos cada: 676 KB por carregamento da tela. Agora a busca consulta
+   /clientes/buscar enquanto se digita e só as poucas empresas que casam viajam.
+   O <select> continua existindo — é ele que o formulário envia, e é dele que
+   vem a validação de campo obrigatório do próprio navegador. */
 const idSelecionado = selecionado === undefined || selecionado === null ? '' : String(selecionado);
+const atual = typeof clienteAtual !== 'undefined' ? clienteAtual : null;
+const total = typeof totalClientes === 'number' ? totalClientes : 0;
 %>
 <fieldset>
   <legend>Cliente</legend>
 
-  <% if (!clientes.length) { %>
+  <% if (!total) { %>
     <div class="aviso aviso-alerta">
       Nenhuma empresa cadastrada ainda. O processo é sempre aberto para um cliente do cadastro —
       <a href="/clientes">abra a aba Clientes</a> e cadastre (ou importe) as empresas antes de continuar.
     </div>
   <% } else { %>
-    <div class="linha-campos">
+    <div class="linha-campos" data-seletor-cliente>
       <div class="campo">
         <label for="busca_cliente">Buscar empresa</label>
-        <input type="search" id="busca_cliente" data-filtra-lista="cliente_id" autocomplete="off"
+        <input type="search" id="busca_cliente" data-busca-cliente="cliente_id" autocomplete="off"
                placeholder="Código, nome, CNPJ ou município">
-        <div class="dica">Filtra a lista ao lado enquanto você digita. <%= clientes.length %> empresa(s) cadastrada(s).</div>
+        <div class="dica" data-busca-situacao><%= total %> empresa(s) cadastrada(s). Digite para localizar.</div>
       </div>
       <div class="campo">
         <label for="cliente_id">Cliente <span class="obrig">*</span></label>
         <select id="cliente_id" name="cliente_id" required data-resumo-cliente="cliente-escolhido">
           <option value="">Selecione…</option>
-          <% clientes.forEach(function (c) {
-               const titulo = c.razao_social || c.nome;
-               const apelido = c.apelido && c.apelido !== titulo ? ` (${c.apelido})` : '';
-               const local = [c.municipio, c.uf].filter(Boolean).join('/');
-               const situacao = c.situacao && c.situacao !== 'Ativa' ? ` · ${c.situacao}` : '';
+          <% if (atual) {
+               const titulo = atual.razao_social || atual.nome;
+               const apelido = atual.apelido && atual.apelido !== titulo ? ` (${atual.apelido})` : '';
+               const local = [atual.municipio, atual.uf].filter(Boolean).join('/');
+               const situacao = atual.situacao && atual.situacao !== 'Ativa' ? ` · ${atual.situacao}` : '';
           %>
-            <option value="<%= c.id %>" <%= idSelecionado === String(c.id) ? 'selected' : '' %>
-                    data-busca="<%= [c.codigo, c.apelido, c.nome, c.razao_social, c.nome_fantasia, c.municipio, c.uf, c.cnpj_cpf].filter(Boolean).join(' ') %>"
-                    data-digitos="<%= String(c.cnpj_cpf || '').replace(/\D+/g, '') %>"
+            <option value="<%= atual.id %>" selected
                     data-razao="<%= titulo %>"
-                    data-cnpj="<%= c.cnpj_cpf || '—' %>"
+                    data-cnpj="<%= atual.cnpj_cpf || '—' %>"
                     data-local="<%= local || '—' %>"
-                    data-responsavel="<%= c.responsavel_legal || '—' %>"
-                    data-telefone="<%= c.telefone || '—' %>"
-                    data-email="<%= c.email || '—' %>"
-                    data-ficha="/clientes/<%= c.id %>"><%= c.codigo %> — <%= titulo %><%= apelido %><%= local ? ` · ${local}` : '' %><%= situacao %></option>
-          <% }) %>
+                    data-responsavel="<%= atual.responsavel_legal || '—' %>"
+                    data-telefone="<%= atual.telefone || '—' %>"
+                    data-email="<%= atual.email || '—' %>"
+                    data-ficha="/clientes/<%= atual.id %>"><%= atual.codigo %> — <%= titulo %><%= apelido %><%= local ? ` · ${local}` : '' %><%= situacao %></option>
+          <% } %>
         </select>
         <div class="dica">Os dados da empresa vêm do cadastro — não precisam ser digitados aqui.</div>
       </div>
     </div>
 
-    <div class="cliente-resumo" id="cliente-escolhido" hidden>
+    <div class="cliente-resumo" id="cliente-escolhido" <%= atual ? '' : 'hidden' %>>
       <div class="grade grade-4">
         <div><label>Razão social</label><div data-campo="razao">—</div></div>
         <div><label>CNPJ / CPF</label><div class="mono" data-campo="cnpj">—</div></div>
@@ -56,5 +64,11 @@ const idSelecionado = selecionado === undefined || selecionado === null ? '' : S
       </div>
       <a class="botao botao-secundario botao-pequeno" data-campo="ficha" href="#" target="_blank" rel="noopener">Ver ficha completa</a>
     </div>
+
+    <% if (idSelecionado && !atual) { %>
+      <div class="aviso aviso-alerta">
+        Este processo aponta para uma empresa que não está mais no cadastro. Escolha a empresa correta acima.
+      </div>
+    <% } %>
   <% } %>
 </fieldset>

@@ -11,6 +11,7 @@ const csrf = require('../lib/csrf');
 const db = require('../db');
 const acesso = require('../domain/acesso');
 const checklist = require('../domain/checklist');
+const clientes = require('../domain/clientes');
 const documentosDom = require('../domain/documentos');
 const historico = require('../domain/historico');
 const notificacoes = require('../domain/notificacoes');
@@ -63,17 +64,19 @@ function listasAuxiliares() {
   };
 }
 
-/** Clientes cadastrados, para o seletor da abertura/edição do processo. */
-function clientesParaSelecao() {
-  return db
-    .get()
-    .prepare(
-      `SELECT id, codigo, apelido, nome, razao_social, nome_fantasia, cnpj_cpf,
-              municipio, uf, telefone, email, responsavel_legal, situacao
-         FROM clientes
-        ORDER BY situacao <> 'Ativa', nome`
-    )
-    .all();
+/**
+ * O que o seletor de cliente precisa saber ao abrir a tela: quantas empresas
+ * existem (para o rótulo e para o estado "nenhuma cadastrada") e a ficha da
+ * empresa já escolhida, quando houver.
+ *
+ * A lista inteira NÃO vai mais no HTML — ela custava 676 KB por carregamento.
+ * O seletor consulta /clientes/buscar enquanto o usuário digita.
+ */
+function dadosDoSeletor(clienteId) {
+  return {
+    totalClientes: clientes.contarTodos(),
+    clienteAtual: clienteId ? clientes.obter(Number(clienteId)) || null : null,
+  };
 }
 
 /* ------------------------------------------------------------- Listagem */
@@ -106,7 +109,7 @@ router.get('/novo', (req, res) => {
     erro: null,
     valores: { data_abertura: new Date().toISOString().slice(0, 10) },
     prazoPadrao: parametros.num('PRAZO_PADRAO_PROCESSO_DIAS', 15),
-    clientes: clientesParaSelecao(),
+    ...dadosDoSeletor(null),
     ...listasAuxiliares(),
   });
 });
@@ -128,7 +131,7 @@ router.post('/', async (req, res, next) => {
         erro: err.message,
         valores: req.body,
         prazoPadrao: parametros.num('PRAZO_PADRAO_PROCESSO_DIAS', 15),
-        clientes: clientesParaSelecao(),
+        ...dadosDoSeletor(req.body.cliente_id),
         ...listasAuxiliares(),
       });
     }
@@ -195,7 +198,7 @@ router.get('/:id/editar', carregar, (req, res) => {
     titulo: `Editar ${req.processo.codigo}`,
     processo: req.processo,
     erro: null,
-    clientes: clientesParaSelecao(),
+    ...dadosDoSeletor(req.processo.cliente_id),
     ...listasAuxiliares(),
   });
 });
@@ -214,7 +217,7 @@ router.post('/:id/editar', carregar, (req, res, next) => {
         titulo: `Editar ${req.processo.codigo}`,
         processo: { ...req.processo, ...req.body },
         erro: err.message,
-        clientes: clientesParaSelecao(),
+        ...dadosDoSeletor(req.body.cliente_id || req.processo.cliente_id),
         ...listasAuxiliares(),
       });
     }

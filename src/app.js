@@ -10,6 +10,7 @@ const config = require('./config');
 const db = require('./db');
 const datas = require('./lib/datas');
 const csrf = require('./lib/csrf');
+const compressao = require('./lib/compressao');
 const seguranca = require('./lib/seguranca');
 const acesso = require('./domain/acesso');
 const avisosDom = require('./domain/avisos');
@@ -29,10 +30,25 @@ app.set('views', path.join(__dirname, 'views'));
 
 app.use(seguranca.exigirHttps);
 app.use(seguranca.cabecalhos);
+app.use(compressao);
 
 app.use(express.urlencoded({ extended: false, limit: '1mb', parameterLimit: 2000 }));
 app.use(express.json({ limit: '1mb' }));
-app.use('/static', express.static(path.join(__dirname, 'public'), { maxAge: '1h', dotfiles: 'ignore', index: false }));
+
+/* Estáticos antes da sessão: pedir uma fonte ou o CSS não precisa tocar no
+   banco nem no cookie. As fontes e o Chart.js têm nome fixo e conteúdo que não
+   muda; um ano de cache poupa uma revalidação por arquivo a cada acesso. */
+app.use(
+  '/static',
+  express.static(path.join(__dirname, 'public'), {
+    dotfiles: 'ignore',
+    index: false,
+    setHeaders(res, caminho) {
+      const eterno = /[\\/](fonts|vendor|img)[\\/]/.test(caminho) || /\.woff2?$/.test(caminho);
+      res.setHeader('Cache-Control', eterno ? 'public, max-age=31536000, immutable' : 'public, max-age=3600');
+    },
+  })
+);
 
 app.use(
   session({
@@ -84,6 +100,15 @@ function jsonSeguro(valor) {
     .replace(/\u2029/g, '\\u2029');
 }
 
+/** A requisição vai virar uma página HTML, ou é uma chamada de dados? */
+function pedeTela(req) {
+  if (req.xhr) return false;
+  const aceita = String(req.headers.accept || '');
+  if (aceita.includes('text/event-stream')) return false;
+  if (aceita.includes('application/json') && !aceita.includes('text/html')) return false;
+  return true;
+}
+
 /* Variáveis disponíveis em todas as views. */
 app.use((req, res, next) => {
   res.locals.jsonSeguro = jsonSeguro;
@@ -106,17 +131,20 @@ app.use((req, res, next) => {
   // A faixa no topo mostra os avisos que valem para o escritório inteiro
   // (processo concluído ou impedido). Os dirigidos aos setores do processo
   // chegam como notificação no canto da tela e ficam no mural em /avisos.
-  if (usuario) {
+  //
+  // Só quem vai desenhar uma tela precisa disso. Chamadas de JSON (dispensar
+  // aviso, buscar cliente, inscrever no push) e o canal de eventos não montam
+  // view nenhuma — antes elas pagavam duas consultas ao banco à toa, e são
+  // justamente as mais frequentes.
+  res.locals.avisos = [];
+  res.locals.avisosTotal = 0;
+  if (usuario && pedeTela(req)) {
     try {
       res.locals.avisos = avisosDom.naoLidos(usuario.id, 3, { escopo: 'todos' });
       res.locals.avisosTotal = avisosDom.contarNaoLidos(usuario.id);
     } catch (err) {
-      res.locals.avisos = [];
-      res.locals.avisosTotal = 0;
+      /* a falta da faixa não pode derrubar a página */
     }
-  } else {
-    res.locals.avisos = [];
-    res.locals.avisosTotal = 0;
   }
   next();
 });

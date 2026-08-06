@@ -78,6 +78,33 @@ router.get('/', (req, res) => {
 });
 
 /* -------------------------------------------------------------- cadastro */
+/* ------------------------------------------------------- busca (JSON) --
+   Alimenta o seletor de cliente da abertura/edição de processo. Consultar o
+   cadastro é liberado a todos os usuários, como na listagem. Fica antes de
+   "/:id" para não ser capturada por ela. */
+router.get('/buscar', (req, res) => {
+  const termo = String(req.query.q || '').trim();
+  const { itens, total, parcial } = clientes.buscarParaSelecao(termo, 20);
+
+  // Só o que o seletor mostra — nada do resto da ficha viaja à toa.
+  res.json({
+    total,
+    parcial,
+    itens: itens.map((c) => ({
+      id: c.id,
+      codigo: c.codigo,
+      titulo: c.razao_social || c.nome,
+      apelido: c.apelido || '',
+      local: [c.municipio, c.uf].filter(Boolean).join('/'),
+      situacao: c.situacao || '',
+      cnpj: c.cnpj_cpf || '',
+      responsavel: c.responsavel_legal || '',
+      telefone: c.telefone || '',
+      email: c.email || '',
+    })),
+  });
+});
+
 router.get('/novo', exigirAdministrador, (req, res) => {
   res.render('clientes/formulario', {
     titulo: 'Novo cliente',

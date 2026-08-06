@@ -353,6 +353,20 @@ o último aviso que viu e informa ao (re)conectar (`?desde=` e o cabeçalho `Las
 servidor repõe o que passou nesse intervalo — a troca de página, a rede que oscilou, o servidor que
 reiniciou. O cartão reposto vem marcado como “enquanto você navegava”.
 
+#### Uma conexão por navegador, não uma por aba
+
+O canal é uma conexão HTTP que fica aberta. Em HTTP/1.1 o navegador só permite **seis conexões
+simultâneas por endereço**, somando todas as abas — e uma conexão presa conta como ocupada.
+
+Por isso as abas **elegem uma líder**: só ela abre `/eventos`; as outras recebem os avisos por
+`BroadcastChannel`, que não passa pela rede. O posto é renovado a cada 2 s num registro compartilhado
+(`localStorage`); se a aba líder é fechada, ela devolve o posto na hora, e se ela trava, outra assume
+depois de 7 s. A notificação do **sistema** sai só pela líder, para não aparecer repetida; o cartão
+dentro da página aparece em todas as abas, como antes.
+
+Em navegador sem `BroadcastChannel`, cada aba abre a sua conexão — funciona igual, só não divide.
+O servidor ainda assim limita a 4 canais por usuário e encerra o mais antigo ao passar disso.
+
 ### Permissão do navegador
 
 A permissão **nunca** é pedida no carregamento da página — isso faz o usuário negar por reflexo, e
@@ -496,6 +510,62 @@ comando (`PORT=3001 npm start`).
 
 **Quero recomeçar do zero** — `npm run reset && npm run seed` apaga o banco e os anexos e recarrega
 o modelo da planilha.
+
+## Desempenho
+
+Depois de algumas telas, a plataforma travava. A causa era uma só, e mensurável.
+
+### O que estava acontecendo
+
+**Cada aba segurava uma conexão aberta em `/eventos`** (o canal de avisos). Em HTTP/1.1 o navegador
+permite **seis conexões simultâneas por endereço**, contando todas as abas juntas. Na sexta aba, as
+seis vagas estavam ocupadas por canais de aviso e **nenhuma requisição nova conseguia começar**: a
+tela seguinte ficava esperando uma vaga que não vinha.
+
+Medido antes da correção, abrindo uma aba de cada vez e cronometrando a tela seguinte:
+
+| Abas abertas | Carregar `/processos` |
+|---|---|
+| 1 a 5 | 48–67 ms |
+| **6 em diante** | **não carrega** (12 s sem resposta) |
+
+Junto disso havia peso desnecessário: a tela **Abrir processo** trazia as 945 empresas do cadastro
+dentro do HTML, com nove atributos cada — **676 KB por carregamento**, em toda abertura e em todo
+erro de validação. E nada trafegava comprimido.
+
+### O que foi feito
+
+| Mudança | Efeito |
+|---|---|
+| **Uma conexão para todas as abas** — as abas elegem uma líder por `BroadcastChannel` (veja "Avisos em tempo real") | de 6 vagas ocupadas para 1, com qualquer número de abas |
+| **Seletor de cliente por busca** — `/clientes/buscar` devolve até 20 empresas do que foi digitado, em vez de mandar o cadastro inteiro | `/processos/novo`: 676 KB → 12,5 KB de HTML |
+| **Compressão gzip** (`src/lib/compressao.js`, com o zlib do próprio Node) | HTML, CSS, JS e JSON encolhem 70–90% |
+| **Cache longo nos arquivos de nome fixo** (fontes, Chart.js, ícones) | um ano, `immutable` — deixam de ser revalidados a cada acesso |
+| **Consulta de avisos só em quem desenha tela** | chamadas de JSON e o canal de eventos pararam de pagar duas consultas ao banco à toa |
+| **Estado inicial do canal por conexão** | conectar uma aba não repõe avisos nas outras |
+
+### Resultado medido
+
+Mesmas telas, mesmos dados, agora com gzip:
+
+| Tela | Antes | Agora | |
+|---|---|---|---|
+| Minha fila | 25,9 KB | 3,3 KB | −87% |
+| Processos | 13,2 KB | 3,1 KB | −77% |
+| Clientes | 64,0 KB | 7,9 KB | −88% |
+| Avisos | 10,3 KB | 2,5 KB | −75% |
+| **Abrir processo** | **675,9 KB** | **3,3 KB** | **−100%** |
+| Dashboard | 9,9 KB | 2,9 KB | −71% |
+| **as seis juntas** | **799 KB** | **23 KB** | **−97%** |
+
+E com nove abas abertas ao mesmo tempo, `/processos` carrega em 54–74 ms — antes, a partir da sexta,
+não carregava.
+
+O backup completo (1,3 MB de JSON) viaja em 159 KB. Duas coisas ficam **fora** da compressão de
+propósito: o canal `text/event-stream`, porque comprimir um fluxo aberto significaria segurar os
+avisos num buffer, e o que já nasce comprimido (fontes woff2, PDF, imagens).
+
+Os testes em `tests/desempenho.test.js` guardam cada um desses pontos.
 
 ## Segurança e publicação na internet
 

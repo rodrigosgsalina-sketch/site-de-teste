@@ -43,10 +43,12 @@ router.get('/', (req, res) => {
   });
 
   try {
-    // Primeiro quadro: estado atual, para a tela acertar o contador.
-    eventos.enviarPara(usuario.id, 'conectado', {
+    // Primeiro quadro: estado atual, para a tela acertar o contador. Vai só por
+    // esta conexão — as outras abas do usuário já têm o seu estado.
+    const naoLidos = avisosDom.contarNaoLidos(usuario.id);
+    eventos.enviarNesta(res, 'conectado', {
       usuario: usuario.nome,
-      naoLidos: avisosDom.contarNaoLidos(usuario.id),
+      naoLidos,
       // Marco de onde a tela deve continuar a partir da próxima navegação.
       ultimoAviso: avisosDom.ultimoIdVisivel(usuario.id),
       em: new Date().toISOString(),
@@ -58,12 +60,7 @@ router.get('/', (req, res) => {
     const desde = ultimoVisto(req);
     const perdidos = desde > 0 ? avisosDom.pendentesDesde(usuario.id, desde) : [];
     for (const aviso of perdidos) {
-      eventos.enviarPara(
-        usuario.id,
-        'aviso',
-        { ...aviso, naoLidos: avisosDom.contarNaoLidos(usuario.id), atrasado: true },
-        aviso.id
-      );
+      eventos.enviarNesta(res, 'aviso', { ...aviso, naoLidos, atrasado: true }, aviso.id);
     }
     if (perdidos.length) {
       registro.notificacao('reposição na reconexão', {

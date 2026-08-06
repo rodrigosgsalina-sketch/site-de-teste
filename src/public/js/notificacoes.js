@@ -132,7 +132,11 @@
         return r.ok ? r.json().catch(function () { return null; }) : null;
       })
       .then(function (dados) {
-        if (dados && typeof dados.naoLidos === 'number') atualizarContador(dados.naoLidos);
+        if (dados && typeof dados.naoLidos === 'number') {
+          atualizarContador(dados.naoLidos);
+          // As outras abas acertam o contador sem precisar recarregar.
+          espalhar({ tipo: 'lido', naoLidos: dados.naoLidos });
+        }
       })
       .catch(function () {
         /* sem rede: o aviso continua no mural, nada se perde */
@@ -281,7 +285,8 @@
     while (abertas.length > MAXIMO_NA_TELA) fechar(abertas[0]);
     log('cartão exibido na tela', aviso.id);
 
-    mostrarNoSistema(aviso);
+    // A notificação do sistema fica a cargo de quem segura a conexão (ver
+    // "canal SSE" abaixo): assim ela não sai repetida em cada aba aberta.
   }
 
   /* ------------------------------------------------------------- permissão */
@@ -538,9 +543,125 @@
       });
   }
 
-  /* ------------------------------------------------------------ canal SSE */
+  /* ------------------------------------------------------------ canal SSE
 
-  function conectar() {
+     UMA conexão por navegador, não uma por aba.
+
+     O canal SSE é uma conexão HTTP que fica aberta. Em HTTP/1.1 o navegador
+     permite apenas SEIS conexões simultâneas por endereço — e esse limite vale
+     para o navegador inteiro, somando todas as abas. Com uma conexão por aba, a
+     sexta aba consumia a última vaga e a plataforma parava de carregar: as
+     telas seguintes ficavam esperando uma vaga que não vinha.
+
+     Agora as abas elegem uma líder. Só ela abre `/eventos`; as demais recebem
+     os avisos por `BroadcastChannel`, que não usa rede. Sobram cinco vagas
+     livres, tenha o usuário quantas abas tiver. Se a aba líder fecha ou trava,
+     outra assume em poucos segundos.
+
+     Sem `BroadcastChannel` (navegador antigo), cada aba abre a sua conexão,
+     como antes — nada deixa de funcionar. */
+
+  var NOME_DO_CANAL = 'jsgrilo.avisos';
+  var CHAVE_LIDER = 'jsgrilo.avisos.lider';
+  var RENOVAR_MS = 2000; // de quanto em quanto a líder renova o posto
+  var ABANDONO_MS = 7000; // sem renovar por este tempo, outra aba assume
+
+  var minhaEtiqueta = String(Date.now()) + '-' + Math.random().toString(36).slice(2, 8);
+  var canal = null;
+  var fonte = null;
+  var souLider = false;
+  var desdeQuandoLidero = 0;
+  var relogioLideranca = null;
+
+  function suportaCanal() {
+    return typeof window.BroadcastChannel === 'function';
+  }
+
+  /** Quem é a líder agora, segundo o localStorage (compartilhado entre abas). */
+  function liderancaAtual() {
+    try {
+      return JSON.parse(ler(CHAVE_LIDER) || 'null');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function anotarLideranca() {
+    desdeQuandoLidero = Date.now();
+    guardar(CHAVE_LIDER, JSON.stringify({ etiqueta: minhaEtiqueta, em: desdeQuandoLidero }));
+  }
+
+  function largarLideranca() {
+    if (!souLider) return;
+    souLider = false;
+    var atual = liderancaAtual();
+    // Só apaga se o posto ainda for meu: não atrapalha quem já assumiu.
+    if (atual && atual.etiqueta === minhaEtiqueta) guardar(CHAVE_LIDER, '');
+    fecharFonte();
+    log('liderança do canal devolvida', minhaEtiqueta);
+  }
+
+  function fecharFonte() {
+    if (!fonte) return;
+    try {
+      fonte.close();
+    } catch (_) {
+      /* já fechada */
+    }
+    fonte = null;
+  }
+
+  /** Assume o canal se ninguém o estiver segurando (ou se quem segurava sumiu). */
+  function conferirLideranca() {
+    if (!suportaCanal()) return; // sem canal entre abas, cada uma cuida da sua
+    var atual = liderancaAtual();
+    var vago = !atual || !atual.em || Date.now() - atual.em > ABANDONO_MS;
+
+    if (souLider) {
+      // Outra aba assumiu enquanto esta estava congelada em segundo plano.
+      if (atual && atual.etiqueta !== minhaEtiqueta && atual.em > desdeQuandoLidero) {
+        souLider = false;
+        fecharFonte();
+        log('outra aba assumiu o canal', atual.etiqueta);
+        return;
+      }
+      anotarLideranca();
+      if (!fonte) abrirFonte();
+      return;
+    }
+
+    if (vago) {
+      souLider = true;
+      anotarLideranca();
+      abrirFonte();
+      if (canal) canal.postMessage({ tipo: 'lider', etiqueta: minhaEtiqueta, em: desdeQuandoLidero });
+      log('esta aba assumiu o canal', minhaEtiqueta);
+    }
+  }
+
+  /** Repassa o que chegou do servidor para as outras abas. */
+  function espalhar(mensagem) {
+    if (canal) {
+      try {
+        canal.postMessage(mensagem);
+      } catch (_) {
+        /* aba fechando */
+      }
+    }
+  }
+
+  function tratarConectado(dados) {
+    atualizarContador(dados.naoLidos);
+    // Primeira visita neste navegador: marca o ponto de partida para não
+    // despejar de uma vez tudo o que já estava acumulado no mural.
+    if (ler(CHAVES.ultimoId) === null && typeof dados.ultimoAviso === 'number') {
+      guardar(CHAVES.ultimoId, dados.ultimoAviso);
+    }
+    log('canal conectado', dados.usuario + ' · ' + dados.naoLidos + ' não lido(s)');
+  }
+
+  function abrirFonte() {
+    if (fonte) return;
     if (!('EventSource' in window)) {
       log('EventSource indisponível', 'sem tempo real neste navegador');
       return;
@@ -548,21 +669,17 @@
     // `desde` cobre o intervalo entre uma tela e outra: o servidor repõe o que
     // aconteceu enquanto a página anterior estava sendo trocada.
     var desde = Number(ler(CHAVES.ultimoId) || 0);
-    var fonte = new EventSource('/eventos?desde=' + desde, { withCredentials: true });
+    fonte = new EventSource('/eventos?desde=' + desde, { withCredentials: true });
 
     fonte.addEventListener('conectado', function (evento) {
+      var dados;
       try {
-        var dados = JSON.parse(evento.data);
-        atualizarContador(dados.naoLidos);
-        // Primeira visita neste navegador: marca o ponto de partida para não
-        // despejar de uma vez tudo o que já estava acumulado no mural.
-        if (ler(CHAVES.ultimoId) === null && typeof dados.ultimoAviso === 'number') {
-          guardar(CHAVES.ultimoId, dados.ultimoAviso);
-        }
-        log('canal conectado', dados.usuario + ' · ' + dados.naoLidos + ' não lido(s)');
+        dados = JSON.parse(evento.data);
       } catch (_) {
-        /* quadro malformado: ignora */
+        return; // quadro malformado: ignora
       }
+      tratarConectado(dados);
+      espalhar({ tipo: 'conectado', dados: dados });
     });
 
     fonte.addEventListener('aviso', function (evento) {
@@ -575,15 +692,78 @@
       }
       atualizarContador(aviso.naoLidos);
       mostrar(aviso);
+      // A notificação do sistema sai só daqui: as outras abas mostram o cartão,
+      // mas não repetem o alerta do sistema operacional.
+      mostrarNoSistema(aviso);
+      espalhar({ tipo: 'aviso', aviso: aviso });
     });
 
     fonte.addEventListener('open', function () {
-      log('canal aberto', '/eventos');
+      log('canal aberto', '/eventos (uma conexão para todas as abas)');
     });
 
     // O EventSource reabre sozinho (o servidor manda o intervalo em `retry`).
     fonte.addEventListener('error', function () {
       log('canal caiu', 'reconectando — nada se perde, o servidor repõe');
+    });
+  }
+
+  function ouvirOutrasAbas() {
+    canal = new window.BroadcastChannel(NOME_DO_CANAL);
+    canal.addEventListener('message', function (evento) {
+      var mensagem = evento.data || {};
+
+      if (mensagem.tipo === 'aviso') {
+        atualizarContador(mensagem.aviso && mensagem.aviso.naoLidos);
+        mostrar(mensagem.aviso);
+        return;
+      }
+      if (mensagem.tipo === 'conectado') {
+        tratarConectado(mensagem.dados || {});
+        return;
+      }
+      if (mensagem.tipo === 'lido') {
+        atualizarContador(mensagem.naoLidos);
+        return;
+      }
+      // Outra aba assumiu o canal: esta solta a conexão na hora, sem esperar o
+      // prazo de abandono.
+      if (mensagem.tipo === 'lider' && mensagem.etiqueta !== minhaEtiqueta) {
+        if (souLider && mensagem.em > desdeQuandoLidero) {
+          souLider = false;
+          fecharFonte();
+          log('cedi o canal para outra aba', mensagem.etiqueta);
+        }
+      }
+    });
+  }
+
+  function conectar() {
+    if (!suportaCanal()) {
+      // Navegador sem BroadcastChannel: volta ao comportamento de uma conexão
+      // por aba. Funciona igual; só não divide a conexão.
+      log('BroadcastChannel indisponível', 'cada aba abre a sua conexão');
+      souLider = true;
+      abrirFonte();
+      return;
+    }
+
+    ouvirOutrasAbas();
+    conferirLideranca();
+    relogioLideranca = setInterval(conferirLideranca, RENOVAR_MS);
+
+    // Sair da página devolve o posto imediatamente: a próxima aba assume sem
+    // esperar, e a conexão some da conta do navegador na hora.
+    window.addEventListener('pagehide', function () {
+      if (relogioLideranca) clearInterval(relogioLideranca);
+      largarLideranca();
+    });
+
+    // Página restaurada do cache de voltar/avançar: reassume se couber.
+    window.addEventListener('pageshow', function (evento) {
+      if (!evento.persisted) return;
+      if (!relogioLideranca) relogioLideranca = setInterval(conferirLideranca, RENOVAR_MS);
+      conferirLideranca();
     });
   }
 
