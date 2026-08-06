@@ -148,6 +148,8 @@ src/
     webpush.js           Web Push (VAPID + aes128gcm) com o crypto do Node
     registro.js          log de diagnóstico das notificações
     session-store.js     sessões no mesmo SQLite da aplicação
+    compressao.js        gzip nas respostas de texto (o canal de avisos fica fora)
+    estaticos.js         versão no endereço do CSS/JS: atualização chega sem limpar cache
     datas.js, pdf.js     utilidades de data e geração de PDF
   domain/                regras de negócio (testáveis, sem Express)
     processos.js         criação, numeração, motor de status, conclusão, prazos
@@ -381,15 +383,21 @@ de áudio: um pedido de rede a menos, nada para baixar e nada para manter em cac
 | Notificação **não ativada** (ou negada) | o toque da plataforma |
 | Som desligado no mural | nada — o cartão e o contador continuam normais |
 
-**A regra do navegador:** áudio só toca depois que a pessoa interagiu com a página pelo menos uma
-vez. Não há como contornar, e nem se deve — é o que impede um site de gritar ao abrir. O que a
-plataforma faz é aproveitar o **primeiro clique, em qualquer tela**, para liberar o áudio em
-silêncio. Depois disso o toque funciona inclusive com a aba em segundo plano.
+**A regra do navegador, e o limite dela:** áudio só toca depois que a pessoa **clicou naquela
+tela**. Não há como contornar, e nem se deve — é o que impede um site de gritar ao abrir. Duas
+consequências práticas:
 
-Em **Avisos** há um interruptor (**"Tocar um som quando chegar aviso"**, ligado por padrão) e um
-botão **"Testar som"**. O botão serve de atalho: além de deixar a pessoa ouvir, o clique nele já é
-o gesto que libera o áudio. Se o navegador ainda estiver bloqueando, o botão diz isso em vez de
-fingir que tocou. O ajuste vale por computador (fica no `localStorage`).
+- O clique que abre uma tela acontece na tela **anterior**. Para o navegador, a tela nova é um
+  documento novo, sem clique nenhum — ela começa muda até a pessoa clicar em algo ali.
+- Por isso o caminho garantido para ouvir o alerta com a plataforma em segundo plano é **ativar as
+  notificações do navegador**: aí quem toca é o sistema operacional, independente de clique.
+
+Em **Avisos** há um interruptor (**"Tocar um som quando chegar aviso"**, ligado por padrão), um
+botão **"Testar som"** e uma **linha de estado** que diz, na hora, se o navegador já liberou o áudio
+daquela aba — verde para "Som liberado nesta aba", âmbar para "o navegador libera o som depois do
+seu primeiro clique em cada tela". Sem essa linha o silêncio parecia defeito da plataforma. O botão
+serve de atalho: o clique nele já é o gesto que libera o áudio, e ele diz se o navegador recusou em
+vez de fingir que tocou. O ajuste vale por computador (fica no `localStorage`).
 
 **Com várias abas, toca uma vez só.** Quem decide é a aba que segura a conexão: ela toca, e se o
 áudio dela ainda não estiver liberado, pergunta quem consegue e **nomeia** a primeira que responder.
@@ -570,7 +578,7 @@ erro de validação. E nada trafegava comprimido.
 | **Uma conexão para todas as abas** — as abas elegem uma líder por `BroadcastChannel` (veja "Avisos em tempo real") | de 6 vagas ocupadas para 1, com qualquer número de abas |
 | **Seletor de cliente por busca** — `/clientes/buscar` devolve até 20 empresas do que foi digitado, em vez de mandar o cadastro inteiro | `/processos/novo`: 676 KB → 12,5 KB de HTML |
 | **Compressão gzip** (`src/lib/compressao.js`, com o zlib do próprio Node) | HTML, CSS, JS e JSON encolhem 70–90% |
-| **Cache longo nos arquivos de nome fixo** (fontes, Chart.js, ícones) | um ano, `immutable` — deixam de ser revalidados a cada acesso |
+| **Endereço versionado nos estáticos** (`app.css?v=6a91e6c7`) | um ano de cache, `immutable`, e a atualização chega na hora — endereço novo é arquivo novo |
 | **Consulta de avisos só em quem desenha tela** | chamadas de JSON e o canal de eventos pararam de pagar duas consultas ao banco à toa |
 | **Estado inicial do canal por conexão** | conectar uma aba não repõe avisos nas outras |
 

@@ -364,6 +364,36 @@ test('o som é gerado no navegador, sem arquivo de áudio para baixar', () => {
   assert.match(script, /if \(!mostrarNoSistema\(aviso\)\) anunciar\(aviso\);/);
 });
 
+test('o som espera a liberação do áudio antes de decidir que falhou', () => {
+  const script = fsp.readFileSync(caminhos.join(__dirname, '..', 'src', 'public', 'js', 'notificacoes.js'), 'utf8');
+
+  // `resume()` é assíncrono. A primeira versão conferia o estado na linha
+  // seguinte — que ainda era "suspended" — e o botão "Testar som" nunca tocava.
+  const corpo = script.slice(script.indexOf('function tocar('), script.indexOf('function anunciar('));
+  assert.ok(
+    !/resume\(\);[\s\S]{0,200}state === 'running'/.test(corpo),
+    'conferir o estado logo depois de resume() volta a quebrar o primeiro clique'
+  );
+  assert.match(corpo, /resume\(\)/);
+  assert.match(corpo, /\.then\(/, 'a nota só pode sair depois de a liberação terminar');
+  assert.match(corpo, /return Promise\.resolve\(/, 'tocar() responde uma promessa');
+
+  // E quem chama precisa tratar a promessa, não o valor.
+  assert.match(script, /tocar\(\)\.then\(function \(tocou\)/);
+  assert.match(script, /tocar\(true\)\.then\(function \(tocou\)/);
+});
+
+test('o mural mostra se o navegador já liberou o áudio', async () => {
+  const cliente = criarCliente(base);
+  await cliente.entrar('daiane', 'teste123');
+  const html = await (await cliente.get('/avisos')).text();
+
+  assert.match(html, /data-som-estado/, 'silêncio sem explicação é o que faz parecer defeito');
+  // A caixa vem marcada já no HTML: o som é ligado por padrão, e a tela precisa
+  // dizer a verdade mesmo antes de o JavaScript rodar.
+  assert.match(html, /data-som-avisos checked/);
+});
+
 test.after(() => {
   eventos.encerrarTodas();
   servidor.close();

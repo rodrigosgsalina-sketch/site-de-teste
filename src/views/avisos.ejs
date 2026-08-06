@@ -27,7 +27,10 @@
 
   <div class="som-avisos">
     <label class="som-avisos-chave">
-      <input type="checkbox" data-som-avisos>
+      <%# Marcada já no HTML: o som vem ligado por padrão, e assim a caixa diz a
+          verdade mesmo no instante antes de o JavaScript acertar o que está
+          gravado neste computador. %>
+      <input type="checkbox" data-som-avisos checked>
       <span>
         <strong>Tocar um som quando chegar aviso</strong>
         <span class="dica">
@@ -35,6 +38,7 @@
           computador. Se a notificação do navegador estiver ativada, o som é o do próprio sistema —
           não toca duas vezes.
         </span>
+        <span class="dica som-avisos-estado" data-som-estado></span>
       </span>
     </label>
     <button type="button" class="botao botao-secundario botao-pequeno" data-testar-som>Testar som</button>

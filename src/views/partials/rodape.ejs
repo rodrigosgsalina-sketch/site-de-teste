@@ -8,10 +8,10 @@
   </main>
 </div>
 <% } %>
-<script src="/static/js/app.js" nonce="<%= nonce %>" defer></script>
+<script src="<%= estatico('/js/app.js') %>" nonce="<%= nonce %>" defer></script>
 <% if (typeof usuario !== 'undefined' && usuario) { %>
   <%# Canal de avisos em tempo real (cartões no canto inferior direito). %>
-  <script src="/static/js/notificacoes.js" nonce="<%= nonce %>" defer></script>
+  <script src="<%= estatico('/js/notificacoes.js') %>" nonce="<%= nonce %>" defer></script>
 <% } %>
 </body>
 </html>

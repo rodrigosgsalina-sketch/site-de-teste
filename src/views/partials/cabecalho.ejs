@@ -6,9 +6,9 @@
   <title><%= titulo %> · JS Grilo Processos</title>
   <%# O token vai também no cabeçalho para as ações feitas por JavaScript (dispensar aviso). %>
   <meta name="csrf-token" content="<%= csrfToken %>">
-  <link rel="preload" as="font" type="font/woff2" href="/static/fonts/manrope-latin-wght-normal.woff2" crossorigin>
-  <link rel="preload" as="font" type="font/woff2" href="/static/fonts/ibm-plex-sans-latin-wght-normal.woff2" crossorigin>
-  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="preload" as="font" type="font/woff2" href="<%= estatico('/fonts/manrope-latin-wght-normal.woff2') %>" crossorigin>
+  <link rel="preload" as="font" type="font/woff2" href="<%= estatico('/fonts/ibm-plex-sans-latin-wght-normal.woff2') %>" crossorigin>
+  <link rel="stylesheet" href="<%= estatico('/css/app.css') %>">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2312395b'/><text x='16' y='22' font-size='16' font-family='sans-serif' fill='white' text-anchor='middle'>JS</text></svg>">
 </head>
 <body data-avisos-debug="<%= typeof debugAvisos !== 'undefined' && debugAvisos ? '1' : '' %>">

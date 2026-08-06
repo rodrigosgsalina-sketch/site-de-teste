@@ -454,6 +454,12 @@ table.tabela td.mono { white-space: nowrap; }
 .som-avisos-chave input { margin-top: .2rem; flex-shrink: 0; }
 .som-avisos-chave strong { display: block; font-weight: 600; }
 .som-avisos-chave .dica { display: block; margin-top: .2rem; }
+.som-avisos-estado:not(:empty) {
+  margin-top: .3rem;
+  color: var(--ambar);
+  font-weight: 500;
+}
+.som-avisos-estado.som-avisos-liberado { color: var(--verde); }
 
 /* ------------------------------------------------- notificações em tempo real */
 /* Cartões que surgem no canto inferior direito quando um processo é aberto,

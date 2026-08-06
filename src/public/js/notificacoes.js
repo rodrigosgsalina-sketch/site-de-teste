@@ -253,12 +253,8 @@
     log('som dos avisos', ligado ? 'ligado' : 'desligado');
   }
 
-  /**
-   * Devolve o contexto de áudio pronto para tocar, ou null. Criar o contexto é
-   * barato; o que o navegador controla é o estado dele ("running" só depois de
-   * um gesto do usuário).
-   */
-  function audioPronto() {
+  /** Cria o contexto de áudio (ou devolve o que já existe). Criar é barato. */
+  function contexto() {
     var Contexto = window.AudioContext || window.webkitAudioContext;
     if (!Contexto) return null;
     if (!contextoDeAudio) {
@@ -268,29 +264,11 @@
         return null;
       }
     }
-    if (contextoDeAudio.state === 'suspended') {
-      // Pode falhar sem gesto — a tentativa é barata e não atrapalha nada.
-      try {
-        contextoDeAudio.resume();
-      } catch (_) {
-        /* segue suspenso */
-      }
-    }
-    return contextoDeAudio.state === 'running' ? contextoDeAudio : null;
+    return contextoDeAudio;
   }
 
-  /** Toca o aviso. Devolve `false` quando o navegador ainda não liberou o áudio. */
-  function tocar(forcado) {
-    if (!forcado && !somLigado()) {
-      log('som ignorado', 'desligado nesta máquina');
-      return false;
-    }
-    var ctx = audioPronto();
-    if (!ctx) {
-      log('som adiado', 'o navegador ainda não liberou o áudio nesta aba');
-      return false;
-    }
-
+  /** Emite as duas notas. Só é chamada com o contexto já em "running". */
+  function emitir(ctx) {
     var inicio = ctx.currentTime + 0.01;
     NOTAS.forEach(function (nota) {
       var oscilador = ctx.createOscillator();
@@ -309,9 +287,60 @@
       oscilador.start(em);
       oscilador.stop(em + nota.duracao + 0.02);
     });
+  }
 
-    log('som tocado', forcado ? 'teste' : 'aviso');
-    return true;
+  /**
+   * Toca o aviso. Responde uma promessa: `true` se tocou, `false` se o
+   * navegador não liberou o áudio nesta aba.
+   *
+   * Por que promessa e não um simples true/false: `resume()` é ASSÍNCRONO. A
+   * primeira versão chamava `resume()` e conferia o estado na linha seguinte —
+   * que ainda era "suspended", porque a liberação não tinha terminado. Com
+   * isso o primeiro clique em "Testar som" nunca tocava, mesmo com tudo certo
+   * no navegador. Aqui a nota só é emitida depois de o contexto ficar pronto.
+   */
+  function tocar(forcado) {
+    if (!forcado && !somLigado()) {
+      log('som ignorado', 'desligado nesta máquina');
+      return Promise.resolve(false);
+    }
+
+    var ctx = contexto();
+    if (!ctx) {
+      log('som indisponível', 'este navegador não tem Web Audio');
+      return Promise.resolve(false);
+    }
+
+    if (ctx.state === 'running') {
+      emitir(ctx);
+      log('som tocado', forcado ? 'teste' : 'aviso');
+      return Promise.resolve(true);
+    }
+
+    // Suspenso: pede a liberação e toca quando ela chegar. Fora de um clique o
+    // navegador recusa — e aí a resposta é `false`, para outra aba assumir.
+    var pedido;
+    try {
+      pedido = ctx.resume();
+    } catch (erro) {
+      return Promise.resolve(false);
+    }
+    if (!pedido || typeof pedido.then !== 'function') pedido = Promise.resolve();
+
+    return pedido
+      .then(function () {
+        if (ctx.state !== 'running') {
+          log('som adiado', 'o navegador ainda não liberou o áudio nesta aba');
+          return false;
+        }
+        emitir(ctx);
+        log('som tocado', forcado ? 'teste (áudio recém-liberado)' : 'aviso');
+        return true;
+      })
+      .catch(function () {
+        log('som adiado', 'o navegador recusou liberar o áudio sem um clique');
+        return false;
+      });
   }
 
   /**
@@ -330,20 +359,44 @@
   function anunciar(aviso) {
     if (!aviso || !aviso.id || ultimoSomId === aviso.id) return;
     ultimoSomId = aviso.id;
-    if (tocar()) return;
-    somPendente = aviso.id;
-    espalhar({ tipo: 'quem-pode-tocar', id: aviso.id });
+    tocar().then(function (tocou) {
+      if (tocou) return;
+      somPendente = aviso.id;
+      espalhar({ tipo: 'quem-pode-tocar', id: aviso.id });
+    });
   }
 
-  /** Primeiro gesto em qualquer tela libera o áudio, sem tocar nada. */
+  /**
+   * Primeiro gesto em qualquer tela libera o áudio, sem tocar nada.
+   *
+   * É aqui que o navegador é convencido: um contexto criado (ou retomado)
+   * durante um clique nasce liberado e continua assim pelo resto da visita,
+   * inclusive com a aba em segundo plano.
+   */
   function liberarAudioNoPrimeiroGesto() {
     var eventos = ['pointerdown', 'keydown', 'touchstart'];
 
     function liberar() {
-      audioPronto();
       eventos.forEach(function (nome) {
         document.removeEventListener(nome, liberar, true);
       });
+      var ctx = contexto();
+      if (ctx && ctx.state === 'suspended') {
+        try {
+          ctx.resume().then(
+            function () {
+              log('áudio liberado', 'pelo primeiro clique da visita');
+              atualizarEstadoDoSom();
+            },
+            function () { /* o navegador decide; sem drama */ }
+          );
+        } catch (_) {
+          /* segue suspenso */
+        }
+      } else if (ctx) {
+        log('áudio já liberado', ctx.state);
+        atualizarEstadoDoSom();
+      }
     }
 
     eventos.forEach(function (nome) {
@@ -592,6 +645,37 @@
     atualizarBotoes();
   }
 
+  /**
+   * Diz, na tela, se o navegador já liberou o áudio desta aba.
+   *
+   * Sem isso o silêncio fica sem explicação: a pessoa liga o interruptor, não
+   * ouve nada e conclui que a plataforma está quebrada — quando na verdade o
+   * navegador está esperando um clique nesta tela. Trocar de tela zera essa
+   * liberação, porque para o navegador cada tela é um documento novo.
+   */
+  function atualizarEstadoDoSom() {
+    var alvos = document.querySelectorAll('[data-som-estado]');
+    if (!alvos.length) return;
+
+    var Contexto = window.AudioContext || window.webkitAudioContext;
+    var liberado = contextoDeAudio && contextoDeAudio.state === 'running';
+    var texto;
+    if (!Contexto) {
+      texto = 'Este navegador não reproduz som gerado pela plataforma. Ative as notificações do navegador para ouvir o alerta do sistema.';
+    } else if (liberado) {
+      texto = 'Som liberado nesta aba.';
+    } else {
+      texto =
+        'O navegador libera o som depois do seu primeiro clique em cada tela — clique em "Testar som". ' +
+        'Para ouvir o alerta mesmo sem clicar, ative as notificações do navegador acima.';
+    }
+
+    for (var i = 0; i < alvos.length; i += 1) {
+      alvos[i].textContent = texto;
+      alvos[i].className = 'dica som-avisos-estado' + (liberado ? ' som-avisos-liberado' : '');
+    }
+  }
+
   /** Interruptor e teste do som, na tela de Avisos. */
   function ligarControlesDeSom() {
     var interruptores = document.querySelectorAll('[data-som-avisos]');
@@ -604,21 +688,32 @@
           // toca, para a pessoa ouvir o que acabou de ligar.
           if (caixa.checked) tocar(true);
         });
+        // Se o navegador restaurar a página do cache de voltar/avançar, o
+        // estado marcado pode ser o de antes: reacerta pelo que está gravado.
+        window.addEventListener('pageshow', function () {
+          caixa.checked = somLigado();
+        });
       })(interruptores[i]);
     }
+
+    atualizarEstadoDoSom();
 
     var testes = document.querySelectorAll('[data-testar-som]');
     for (var j = 0; j < testes.length; j += 1) {
       (function (botao) {
         var textoOriginal = botao.textContent;
         botao.addEventListener('click', function () {
+          botao.disabled = true;
           // `true` ignora o interruptor: o teste tem que tocar mesmo desligado,
           // senão o botão parece quebrado.
-          var tocou = tocar(true);
-          botao.textContent = tocou ? 'Tocou agora' : 'Seu navegador bloqueou o áudio';
-          setTimeout(function () {
-            botao.textContent = textoOriginal;
-          }, 2500);
+          tocar(true).then(function (tocou) {
+            botao.textContent = tocou ? 'Tocou agora' : 'Seu navegador bloqueou o áudio';
+            botao.disabled = false;
+            atualizarEstadoDoSom();
+            setTimeout(function () {
+              botao.textContent = textoOriginal;
+            }, 2500);
+          });
         });
       })(testes[j]);
     }
@@ -903,7 +998,12 @@
       // não toca nada — só diz que o áudio desta aba está liberado.
       if (mensagem.tipo === 'quem-pode-tocar') {
         if (!somLigado() || ultimoSomId === mensagem.id) return;
-        if (audioPronto()) espalhar({ tipo: 'posso-tocar', etiqueta: minhaEtiqueta, id: mensagem.id });
+        var ctx = contexto();
+        // Só responde quem já está com o áudio liberado: pedir a liberação
+        // aqui não adiantaria — não há clique nenhum acontecendo.
+        if (ctx && ctx.state === 'running') {
+          espalhar({ tipo: 'posso-tocar', etiqueta: minhaEtiqueta, id: mensagem.id });
+        }
         return;
       }
       // Resposta chegando: a primeira ganha, as outras caem no `return` porque

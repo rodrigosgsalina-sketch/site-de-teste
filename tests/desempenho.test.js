@@ -220,11 +220,61 @@ test('arquivo grande comprimido chega inteiro (e chega ao fim)', async () => {
   assert.ok(Buffer.compare(devolta, original) === 0, 'o arquivo chegou corrompido');
 });
 
+/* ------------------------------------------------- versão dos estáticos */
+
+test('CSS e JavaScript saem com a versão no endereço', async () => {
+  const cliente = await autenticado();
+  const html = await (await cliente.get('/avisos')).text();
+
+  const semVersao = (html.match(/["']\/static\/[^"']+["']/g) || []).filter((u) => !u.includes('?v='));
+  assert.deepEqual(semVersao, [], `endereço estático sem versão: ${semVersao.join(', ')}`);
+  assert.match(html, /\/static\/js\/notificacoes\.js\?v=[a-f0-9]{8}/);
+  assert.match(html, /\/static\/css\/app\.css\?v=[a-f0-9]{8}/);
+});
+
+test('a versão muda quando o arquivo muda — é o que faz a atualização chegar', () => {
+  const estaticos = require('../src/lib/estaticos');
+  const arquivo = path.join(__dirname, '..', 'src', 'public', 'css', 'app.css');
+  const original = fs.readFileSync(arquivo);
+
+  const antes = estaticos.estatico('/css/app.css');
+  try {
+    fs.writeFileSync(arquivo, Buffer.concat([original, Buffer.from('\n/* teste */\n')]));
+    const depois = estaticos.estatico('/css/app.css');
+    assert.notEqual(
+      depois,
+      antes,
+      'sem endereço novo, o navegador segue com o arquivo antigo — foi assim que o botão do som ficou sem efeito'
+    );
+  } finally {
+    fs.writeFileSync(arquivo, original);
+  }
+
+  // Voltando ao conteúdo de antes, o endereço volta a ser o mesmo: quem já tem
+  // o arquivo guardado não precisa baixar de novo.
+  assert.equal(estaticos.estatico('/css/app.css'), antes);
+});
+
+test('só o endereço versionado é guardado por muito tempo', async () => {
+  const comVersao = await pedirCru('/static/css/app.css?v=abc12345', {});
+  const semVersao = await pedirCru('/static/css/app.css', {});
+
+  assert.match(String(comVersao.headers['cache-control']), /max-age=31536000/);
+  assert.match(String(comVersao.headers['cache-control']), /immutable/);
+  assert.match(
+    String(semVersao.headers['cache-control']),
+    /no-cache/,
+    'sem versão no endereço, o navegador tem que perguntar antes de reusar'
+  );
+});
+
 test('o que já nasce comprimido passa intacto', async () => {
-  const fonte = await pedirCru('/static/fonts/manrope-latin-wght-normal.woff2', { 'accept-encoding': 'gzip' });
+  const fonte = await pedirCru('/static/fonts/manrope-latin-wght-normal.woff2?v=1234abcd', {
+    'accept-encoding': 'gzip',
+  });
   if (fonte.status !== 200) return; // fonte ausente em instalação mínima
   assert.equal(fonte.headers['content-encoding'], undefined, 'passar gzip por cima de woff2 só gasta processador');
-  assert.match(String(fonte.headers['cache-control'] || ''), /immutable/, 'fonte tem nome fixo: pode ficar em cache');
+  assert.match(String(fonte.headers['cache-control'] || ''), /immutable/, 'endereço versionado pode ficar em cache');
 });
 
 test('o canal de avisos NUNCA é comprimido', async () => {

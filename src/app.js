@@ -11,6 +11,7 @@ const db = require('./db');
 const datas = require('./lib/datas');
 const csrf = require('./lib/csrf');
 const compressao = require('./lib/compressao');
+const estaticos = require('./lib/estaticos');
 const seguranca = require('./lib/seguranca');
 const acesso = require('./domain/acesso');
 const avisosDom = require('./domain/avisos');
@@ -28,6 +29,12 @@ if (config.trustProxy) app.set('trust proxy', config.trustProxy);
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
+/* Endereço versionado dos arquivos estáticos (ver src/lib/estaticos.js).
+   Fica em app.locals, e não em res.locals: assim vale em QUALQUER render,
+   inclusive na tela de erro montada antes dos middlewares de página — o CSRF
+   recusa uma escrita logo no começo da fila, e ali o helper precisa existir. */
+app.locals.estatico = estaticos.estatico;
+
 app.use(seguranca.exigirHttps);
 app.use(seguranca.cabecalhos);
 app.use(compressao);
@@ -36,16 +43,22 @@ app.use(express.urlencoded({ extended: false, limit: '1mb', parameterLimit: 2000
 app.use(express.json({ limit: '1mb' }));
 
 /* Estáticos antes da sessão: pedir uma fonte ou o CSS não precisa tocar no
-   banco nem no cookie. As fontes e o Chart.js têm nome fixo e conteúdo que não
-   muda; um ano de cache poupa uma revalidação por arquivo a cada acesso. */
+   banco nem no cookie.
+
+   O cache depende de o endereço trazer a versão do arquivo (`?v=`, ver
+   src/lib/estaticos.js). Com versão, o endereço muda sempre que o conteúdo
+   muda, então guardar por um ano é seguro. Sem versão — alguém que digitou o
+   caminho direto —, o navegador tem que perguntar antes de reusar: guardar por
+   uma hora era o que deixava a tela nova rodando com o JavaScript velho depois
+   de uma atualização. */
 app.use(
   '/static',
   express.static(path.join(__dirname, 'public'), {
     dotfiles: 'ignore',
     index: false,
-    setHeaders(res, caminho) {
-      const eterno = /[\\/](fonts|vendor|img)[\\/]/.test(caminho) || /\.woff2?$/.test(caminho);
-      res.setHeader('Cache-Control', eterno ? 'public, max-age=31536000, immutable' : 'public, max-age=3600');
+    setHeaders(res) {
+      const versionado = Boolean(res.req && res.req.query && res.req.query.v);
+      res.setHeader('Cache-Control', versionado ? 'public, max-age=31536000, immutable' : 'no-cache');
     },
   })
 );
