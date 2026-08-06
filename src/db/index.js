@@ -155,12 +155,29 @@ function migrarEscopoDeAvisos(conn) {
   console.log(`[migração] avisos ganharam escopo e novos tipos (${antigos.length} preservado(s)).`);
 }
 
+/**
+ * Subtipos de processo entraram depois. A coluna é opcional e nasce vazia: os
+ * processos já abertos continuam válidos, apenas sem subtipo — e passam a
+ * aceitar um na edição.
+ */
+function migrarSubtipoEmProcessos(conn) {
+  if (!tabelaExiste(conn, 'processos')) return;
+  if (colunas(conn, 'processos').includes('subtipo_processo_id')) return;
+
+  conn.exec('ALTER TABLE processos ADD COLUMN subtipo_processo_id INTEGER REFERENCES subtipos_processo (id);');
+  // eslint-disable-next-line no-console
+  console.log('[migração] coluna "subtipo_processo_id" criada em processos.');
+}
+
 function migrate(conn) {
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   migrarLoginDeUsuarios(conn);
   migrarClienteEmProcessos(conn);
   migrarEscopoDeAvisos(conn);
   conn.exec(schema);
+  // Depois do schema: a coluna aponta para subtipos_processo, que o schema
+  // acabou de criar.
+  migrarSubtipoEmProcessos(conn);
 }
 
 function get() {

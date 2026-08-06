@@ -10,6 +10,7 @@ const config = require('../config');
 const csrf = require('../lib/csrf');
 const db = require('../db');
 const backup = require('../domain/backup');
+const subtiposDom = require('../domain/subtipos');
 const historico = require('../domain/historico');
 const integracoes = require('../domain/integracoes');
 const notificacoes = require('../domain/notificacoes');
@@ -328,11 +329,61 @@ router.post('/usuarios/:id', (req, res, next) => {
 router.get('/tabelas', (req, res) => {
   const conn = db.get();
   res.render('admin/tabelas', {
-    titulo: 'Tipos, status e setores',
+    titulo: 'Tipos, subtipos, status e setores',
     tipos: conn.prepare('SELECT * FROM tipos_processo ORDER BY ordem, nome').all(),
+    subtipos: subtiposDom.listar(),
     status: conn.prepare('SELECT * FROM status_processo ORDER BY ordem').all(),
     setores: conn.prepare('SELECT * FROM setores ORDER BY ordem').all(),
   });
+});
+
+/* ------------------------------------------------------ Subtipos de processo */
+
+router.post('/tabelas/subtipos', (req, res, next) => {
+  try {
+    let mensagem;
+    if (req.body.id) {
+      const salvo = subtiposDom.atualizar(Number(req.body.id), { nome: req.body.nome, ativo: req.body.ativo });
+      mensagem = `Subtipo "${salvo.nome}" salvo.`;
+    } else {
+      const criado = subtiposDom.criar({ tipo_processo_id: req.body.tipo_processo_id, nome: req.body.nome });
+      mensagem = `Subtipo "${criado.nome}" criado em "${criado.tipo.nome}".`;
+    }
+    historico.registrar({
+      processoId: null,
+      acao: 'Subtipo de Processo Alterado',
+      usuario: req.session.usuario,
+      observacao: mensagem,
+    });
+    flash(req, 'sucesso', mensagem);
+    res.redirect('/admin/tabelas');
+  } catch (err) {
+    if (err instanceof ErroValidacao) {
+      flash(req, 'erro', err.message);
+      return res.redirect('/admin/tabelas');
+    }
+    next(err);
+  }
+});
+
+router.post('/tabelas/subtipos/:id/excluir', (req, res, next) => {
+  try {
+    const removido = subtiposDom.remover(Number(req.params.id));
+    historico.registrar({
+      processoId: null,
+      acao: 'Subtipo de Processo Excluído',
+      usuario: req.session.usuario,
+      observacao: removido.nome,
+    });
+    flash(req, 'sucesso', `Subtipo "${removido.nome}" excluído.`);
+    res.redirect('/admin/tabelas');
+  } catch (err) {
+    if (err instanceof ErroValidacao) {
+      flash(req, 'erro', err.message);
+      return res.redirect('/admin/tabelas');
+    }
+    next(err);
+  }
 });
 
 router.post('/tabelas/tipos', (req, res, next) => {

@@ -8,9 +8,19 @@ const { agoraISO, somarHoras } = require('../lib/datas');
 
 const STATUS_ITEM = { PENDENTE: 'Pendente', CONCLUIDO: 'Concluído', IMPEDIDO: 'Impedido' };
 
+/**
+ * Próximo número da sequência CHK-0001.
+ *
+ * Sai do MAIOR número já usado, não da contagem de linhas: contar volta atrás
+ * quando um processo é excluído, e os itens seguintes tentariam nascer com um
+ * código que ainda existe — o banco recusa, e a abertura do próximo processo
+ * falharia. O maior número só cresce, então o código nunca se repete.
+ */
 function proximoCodigoItem(conn) {
-  const row = conn.prepare("SELECT COUNT(*) AS total FROM checklist").get();
-  return row.total + 1;
+  const row = conn
+    .prepare("SELECT MAX(CAST(substr(codigo, 5) AS INTEGER)) AS maior FROM checklist WHERE codigo LIKE 'CHK-%'")
+    .get();
+  return (row && row.maior ? row.maior : 0) + 1;
 }
 
 /**

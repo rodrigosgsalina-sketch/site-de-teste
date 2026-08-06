@@ -12,6 +12,7 @@ const db = require('../db');
 const acesso = require('../domain/acesso');
 const checklist = require('../domain/checklist');
 const clientes = require('../domain/clientes');
+const subtipos = require('../domain/subtipos');
 const documentosDom = require('../domain/documentos');
 const historico = require('../domain/historico');
 const notificacoes = require('../domain/notificacoes');
@@ -109,6 +110,7 @@ router.get('/novo', (req, res) => {
     erro: null,
     valores: { data_abertura: new Date().toISOString().slice(0, 10) },
     prazoPadrao: parametros.num('PRAZO_PADRAO_PROCESSO_DIAS', 15),
+    subtiposPorTipo: subtipos.ativosPorTipo(),
     ...dadosDoSeletor(null),
     ...listasAuxiliares(),
   });
@@ -131,6 +133,7 @@ router.post('/', async (req, res, next) => {
         erro: err.message,
         valores: req.body,
         prazoPadrao: parametros.num('PRAZO_PADRAO_PROCESSO_DIAS', 15),
+        subtiposPorTipo: subtipos.ativosPorTipo(),
         ...dadosDoSeletor(req.body.cliente_id),
         ...listasAuxiliares(),
       });
@@ -198,6 +201,7 @@ router.get('/:id/editar', carregar, (req, res) => {
     titulo: `Editar ${req.processo.codigo}`,
     processo: req.processo,
     erro: null,
+    subtiposDoTipo: subtipos.doTipo(req.processo.tipo_processo_id),
     ...dadosDoSeletor(req.processo.cliente_id),
     ...listasAuxiliares(),
   });
@@ -217,6 +221,7 @@ router.post('/:id/editar', carregar, (req, res, next) => {
         titulo: `Editar ${req.processo.codigo}`,
         processo: { ...req.processo, ...req.body },
         erro: err.message,
+        subtiposDoTipo: subtipos.doTipo(req.processo.tipo_processo_id),
         ...dadosDoSeletor(req.body.cliente_id || req.processo.cliente_id),
         ...listasAuxiliares(),
       });
@@ -265,6 +270,50 @@ router.post('/:id/cancelar', carregar, (req, res, next) => {
     if (err instanceof ErroValidacao) {
       flash(req, 'erro', err.message);
       return res.redirect(`/processos/${req.processo.id}`);
+    }
+    next(err);
+  }
+});
+
+/**
+ * Exclusão definitiva — privativa do administrador.
+ *
+ * Some tudo do processo: checklist, anexos, histórico e avisos. Por isso não
+ * basta clicar: é preciso digitar o número do processo, do mesmo jeito que a
+ * restauração de backup pede a palavra "RESTAURAR". Quem quer só encerrar o
+ * trabalho usa "Cancelar processo", que mantém tudo legível.
+ */
+router.post('/:id/excluir', carregar, (req, res, next) => {
+  try {
+    if (!req.session.usuario || req.session.usuario.perfil !== 'Administrador') {
+      throw new ErroValidacao('Somente administradores podem excluir processos.');
+    }
+
+    const confirmacao = String(req.body.confirmacao || '').trim().toUpperCase();
+    if (confirmacao !== String(req.processo.codigo).toUpperCase()) {
+      throw new ErroValidacao(
+        `Para excluir, digite o número do processo (${req.processo.codigo}) no campo de confirmação.`
+      );
+    }
+
+    const { processo, perdidos, arquivosApagados } = processos.remover(
+      req.processo.id,
+      req.session.usuario,
+      req.body.motivo
+    );
+
+    flash(
+      req,
+      'sucesso',
+      `Processo ${processo.codigo} excluído: ${perdidos.checklist} item(ns) de checklist, ` +
+        `${perdidos.documentos} anexo(s) (${arquivosApagados} arquivo(s) em disco) e ` +
+        `${perdidos.historico} registro(s) de histórico foram removidos junto.`
+    );
+    res.redirect('/processos');
+  } catch (err) {
+    if (err instanceof ErroValidacao) {
+      flash(req, 'erro', err.message);
+      return res.redirect(`/processos/${req.params.id}`);
     }
     next(err);
   }

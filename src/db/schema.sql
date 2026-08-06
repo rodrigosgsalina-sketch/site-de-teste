@@ -24,6 +24,21 @@ CREATE TABLE IF NOT EXISTS tipos_processo (
   ordem INTEGER NOT NULL DEFAULT 0
 );
 
+-- --------------------------------------------------- SUBTIPOS_PROCESSO
+-- Detalhamento do tipo. "Alteração Contratual" pode ter "Mudança de endereço",
+-- "Entrada de sócio", "Alteração de capital" — a abertura mostra os subtipos do
+-- tipo escolhido. O nome é único dentro do tipo, não no sistema inteiro: dois
+-- tipos diferentes podem ter um subtipo com o mesmo nome.
+CREATE TABLE IF NOT EXISTS subtipos_processo (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  tipo_processo_id INTEGER NOT NULL REFERENCES tipos_processo (id) ON DELETE CASCADE,
+  nome             TEXT    NOT NULL,
+  ativo            INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1)),
+  ordem            INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (tipo_processo_id, nome)
+);
+CREATE INDEX IF NOT EXISTS idx_subtipos_tipo ON subtipos_processo (tipo_processo_id);
+
 -- ------------------------------------------------------ STATUS_PROCESSO
 CREATE TABLE IF NOT EXISTS status_processo (
   id     INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,6 +97,7 @@ CREATE TABLE IF NOT EXISTS processos (
   codigo                 TEXT    NOT NULL UNIQUE,          -- ID_PROCESSO (PR-2026-0001)
   data_abertura          TEXT    NOT NULL,                 -- ISO date
   tipo_processo_id       INTEGER NOT NULL REFERENCES tipos_processo (id),
+  subtipo_processo_id    INTEGER REFERENCES subtipos_processo (id),  -- opcional
   status_id              INTEGER NOT NULL REFERENCES status_processo (id),
   status_manual          INTEGER NOT NULL DEFAULT 0 CHECK (status_manual IN (0, 1)),
   etapa_atual            TEXT,

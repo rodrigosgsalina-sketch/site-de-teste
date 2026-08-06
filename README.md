@@ -163,6 +163,7 @@ src/
     dashboard.js         indicadores gerenciais
     usuarios.js          autenticação por ID de usuário e CRUD
     avisos.js            avisos em tempo real (quem recebe cada evento) e mural
+    subtipos.js          subtipos de processo (detalhamento do tipo)
     push.js              inscrições de push por navegador/aparelho
     ordem-setores.js     ordem de atendimento dos setores por tipo de processo
     clientes.js          cadastro das empresas atendidas
@@ -313,6 +314,45 @@ gravado. Só depois da confirmação a importação acontece.
 - as **observações internas** escritas na plataforma nunca são sobrescritas pela importação;
 - datas viram formato ISO e o capital social também é guardado como número, para ordenar e somar;
 - cada importação fica registrada na auditoria com o resultado.
+
+## Subtipos de processo
+
+O tipo diz **o que é** ("Alteração Contratual"); o subtipo diz **qual** — "Mudança de endereço",
+"Entrada de sócio", "Alteração de capital".
+
+- **Cadastro:** Administração → **Tipos e setores**, no cartão *Subtipos de processo*. Cada subtipo
+  pertence a um tipo, e o nome é único **dentro do tipo**: dois tipos podem ter um subtipo com o
+  mesmo nome, porque são coisas diferentes.
+- **Na abertura:** o campo aparece assim que o tipo é escolhido e mostra só os subtipos daquele
+  tipo. Tipo sem subtipo cadastrado **esconde o campo** — abre processo como sempre abriu.
+- **Opcional por decisão:** nenhum processo é obrigado a ter subtipo. Os processos abertos antes
+  desta versão continuam válidos, sem nenhum, e podem receber um na edição.
+- **Exclusão:** livre enquanto nenhum processo usa o subtipo. Depois disso a exclusão é **recusada**
+  — apagar deixaria esses processos sem o detalhe que alguém registrou, e sem como recuperar. O
+  caminho nesse caso é desmarcar **Ativo**: o subtipo some da abertura e continua legível em quem
+  já o usa. Apagar o **tipo** leva os subtipos dele junto.
+
+A lista de subtipos por tipo viaja junto com a tela de abertura (são poucas linhas), então trocar o
+tipo não custa uma ida ao servidor.
+
+## Excluir um processo
+
+Privativo do **administrador**, na tela do processo, em *Excluir este processo*.
+
+> **Cancelar** e **excluir** são coisas diferentes. Cancelar encerra o processo e mantém tudo
+> legível para todo mundo — é o que serve para trabalho que não vai adiante. Excluir apaga: somem o
+> checklist, os anexos (inclusive os arquivos em disco), o histórico e os avisos daquele processo.
+> Existe para o que não deveria ter sido aberto: engano de digitação, teste, duplicado.
+
+Três travas, porque não tem volta:
+
+1. **Perfil de administrador** — o bloco nem aparece para os demais, e a rota recusa quem tentar
+   por fora.
+2. **O número do processo digitado à mão** (`PR-2026-0007`), como a restauração de backup pede a
+   palavra `RESTAURAR`. Clicar sem digitar não faz nada.
+3. **Uma linha de auditoria que sobrevive** — ela é gravada *sem* processo vinculado, justamente
+   para não sair na cascata: fica registrado quem apagou, quando, qual era o número, de que cliente,
+   o motivo e quanto se perdeu junto (itens de checklist, anexos, registros de histórico e avisos).
 
 ## Avisos em tempo real
 

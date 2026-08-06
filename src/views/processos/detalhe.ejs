@@ -7,6 +7,7 @@
       <div>
         <span class="etiqueta <%= classeStatus(processo.status) %>"><%= processo.status %></span>
         <span class="etiqueta et-neutro"><%= processo.tipo_processo %></span>
+        <% if (processo.subtipo_processo) { %><span class="etiqueta et-neutro"><%= processo.subtipo_processo %></span><% } %>
         <% if (processo.etapa_atual) { %><span class="etiqueta et-neutro"><%= processo.etapa_atual %></span><% } %>
       </div>
     </div>
@@ -232,6 +233,33 @@
           <button class="botao botao-perigo">Cancelar processo</button>
         </form>
       <% } %>
+    <% } %>
+
+    <% if (ehAdmin) { %>
+      <hr style="border:0;border-top:1px solid var(--linha);margin:1rem 0">
+      <details class="excluir-processo">
+        <summary>Excluir este processo</summary>
+        <div class="aviso aviso-erro" style="margin:.7rem 0">
+          <strong>A exclusão não tem volta.</strong> Somem junto o checklist, os anexos, o histórico e os
+          avisos deste processo. Para apenas encerrar o trabalho, use <strong>Cancelar processo</strong>:
+          o processo continua legível para todo mundo.
+        </div>
+        <form method="post" action="/processos/<%= processo.id %>/excluir">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <div class="campo">
+            <label for="motivo-excluir">Motivo da exclusão</label>
+            <input type="text" id="motivo-excluir" name="motivo" placeholder="Ex.: aberto por engano, duplicado">
+          </div>
+          <div class="campo">
+            <label for="confirmacao-excluir">
+              Digite <strong class="mono"><%= processo.codigo %></strong> para confirmar <span class="obrig">*</span>
+            </label>
+            <input type="text" id="confirmacao-excluir" name="confirmacao" required autocomplete="off"
+                   placeholder="<%= processo.codigo %>">
+          </div>
+          <button class="botao botao-perigo">Excluir definitivamente</button>
+        </form>
+      </details>
     <% } %>
   </div>
 </div>

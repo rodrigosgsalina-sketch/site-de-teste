@@ -216,6 +216,55 @@
     });
   }
 
+  /* Subtipos que acompanham o tipo escolhido (data-subtipos-de="id-do-select").
+
+     A lista de subtipos por tipo vem junto com a tela (window.__subtiposPorTipo),
+     porque são poucas linhas: uma consulta ao servidor a cada troca de tipo
+     custaria mais do que mandar tudo de uma vez.
+
+     Tipo sem subtipo cadastrado esconde o campo — não adianta mostrar uma
+     lista vazia para a pessoa decidir o que fazer com ela. */
+  function ligarSubtipos(raiz) {
+    var porTipo = window.__subtiposPorTipo || {};
+
+    raiz.querySelectorAll('[data-subtipos-de]').forEach(function (select) {
+      var tipo = document.getElementById(select.dataset.subtiposDe);
+      if (!tipo) return;
+      var campo = select.closest('[data-campo-subtipo]') || select.parentNode;
+      // Guarda a escolha anterior para reaparecer quando o formulário volta com
+      // erro de validação.
+      var desejado = select.dataset.selecionado || '';
+
+      function montar() {
+        var lista = porTipo[String(tipo.value)] || [];
+        var anterior = select.value || desejado;
+
+        select.innerHTML = '';
+        var vazia = document.createElement('option');
+        vazia.value = '';
+        vazia.textContent = 'Selecione…';
+        select.appendChild(vazia);
+
+        lista.forEach(function (sub) {
+          var opcao = document.createElement('option');
+          opcao.value = String(sub.id);
+          opcao.textContent = sub.nome;
+          select.appendChild(opcao);
+        });
+
+        // Só restaura a escolha se ela pertencer ao tipo que está selecionado.
+        var cabe = lista.some(function (sub) { return String(sub.id) === String(anterior); });
+        select.value = cabe ? String(anterior) : '';
+        desejado = select.value;
+
+        campo.hidden = lista.length === 0;
+      }
+
+      tipo.addEventListener('change', montar);
+      montar();
+    });
+  }
+
   /* Mostra o resumo do cliente escolhido (data-resumo-cliente="id-do-painel"). */
   function ligarResumoDeCliente(raiz) {
     raiz.querySelectorAll('[data-resumo-cliente]').forEach(function (select) {
@@ -312,6 +361,7 @@
     ligarFiltros(document);
     ligarFiltroDeLista(document);
     ligarBuscaDeCliente(document);
+    ligarSubtipos(document);
     ligarResumoDeCliente(document);
     ligarTopo();
     ligarContadores();

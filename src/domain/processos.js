@@ -1,12 +1,16 @@
 'use strict';
 
+const fs = require('fs');
+
 const db = require('../db');
 const parametros = require('./parametros');
 const checklist = require('./checklist');
 const clientes = require('./clientes');
+const subtipos = require('./subtipos');
 const avisos = require('./avisos');
 const historico = require('./historico');
 const notificacoes = require('./notificacoes');
+const documentos = require('./documentos');
 const { agoraISO, hojeISO, somarDias, diffDias } = require('../lib/datas');
 
 const ErroValidacao = checklist.ErroValidacao;
@@ -28,11 +32,13 @@ const STATUS_ANALISE = {
 };
 
 const SELECT_PROCESSO = `
-  SELECT p.*, t.nome AS tipo_processo, st.nome AS status, st.final AS status_final,
+  SELECT p.*, t.nome AS tipo_processo, sub.nome AS subtipo_processo,
+         st.nome AS status, st.final AS status_final,
          st.espera AS status_espera, u.nome AS responsavel_interno, uc.nome AS criado_por,
          cl.codigo AS cliente_codigo, cl.apelido AS cliente_apelido
     FROM processos p
     JOIN tipos_processo t ON t.id = p.tipo_processo_id
+    LEFT JOIN subtipos_processo sub ON sub.id = p.subtipo_processo_id
     JOIN status_processo st ON st.id = p.status_id
     LEFT JOIN usuarios u ON u.id = p.responsavel_interno_id
     LEFT JOIN usuarios uc ON uc.id = p.criado_por_id
@@ -129,6 +135,9 @@ function criar(dados, usuario) {
   if (!tipo) throw new ErroValidacao('Selecione um tipo de processo válido.');
   if (!tipo.ativo) throw new ErroValidacao(`O tipo de processo "${tipo.nome}" está inativo.`);
 
+  // Opcional: tipo sem subtipos cadastrados abre processo como sempre abriu.
+  const subtipoId = subtipos.paraProcesso(tipo.id, dados.subtipo_processo_id);
+
   const abertura = dados.data_abertura ? String(dados.data_abertura).slice(0, 10) : hojeISO();
   const prazoDias = parametros.num('PRAZO_PADRAO_PROCESSO_DIAS', 15);
   const previsao = dados.data_previsao
@@ -143,10 +152,10 @@ function criar(dados, usuario) {
       .get()
       .prepare(
         `INSERT INTO processos
-           (codigo, data_abertura, tipo_processo_id, status_id, etapa_atual, cliente_id, razao_social,
+           (codigo, data_abertura, tipo_processo_id, subtipo_processo_id, status_id, etapa_atual, cliente_id, razao_social,
             nome_fantasia, cnpj, inscricao_estadual, inscricao_municipal, municipio, uf, cliente_responsavel,
             telefone, email, responsavel_interno_id, data_previsao, observacoes, criado_por_id, criado_em, atualizado_em)
-         VALUES (@codigo, @data_abertura, @tipo_processo_id, @status_id, @etapa_atual, @cliente_id, @razao_social,
+         VALUES (@codigo, @data_abertura, @tipo_processo_id, @subtipo_processo_id, @status_id, @etapa_atual, @cliente_id, @razao_social,
                  @nome_fantasia, @cnpj, @inscricao_estadual, @inscricao_municipal, @municipio, @uf,
                  @cliente_responsavel, @telefone, @email, @responsavel_interno_id, @data_previsao,
                  @observacoes, @criado_por_id, @agora, @agora)`
@@ -155,6 +164,7 @@ function criar(dados, usuario) {
         codigo,
         data_abertura: abertura,
         tipo_processo_id: tipo.id,
+        subtipo_processo_id: subtipoId,
         status_id: statusId(STATUS.ABERTO),
         cliente_id: cliente.id,
         responsavel_interno_id: dados.responsavel_interno_id ? Number(dados.responsavel_interno_id) : null,
@@ -198,6 +208,11 @@ function atualizar(id, dados, usuario) {
   const trocouCliente = Number(atual.cliente_id) !== cliente.id;
   const campos = { ...limpar(dados), ...dadosDoCliente(cliente) };
 
+  // O tipo não muda na edição (o checklist já foi gerado a partir dele), mas o
+  // subtipo sim: é só um detalhamento, e processos antigos nasceram sem nenhum.
+  const subtipoId = subtipos.paraProcesso(atual.tipo_processo_id, dados.subtipo_processo_id);
+  const trocouSubtipo = Number(atual.subtipo_processo_id || 0) !== Number(subtipoId || 0);
+
   db.get()
     .prepare(
       `UPDATE processos
@@ -206,12 +221,14 @@ function atualizar(id, dados, usuario) {
               municipio = @municipio, uf = @uf, cliente_responsavel = @cliente_responsavel,
               telefone = @telefone, email = @email, etapa_atual = @etapa_atual,
               observacoes = @observacoes, responsavel_interno_id = @responsavel_interno_id,
+              subtipo_processo_id = @subtipo_processo_id,
               data_previsao = @data_previsao, atualizado_em = @agora
         WHERE id = @id`
     )
     .run({
       id,
       cliente_id: cliente.id,
+      subtipo_processo_id: subtipoId,
       responsavel_interno_id: dados.responsavel_interno_id ? Number(dados.responsavel_interno_id) : null,
       data_previsao: dados.data_previsao ? String(dados.data_previsao).slice(0, 10) : atual.data_previsao,
       agora: agoraISO(),
@@ -222,9 +239,18 @@ function atualizar(id, dados, usuario) {
     processoId: id,
     acao: 'Cadastro Atualizado',
     usuario,
-    observacao: trocouCliente
-      ? `Cliente alterado de ${atual.razao_social} para ${campos.razao_social} (cliente ${cliente.codigo}).`
-      : 'Dados cadastrais do processo alterados.',
+    observacao: [
+      trocouCliente
+        ? `Cliente alterado de ${atual.razao_social} para ${campos.razao_social} (cliente ${cliente.codigo}).`
+        : null,
+      trocouSubtipo
+        ? `Subtipo alterado de "${atual.subtipo_processo || '—'}" para "${
+            subtipoId ? subtipos.obter(subtipoId).nome : '—'
+          }".`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(' ') || 'Dados cadastrais do processo alterados.',
   });
   return obter(id);
 }
@@ -438,6 +464,72 @@ function cancelar(processoId, usuario, motivo) {
   return cancelado;
 }
 
+/**
+ * Apaga o processo definitivamente. Só o administrador chega aqui.
+ *
+ * Diferente de **cancelar**, que encerra o processo e mantém tudo legível:
+ * aqui somem o checklist, os anexos, o histórico e os avisos daquele processo.
+ * Existe para o que não deveria ter sido aberto — engano de digitação, teste,
+ * duplicado — e não para encerrar trabalho.
+ *
+ * O que fica é uma linha de auditoria sem processo (`processoId: null`), que
+ * por isso sobrevive: quem apagou, quando, qual era o número, de que cliente e
+ * quanto se perdeu junto.
+ */
+function remover(processoId, usuario, motivo) {
+  const processo = obter(processoId);
+  if (!processo) throw new ErroValidacao('Processo não encontrado.');
+
+  const conn = db.get();
+  const contar = (tabela) =>
+    conn.prepare(`SELECT COUNT(*) AS total FROM ${tabela} WHERE processo_id = ?`).get(processo.id).total;
+  const perdidos = {
+    checklist: contar('checklist'),
+    documentos: contar('documentos'),
+    historico: contar('historico'),
+    avisos: contar('avisos'),
+  };
+
+  // Os anexos vivem em disco; a linha do banco sai por cascata, o arquivo não.
+  // A lista é montada antes de apagar, porque depois não há como saber quais
+  // eram.
+  const anexos = conn.prepare('SELECT * FROM documentos WHERE processo_id = ?').all(processo.id);
+
+  db.tx(() => {
+    // As tabelas filhas saem por ON DELETE CASCADE (checklist, documentos,
+    // histórico, notificações e avisos do processo).
+    conn.prepare('DELETE FROM processos WHERE id = ?').run(processo.id);
+  });
+
+  let arquivosApagados = 0;
+  for (const anexo of anexos) {
+    try {
+      const caminho = documentos.caminhoAbsoluto(anexo);
+      if (fs.existsSync(caminho)) {
+        fs.unlinkSync(caminho);
+        arquivosApagados += 1;
+      }
+    } catch (_) {
+      // Arquivo já sumido ou caminho recusado: o registro já saiu do banco, e
+      // um anexo órfão em disco não pode impedir a exclusão de terminar.
+    }
+  }
+
+  historico.registrar({
+    processoId: null, // sem isso a própria auditoria sairia junto, por cascata
+    acao: 'Processo Excluído',
+    usuario,
+    observacao:
+      `${processo.codigo} — ${processo.tipo_processo} de ${processo.razao_social}. ` +
+      `Removidos: ${perdidos.checklist} item(ns) de checklist, ${perdidos.documentos} anexo(s) ` +
+      `(${arquivosApagados} arquivo(s) em disco), ${perdidos.historico} registro(s) de histórico e ` +
+      `${perdidos.avisos} aviso(s).` +
+      (motivo && motivo.trim() ? ` Motivo: ${motivo.trim()}` : ''),
+  });
+
+  return { processo, perdidos, arquivosApagados };
+}
+
 function reabrir(processoId, usuario, motivo) {
   const processo = obter(processoId);
   if (!processo) throw new ErroValidacao('Processo não encontrado.');
@@ -587,6 +679,7 @@ module.exports = {
   concluir,
   cancelar,
   reabrir,
+  remover,
   notificarAbertura,
   comAlertaDePrazo,
   verificarPrazos,

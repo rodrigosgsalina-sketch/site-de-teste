@@ -17,6 +17,19 @@
           <input type="text" value="<%= processo.tipo_processo %>" disabled>
           <div class="dica">O tipo define o checklist e não pode ser alterado após a abertura.</div>
         </div>
+        <%# O subtipo é só um detalhamento: pode ser escolhido ou trocado depois,
+            inclusive nos processos abertos antes de existirem subtipos. %>
+        <% if (subtiposDoTipo.length) { %>
+          <div class="campo">
+            <label for="subtipo_processo_id">Subtipo</label>
+            <select id="subtipo_processo_id" name="subtipo_processo_id">
+              <option value="">—</option>
+              <% subtiposDoTipo.forEach(function (sub) { %>
+                <option value="<%= sub.id %>" <%= String(processo.subtipo_processo_id) === String(sub.id) ? 'selected' : '' %>><%= sub.nome %></option>
+              <% }) %>
+            </select>
+          </div>
+        <% } %>
         <div class="campo">
           <label for="data_previsao">Previsão de conclusão</label>
           <input type="date" id="data_previsao" name="data_previsao" value="<%= processo.data_previsao || '' %>">

@@ -36,6 +36,7 @@ const VERSAO = 1;
 const TABELAS = [
   'setores',
   'tipos_processo',
+  'subtipos_processo',
   'status_processo',
   'usuarios',
   'parametros',

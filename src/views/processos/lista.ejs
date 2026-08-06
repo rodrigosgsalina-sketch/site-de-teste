@@ -60,7 +60,7 @@
                 <%= p.razao_social %>
                 <% if (p.nome_fantasia) { %><div class="item-meta"><%= p.nome_fantasia %></div><% } %>
               </td>
-              <td><%= p.tipo_processo %></td>
+              <td><%= p.tipo_processo %><% if (p.subtipo_processo) { %><br><span class="dica"><%= p.subtipo_processo %></span><% } %></td>
               <td><span class="etiqueta <%= classeStatus(p.status) %>"><%= p.status %></span></td>
               <td><%= p.etapa_atual || '—' %></td>
               <td><%= fmtData(p.data_abertura) %></td>

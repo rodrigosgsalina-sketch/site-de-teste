@@ -78,6 +78,85 @@
 </div>
 
 <div class="cartao">
+  <h3>Subtipos de processo</h3>
+  <p class="dica">
+    O tipo diz o que é; o subtipo diz qual. Na <strong>abertura de processo</strong>, o campo de subtipo
+    aparece assim que o tipo é escolhido e mostra só os subtipos daquele tipo. É opcional: tipo sem
+    subtipo cadastrado abre processo como sempre abriu.
+  </p>
+
+  <form method="post" action="/admin/tabelas/subtipos" class="filtros" style="margin:1rem 0">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <div class="campo">
+      <label for="novo-subtipo-tipo">Tipo de processo</label>
+      <select id="novo-subtipo-tipo" name="tipo_processo_id" required>
+        <option value="">Selecione…</option>
+        <% tipos.forEach(function (t) { %>
+          <option value="<%= t.id %>"><%= t.nome %><%= t.ativo ? '' : ' (inativo)' %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="campo" style="flex:1">
+      <label for="novo-subtipo">Novo subtipo</label>
+      <input type="text" id="novo-subtipo" name="nome" required placeholder="Ex.: Mudança de endereço">
+    </div>
+    <button class="botao botao-pequeno">Adicionar</button>
+  </form>
+
+  <% if (!subtipos.length) { %>
+    <p class="vazio">Nenhum subtipo cadastrado ainda.</p>
+  <% } else { %>
+    <div class="tabela-scroll">
+      <table class="tabela">
+        <thead>
+          <tr><th>Tipo de processo</th><th>Subtipo</th><th>Ativo</th><th>Em uso</th><th></th></tr>
+        </thead>
+        <tbody>
+          <% subtipos.forEach(function (s) { %>
+            <tr>
+              <td><%= s.tipo_processo %><%= s.tipo_ativo ? '' : ' (tipo inativo)' %></td>
+              <td><input type="text" form="subtipo-<%= s.id %>" name="nome" value="<%= s.nome %>" required></td>
+              <td><input type="checkbox" form="subtipo-<%= s.id %>" name="ativo" value="1" <%= s.ativo ? 'checked' : '' %>></td>
+              <td class="num"><%= s.processos %></td>
+              <td style="white-space:nowrap">
+                <button class="botao botao-secundario botao-pequeno" form="subtipo-<%= s.id %>">Salvar</button>
+                <% if (s.processos) { %>
+                  <span class="dica" title="Desmarque &quot;Ativo&quot; para tirá-lo da abertura sem perder o histórico.">
+                    em uso
+                  </span>
+                <% } else { %>
+                  <button class="botao botao-perigo botao-pequeno" form="excluir-subtipo-<%= s.id %>">Excluir</button>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <% subtipos.forEach(function (s) { %>
+      <form id="subtipo-<%= s.id %>" method="post" action="/admin/tabelas/subtipos" hidden>
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="id" value="<%= s.id %>">
+      </form>
+      <% if (!s.processos) { %>
+        <form id="excluir-subtipo-<%= s.id %>" method="post"
+              action="/admin/tabelas/subtipos/<%= s.id %>/excluir" hidden
+              data-confirmar="Excluir o subtipo &quot;<%= s.nome %>&quot;?">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        </form>
+      <% } %>
+    <% }) %>
+
+    <p class="dica">
+      Subtipo já usado por algum processo não pode ser excluído — apagá-lo deixaria esses processos sem o
+      detalhe que alguém registrou. Nesse caso, desmarque <strong>Ativo</strong>: ele some da abertura e
+      continua legível em quem já o usa.
+    </p>
+  <% } %>
+</div>
+
+<div class="cartao">
   <h3>Status de processo</h3>
   <p class="dica">Os status são definidos automaticamente pelo andamento do checklist; os marcados como “espera” podem ser aplicados manualmente na tela do processo.</p>
   <div class="tabela-scroll">

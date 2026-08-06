@@ -24,6 +24,15 @@
             <% }) %>
           </select>
         </div>
+        <%# Só aparece quando o tipo escolhido tem subtipos cadastrados. %>
+        <div class="campo" data-campo-subtipo hidden>
+          <label for="subtipo_processo_id">Subtipo</label>
+          <select id="subtipo_processo_id" name="subtipo_processo_id"
+                  data-subtipos-de="tipo_processo_id"
+                  data-selecionado="<%= valores.subtipo_processo_id || '' %>">
+            <option value="">Selecione…</option>
+          </select>
+        </div>
         <div class="campo">
           <label for="data_abertura">Data de abertura</label>
           <input type="date" id="data_abertura" name="data_abertura" value="<%= valores.data_abertura || '' %>">
@@ -65,5 +74,11 @@
     </div>
   </form>
 </div>
+
+<%# Subtipos ativos agrupados por tipo. São poucas linhas: mandá-las junto com a
+    tela evita uma ida ao servidor a cada troca de tipo. %>
+<script nonce="<%= nonce %>">
+  window.__subtiposPorTipo = <%- jsonSeguro(subtiposPorTipo) %>;
+</script>
 
 <%- include('../partials/rodape') %>
