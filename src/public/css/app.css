@@ -437,6 +437,24 @@ table.tabela td.mono { white-space: nowrap; }
 }
 .faixa-notificacoes-acoes { display: flex; gap: .45rem; align-items: center; flex-shrink: 0; }
 
+/* Interruptor do som dos avisos, no mural. */
+.som-avisos {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap;
+  margin: 0 0 1rem;
+  padding: .8rem 1rem;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-sm);
+  background: var(--superficie-2);
+}
+.som-avisos-chave {
+  display: flex; align-items: flex-start; gap: .6rem;
+  flex: 1 1 320px; min-width: 0; cursor: pointer; margin: 0;
+}
+.som-avisos-chave input { margin-top: .2rem; flex-shrink: 0; }
+.som-avisos-chave strong { display: block; font-weight: 600; }
+.som-avisos-chave .dica { display: block; margin-top: .2rem; }
+
 /* ------------------------------------------------- notificações em tempo real */
 /* Cartões que surgem no canto inferior direito quando um processo é aberto,
    impedido, concluído (etc.), no formato de uma notificação de desktop. */

@@ -25,6 +25,21 @@
     </div>
   </div>
 
+  <div class="som-avisos">
+    <label class="som-avisos-chave">
+      <input type="checkbox" data-som-avisos>
+      <span>
+        <strong>Tocar um som quando chegar aviso</strong>
+        <span class="dica">
+          Serve para perceber o aviso com a plataforma em outra aba. O ajuste vale para este
+          computador. Se a notificação do navegador estiver ativada, o som é o do próprio sistema —
+          não toca duas vezes.
+        </span>
+      </span>
+    </label>
+    <button type="button" class="botao botao-secundario botao-pequeno" data-testar-som>Testar som</button>
+  </div>
+
   <% if (!lista.length) { %>
     <p class="vazio">Nenhum aviso publicado até agora.</p>
   <% } else { %>

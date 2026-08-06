@@ -367,6 +367,36 @@ dentro da página aparece em todas as abas, como antes.
 Em navegador sem `BroadcastChannel`, cada aba abre a sua conexão — funciona igual, só não divide.
 O servidor ainda assim limita a 4 canais por usuário e encerra o mais antigo ao passar disso.
 
+### Som ao chegar o aviso
+
+Junto com o cartão sai um **toque curto**, para quem está com a plataforma em outra aba perceber
+sem estar olhando para a tela.
+
+O som é **gerado no navegador** pela Web Audio API — duas notas com envelope curto. Não há arquivo
+de áudio: um pedido de rede a menos, nada para baixar e nada para manter em cache.
+
+| Situação | O que soa |
+|---|---|
+| Notificação do navegador **ativada** e a plataforma em segundo plano | o som do **próprio sistema operacional**, que acompanha a notificação — a plataforma não toca por cima, para não soar duas vezes |
+| Notificação **não ativada** (ou negada) | o toque da plataforma |
+| Som desligado no mural | nada — o cartão e o contador continuam normais |
+
+**A regra do navegador:** áudio só toca depois que a pessoa interagiu com a página pelo menos uma
+vez. Não há como contornar, e nem se deve — é o que impede um site de gritar ao abrir. O que a
+plataforma faz é aproveitar o **primeiro clique, em qualquer tela**, para liberar o áudio em
+silêncio. Depois disso o toque funciona inclusive com a aba em segundo plano.
+
+Em **Avisos** há um interruptor (**"Tocar um som quando chegar aviso"**, ligado por padrão) e um
+botão **"Testar som"**. O botão serve de atalho: além de deixar a pessoa ouvir, o clique nele já é
+o gesto que libera o áudio. Se o navegador ainda estiver bloqueando, o botão diz isso em vez de
+fingir que tocou. O ajuste vale por computador (fica no `localStorage`).
+
+**Com várias abas, toca uma vez só.** Quem decide é a aba que segura a conexão: ela toca, e se o
+áudio dela ainda não estiver liberado, pergunta quem consegue e **nomeia** a primeira que responder.
+Nomear em vez de deixar cada aba tocar por conta é o que evita o coro: o navegador represa os
+temporizadores das abas em segundo plano e solta todos no mesmo instante, de modo que qualquer
+disputa por tempo terminaria com duas abas tocando juntas.
+
 ### Permissão do navegador
 
 A permissão **nunca** é pedida no carregamento da página — isso faz o usuário negar por reflexo, e

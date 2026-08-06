@@ -26,6 +26,9 @@ const clientesDom = require('../src/domain/clientes');
 const processosDom = require('../src/domain/processos');
 const checklist = require('../src/domain/checklist');
 
+const fsp = require('fs');
+const caminhos = require('path');
+
 const conn = carregarSeed(db);
 const app = require('../src/app');
 const servidor = app.listen(0);
@@ -327,6 +330,38 @@ test('a faixa do topo mostra só os avisos que valem para todo o escritório', (
   // Mas continua contando no menu e aparecendo no mural.
   assert.ok(avisos.naoLidos(fiscal.id, 20).some((a) => a.tipo === 'aberto'));
   assert.ok(avisos.listar(fiscal.id, 50).some((a) => a.tipo === 'aberto'));
+});
+
+/* --------------------------------------------------------- som do aviso */
+
+test('o mural traz o interruptor e o teste do som', async () => {
+  const cliente = criarCliente(base);
+  await cliente.entrar('daiane', 'teste123');
+  const html = await (await cliente.get('/avisos')).text();
+
+  assert.match(html, /data-som-avisos/, 'o interruptor do som precisa estar na tela');
+  assert.match(html, /data-testar-som/, 'sem o botão de teste não há como liberar o áudio nem conferir');
+  assert.match(html, /Tocar um som quando chegar aviso/);
+});
+
+test('o som é gerado no navegador, sem arquivo de áudio para baixar', () => {
+  const script = fsp.readFileSync(caminhos.join(__dirname, '..', 'src', 'public', 'js', 'notificacoes.js'), 'utf8');
+
+  assert.match(script, /AudioContext/, 'o toque sai da Web Audio API');
+  assert.match(script, /createOscillator/);
+  assert.ok(
+    !/\.(mp3|ogg|wav|m4a)\b/i.test(script),
+    'nenhum arquivo de áudio: um pedido de rede a menos e nada para manter em cache'
+  );
+
+  // Quem segura a conexão decide sozinho quem toca — nunca cada aba por conta,
+  // senão o navegador solta os temporizadores represados juntos e sai coro.
+  assert.match(script, /quem-pode-tocar/);
+  assert.match(script, /posso-tocar/);
+  assert.match(script, /somPendente/);
+
+  // Com a notificação do sistema à vista, o som é o do sistema operacional.
+  assert.match(script, /if \(!mostrarNoSistema\(aviso\)\) anunciar\(aviso\);/);
 });
 
 test.after(() => {
