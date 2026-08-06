@@ -414,11 +414,13 @@ aparece no **rótulo da aba**, nos dois lugares que o navegador mostra:
 | Onde | Como fica | Quando é o que se vê |
 |---|---|---|
 | **Título** | `(3) Processos · JS Grilo Processos` | com poucas abas abertas, o título aparece inteiro |
-| **Ícone** | bolha vermelha com o número sobre a sigla | com muitas abas o título some e sobra só o ícone |
+| **Ícone** | o número **no lugar** da sigla `JS` | com muitas abas o título some e sobra só o ícone |
 
 O ícone é **desenhado no navegador** a cada mudança do número (canvas, 64 px para ficar nítido nas
-telas de alta densidade) — não há arquivo de ícone por número. Acima de 99 vira `99+`, que é o que
-cabe em 16 pixels.
+telas de alta densidade) — não há arquivo de ícone por número. Havendo aviso, o número ocupa o
+ícone inteiro no lugar da sigla: aos 16 pixels da aba não cabem os dois, e o que precisa ser lido é
+o número. O corpo da fonte é escolhido medindo o texto, para `1` e `99+` ocuparem a mesma largura
+útil. Acima de 99 vira `99+`, que é o que cabe. Sem avisos, a sigla volta.
 
 O número é o mesmo do contador ao lado de **Avisos** no menu, e vem do mesmo funil: sobe quando
 chega aviso, desce quando um é dispensado no "×" e volta ao ícone original quando tudo está lido.

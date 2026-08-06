@@ -393,6 +393,14 @@ test('o contador de não lidos vai para o rótulo da aba', () => {
   assert.match(script, /toDataURL\('image\/png'\)/, 'o ícone é desenhado a cada número, não é arquivo');
   assert.match(script, /'99\+'/, 'acima de 99 o número não cabe no ícone');
 
+  // Havendo aviso, o número toma o lugar da sigla — não fica por cima dela.
+  assert.match(
+    script,
+    /total > 0 \? \(total > 99 \? '99\+' : String\(total\)\) : 'JS'/,
+    'com aviso o ícone mostra só o número; sem aviso, só a sigla'
+  );
+  assert.match(script, /measureText/, 'o corpo da fonte é medido para "1" e "99+" ocuparem a mesma largura');
+
   // Os dois saem do mesmo funil que já alimenta o contador do menu.
   const funil = script.slice(script.indexOf('function atualizarContador('), script.indexOf('function iniciais('));
   assert.match(funil, /atualizarTitulo\(total\)/);

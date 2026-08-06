@@ -146,38 +146,23 @@
     pincel.textAlign = 'center';
     pincel.textBaseline = 'middle';
 
-    if (total > 0) {
-      // Com bolha, a sigla desce e encolhe um pouco para as duas caberem sem
-      // uma cobrir a outra. Aos 16 pixels da aba, o que precisa ser lido é o
-      // número.
-      pincel.font = 'bold 30px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-      pincel.fillText('JS', 27, 42);
+    // Havendo aviso, o número toma o lugar da sigla: aos 16 pixels da aba não
+    // cabem os dois, e ler o número é o que interessa. Sem aviso, o ícone é o
+    // de sempre.
+    var texto = total > 0 ? (total > 99 ? '99+' : String(total)) : 'JS';
 
-      var texto = total > 99 ? '99+' : String(total);
-      // A bolha cresce com o número para caber "12" e "99+" sem espremer.
-      var largura = texto.length === 1 ? 30 : texto.length === 2 ? 38 : 46;
-      var altura = 30;
-      var x = 64 - largura - 1;
-      var y = 1;
-
-      pincel.fillStyle = '#d92d20';
-      pincel.beginPath();
-      if (pincel.roundRect) pincel.roundRect(x, y, largura, altura, altura / 2);
-      else pincel.rect(x, y, largura, altura);
-      pincel.fill();
-
-      // Contorno na cor do fundo: separa a bolha do azul sem depender de sombra.
-      pincel.strokeStyle = '#12395b';
-      pincel.lineWidth = 4;
-      pincel.stroke();
-
-      pincel.fillStyle = '#ffffff';
-      pincel.font = 'bold ' + (texto.length > 2 ? 17 : 23) + 'px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-      pincel.fillText(texto, x + largura / 2, y + altura / 2 + 1);
-    } else {
-      pincel.font = 'bold 34px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-      pincel.fillText('JS', 32, 35);
+    // O corpo da fonte é escolhido medindo: "1" pode ser bem maior que "99+",
+    // e assim os dois ocupam a mesma largura útil, sem sobrar nem transbordar.
+    var LARGURA_UTIL = 48;
+    var corpo = 46;
+    pincel.font = 'bold ' + corpo + 'px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    var medida = pincel.measureText(texto).width;
+    if (medida > LARGURA_UTIL) {
+      corpo = Math.floor(corpo * (LARGURA_UTIL / medida));
+      pincel.font = 'bold ' + corpo + 'px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
     }
+
+    pincel.fillText(texto, 32, 34);
 
     return tela.toDataURL('image/png');
   }
