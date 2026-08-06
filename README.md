@@ -405,6 +405,27 @@ Nomear em vez de deixar cada aba tocar por conta é o que evita o coro: o navega
 temporizadores das abas em segundo plano e solta todos no mesmo instante, de modo que qualquer
 disputa por tempo terminaria com duas abas tocando juntas.
 
+### Contador na aba do navegador
+
+O cartão e o som resolvem o instante em que o aviso chega. Depois disso, quem foi trabalhar em
+outra aba não tem como saber que ficou algo para ler — por isso o número de avisos não lidos
+aparece no **rótulo da aba**, nos dois lugares que o navegador mostra:
+
+| Onde | Como fica | Quando é o que se vê |
+|---|---|---|
+| **Título** | `(3) Processos · JS Grilo Processos` | com poucas abas abertas, o título aparece inteiro |
+| **Ícone** | bolha vermelha com o número sobre a sigla | com muitas abas o título some e sobra só o ícone |
+
+O ícone é **desenhado no navegador** a cada mudança do número (canvas, 64 px para ficar nítido nas
+telas de alta densidade) — não há arquivo de ícone por número. Acima de 99 vira `99+`, que é o que
+cabe em 16 pixels.
+
+O número é o mesmo do contador ao lado de **Avisos** no menu, e vem do mesmo funil: sobe quando
+chega aviso, desce quando um é dispensado no "×" e volta ao ícone original quando tudo está lido.
+Vale em **todas as abas abertas**, inclusive nas que não seguram a conexão — elas recebem o número
+pelo canal entre abas. E a aba já nasce com o contador certo, a partir do que o servidor desenhou
+no menu, sem esperar o canal conectar.
+
 ### Permissão do navegador
 
 A permissão **nunca** é pedida no carregamento da página — isso faz o usuário negar por reflexo, e

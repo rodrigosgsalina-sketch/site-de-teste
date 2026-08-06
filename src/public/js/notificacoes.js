@@ -89,15 +89,136 @@
     return pilha;
   }
 
-  function atualizarContador(total) {
-    var alvo = document.querySelector('[data-contador-avisos]');
-    if (!alvo || typeof total !== 'number') return;
-    if (total > 0) {
-      alvo.textContent = total;
-      alvo.hidden = false;
+  /* ------------------------------------------------- contador na aba
+
+     O cartão e o som resolvem o instante em que o aviso chega. Depois disso,
+     quem está trabalhando em outra aba não tem como saber que ficou algo para
+     ler. Por isso o número dos avisos não lidos aparece também no rótulo da
+     aba do navegador — no título e no ícone.
+
+     São os dois lugares que o navegador mostra, e cada um cobre uma situação:
+     com poucas abas o título aparece inteiro e o "(3)" salta aos olhos; com
+     muitas abas o título some e sobra só o ícone, que passa a carregar a bolha
+     vermelha com o número. */
+
+  var tituloOriginal = '';
+  var faviconOriginal = '';
+  var contadorNaAba = -1;
+
+  /** Guarda o estado de partida da aba, uma vez só. */
+  function lembrarRotuloDaAba() {
+    tituloOriginal = document.title;
+    var icone = document.querySelector('link[rel~="icon"]');
+    faviconOriginal = icone ? icone.getAttribute('href') : '';
+  }
+
+  function atualizarTitulo(total) {
+    document.title = total > 0 ? '(' + (total > 99 ? '99+' : total) + ') ' + tituloOriginal : tituloOriginal;
+  }
+
+  /**
+   * Redesenha o ícone da aba com a bolha do contador.
+   *
+   * O ícone é desenhado aqui, e não guardado como arquivo, porque ele muda a
+   * cada número. São 64 pixels para ficar nítido nas telas de alta densidade,
+   * onde o navegador amplia o ícone de 16.
+   */
+  function desenharFavicon(total) {
+    var tela = document.createElement('canvas');
+    tela.width = 64;
+    tela.height = 64;
+    var pincel = tela.getContext && tela.getContext('2d');
+    if (!pincel) return null;
+
+    // Fundo com os cantos arredondados, na cor da marca.
+    var raio = 14;
+    pincel.fillStyle = '#12395b';
+    pincel.beginPath();
+    if (pincel.roundRect) {
+      pincel.roundRect(0, 0, 64, 64, raio);
     } else {
-      alvo.hidden = true;
+      // Navegador sem roundRect: um retângulo simples resolve.
+      pincel.rect(0, 0, 64, 64);
     }
+    pincel.fill();
+
+    pincel.fillStyle = '#ffffff';
+    pincel.textAlign = 'center';
+    pincel.textBaseline = 'middle';
+
+    if (total > 0) {
+      // Com bolha, a sigla desce e encolhe um pouco para as duas caberem sem
+      // uma cobrir a outra. Aos 16 pixels da aba, o que precisa ser lido é o
+      // número.
+      pincel.font = 'bold 30px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+      pincel.fillText('JS', 27, 42);
+
+      var texto = total > 99 ? '99+' : String(total);
+      // A bolha cresce com o número para caber "12" e "99+" sem espremer.
+      var largura = texto.length === 1 ? 30 : texto.length === 2 ? 38 : 46;
+      var altura = 30;
+      var x = 64 - largura - 1;
+      var y = 1;
+
+      pincel.fillStyle = '#d92d20';
+      pincel.beginPath();
+      if (pincel.roundRect) pincel.roundRect(x, y, largura, altura, altura / 2);
+      else pincel.rect(x, y, largura, altura);
+      pincel.fill();
+
+      // Contorno na cor do fundo: separa a bolha do azul sem depender de sombra.
+      pincel.strokeStyle = '#12395b';
+      pincel.lineWidth = 4;
+      pincel.stroke();
+
+      pincel.fillStyle = '#ffffff';
+      pincel.font = 'bold ' + (texto.length > 2 ? 17 : 23) + 'px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+      pincel.fillText(texto, x + largura / 2, y + altura / 2 + 1);
+    } else {
+      pincel.font = 'bold 34px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+      pincel.fillText('JS', 32, 35);
+    }
+
+    return tela.toDataURL('image/png');
+  }
+
+  function atualizarFavicon(total) {
+    var icone = document.querySelector('link[rel~="icon"]');
+    if (!icone) return;
+
+    if (total <= 0) {
+      if (faviconOriginal) icone.setAttribute('href', faviconOriginal);
+      return;
+    }
+    var desenho;
+    try {
+      desenho = desenharFavicon(total);
+    } catch (_) {
+      desenho = null; // navegador antigo: o título já dá o recado
+    }
+    if (desenho) icone.setAttribute('href', desenho);
+  }
+
+  function atualizarContador(total) {
+    if (typeof total !== 'number' || total < 0) return;
+
+    var alvo = document.querySelector('[data-contador-avisos]');
+    if (alvo) {
+      if (total > 0) {
+        alvo.textContent = total;
+        alvo.hidden = false;
+      } else {
+        alvo.hidden = true;
+      }
+    }
+
+    // Redesenhar o ícone a cada quadro do canal seria trabalho à toa: o número
+    // quase sempre chega igual ao que já está na aba.
+    if (total === contadorNaAba) return;
+    contadorNaAba = total;
+    atualizarTitulo(total);
+    atualizarFavicon(total);
+    log('contador da aba', total);
   }
 
   function iniciais(texto) {
@@ -1069,6 +1190,14 @@
     log('iniciando', window.location.pathname);
 
     ligarBotoes();
+
+    // O rótulo da aba é lembrado antes de qualquer coisa mexer nele, e o
+    // contador começa do número que o servidor já desenhou no menu — assim a
+    // aba nasce com o "(3)" certo, sem esperar o canal conectar.
+    lembrarRotuloDaAba();
+    var badge = document.querySelector('[data-contador-avisos]');
+    atualizarContador(badge && !badge.hidden ? Number(badge.textContent) || 0 : 0);
+
     // O canal entre abas vem antes do som: é por ele que esta aba conta às
     // outras que consegue tocar, e a mensagem não pode sair no vazio.
     conectar();

@@ -383,6 +383,39 @@ test('o som espera a liberação do áudio antes de decidir que falhou', () => {
   assert.match(script, /tocar\(true\)\.then\(function \(tocou\)/);
 });
 
+test('o contador de não lidos vai para o rótulo da aba', () => {
+  const script = fsp.readFileSync(caminhos.join(__dirname, '..', 'src', 'public', 'js', 'notificacoes.js'), 'utf8');
+
+  // Título e ícone: cada um cobre uma situação. Com poucas abas o título
+  // aparece inteiro; com muitas sobra só o ícone.
+  assert.match(script, /document\.title = total > 0/);
+  assert.match(script, /link\[rel~="icon"\]/);
+  assert.match(script, /toDataURL\('image\/png'\)/, 'o ícone é desenhado a cada número, não é arquivo');
+  assert.match(script, /'99\+'/, 'acima de 99 o número não cabe no ícone');
+
+  // Os dois saem do mesmo funil que já alimenta o contador do menu.
+  const funil = script.slice(script.indexOf('function atualizarContador('), script.indexOf('function iniciais('));
+  assert.match(funil, /atualizarTitulo\(total\)/);
+  assert.match(funil, /atualizarFavicon\(total\)/);
+  assert.match(funil, /total === contadorNaAba/, 'redesenhar o ícone com o mesmo número é trabalho à toa');
+
+  // O rótulo de partida é guardado antes de qualquer coisa mexer nele, senão
+  // o "(3)" gruda no título e vai se acumulando.
+  assert.ok(
+    script.indexOf('lembrarRotuloDaAba();') < script.indexOf('conectar();\n    ligarControlesDeSom'),
+    'o título original precisa ser lembrado antes de o canal conectar'
+  );
+});
+
+test('a aba nasce com o número que o servidor já desenhou no menu', () => {
+  const script = fsp.readFileSync(caminhos.join(__dirname, '..', 'src', 'public', 'js', 'notificacoes.js'), 'utf8');
+  assert.match(
+    script,
+    /badge && !badge\.hidden \? Number\(badge\.textContent\) \|\| 0 : 0/,
+    'sem isso a aba só ganha o contador quando chegar o próximo aviso'
+  );
+});
+
 test('o mural mostra se o navegador já liberou o áudio', async () => {
   const cliente = criarCliente(base);
   await cliente.entrar('daiane', 'teste123');
