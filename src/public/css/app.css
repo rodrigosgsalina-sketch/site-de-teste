@@ -907,3 +907,23 @@ a.mono { font-weight: 500; white-space: nowrap; }
 .excluir-processo > summary::before { content: "▸"; font-size: .8em; }
 .excluir-processo[open] > summary::before { content: "▾"; }
 .excluir-processo > summary:hover { text-decoration: underline; }
+
+/* Subtipos do processo: caixas em linha, para marcar mais de um sem virar
+   uma coluna comprida. */
+/* Os subtipos ocupam a linha inteira do formulário: em coluna estreita a
+   lista vira uma torre, e é comum haver meia dúzia deles. */
+.linha-campos > .campo.largo { grid-column: 1 / -1; }
+
+.subtipos-lista {
+  display: flex; flex-wrap: wrap; gap: .4rem .9rem;
+  padding: .5rem .7rem;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-sm);
+  background: var(--superficie-2);
+}
+.subtipos-lista:empty { display: none; }
+.subtipo-opcao {
+  display: inline-flex; align-items: center; gap: .4rem;
+  cursor: pointer; font-size: .9rem; margin: 0;
+}
+.subtipo-opcao input { margin: 0; }

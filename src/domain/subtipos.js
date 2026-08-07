@@ -21,7 +21,7 @@ function listar() {
     .get()
     .prepare(
       `SELECT s.*, t.nome AS tipo_processo, t.ativo AS tipo_ativo,
-              (SELECT COUNT(*) FROM processos p WHERE p.subtipo_processo_id = s.id) AS processos
+              (SELECT COUNT(*) FROM processos_subtipos ps WHERE ps.subtipo_id = s.id) AS processos
          FROM subtipos_processo s
          JOIN tipos_processo t ON t.id = s.tipo_processo_id
         ORDER BY t.ordem, t.nome, s.ordem, s.nome`
@@ -116,8 +116,10 @@ function atualizar(id, { nome, ativo }) {
 
 /** Quantos processos já usam este subtipo. */
 function emUso(id) {
-  return db.get().prepare('SELECT COUNT(*) AS total FROM processos WHERE subtipo_processo_id = ?').get(Number(id))
-    .total;
+  return db
+    .get()
+    .prepare('SELECT COUNT(*) AS total FROM processos_subtipos WHERE subtipo_id = ?')
+    .get(Number(id)).total;
 }
 
 /**
@@ -145,17 +147,65 @@ function remover(id) {
 }
 
 /**
- * Valida o subtipo escolhido no formulário do processo.
- * Devolve o id, ou null quando nenhum foi escolhido.
+ * Valida os subtipos escolhidos no formulário do processo.
+ *
+ * O campo do formulário pode chegar como um valor só, como lista (várias
+ * caixas marcadas com o mesmo nome) ou vazio. Devolve sempre uma lista de ids,
+ * sem repetição e na ordem de cadastro.
  */
-function paraProcesso(tipoId, subtipoId) {
-  if (!subtipoId) return null;
-  const subtipo = obter(subtipoId);
-  if (!subtipo) throw new ErroValidacao('Subtipo não encontrado. Atualize a página e escolha novamente.');
-  if (Number(subtipo.tipo_processo_id) !== Number(tipoId)) {
-    throw new ErroValidacao(`O subtipo "${subtipo.nome}" não pertence ao tipo de processo escolhido.`);
+function paraProcesso(tipoId, escolhidos) {
+  const bruto = escolhidos === undefined || escolhidos === null ? [] : [].concat(escolhidos);
+  const ids = [...new Set(bruto.map(Number).filter((n) => Number.isFinite(n) && n > 0))];
+  if (!ids.length) return [];
+
+  const validos = [];
+  for (const id of ids) {
+    const subtipo = obter(id);
+    if (!subtipo) throw new ErroValidacao('Subtipo não encontrado. Atualize a página e escolha novamente.');
+    if (Number(subtipo.tipo_processo_id) !== Number(tipoId)) {
+      throw new ErroValidacao(`O subtipo "${subtipo.nome}" não pertence ao tipo de processo escolhido.`);
+    }
+    validos.push(subtipo);
   }
-  return subtipo.id;
+
+  // A ordem de cadastro deixa o checklist estável, não a ordem de clique.
+  validos.sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR'));
+  return validos.map((s) => s.id);
+}
+
+/** Subtipos de um processo, na ordem de cadastro. */
+function doProcesso(processoId) {
+  return db
+    .get()
+    .prepare(
+      `SELECT s.*
+         FROM processos_subtipos ps
+         JOIN subtipos_processo s ON s.id = ps.subtipo_id
+        WHERE ps.processo_id = ?
+        ORDER BY s.ordem, s.nome`
+    )
+    .all(Number(processoId));
+}
+
+/** Regrava a lista de subtipos do processo. Devolve o que mudou. */
+function definirDoProcesso(processoId, subtipoIds) {
+  const conn = db.get();
+  const antes = doProcesso(processoId);
+  const antesIds = new Set(antes.map((s) => s.id));
+  const depoisIds = new Set(subtipoIds.map(Number));
+
+  conn.prepare('DELETE FROM processos_subtipos WHERE processo_id = ?').run(Number(processoId));
+  const inserir = conn.prepare('INSERT INTO processos_subtipos (processo_id, subtipo_id) VALUES (?, ?)');
+  for (const id of subtipoIds) inserir.run(Number(processoId), Number(id));
+
+  const depois = doProcesso(processoId);
+  return {
+    antes,
+    depois,
+    entraram: depois.filter((s) => !antesIds.has(s.id)),
+    sairam: antes.filter((s) => !depoisIds.has(s.id)),
+    mudou: antes.length !== depois.length || antes.some((s) => !depoisIds.has(s.id)),
+  };
 }
 
 module.exports = {
@@ -168,4 +218,6 @@ module.exports = {
   remover,
   emUso,
   paraProcesso,
+  doProcesso,
+  definirDoProcesso,
 };

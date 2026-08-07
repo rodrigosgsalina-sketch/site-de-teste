@@ -7,7 +7,7 @@
       <div>
         <span class="etiqueta <%= classeStatus(processo.status) %>"><%= processo.status %></span>
         <span class="etiqueta et-neutro"><%= processo.tipo_processo %></span>
-        <% if (processo.subtipo_processo) { %><span class="etiqueta et-neutro"><%= processo.subtipo_processo %></span><% } %>
+        <% if (processo.subtipos_processo) { %><span class="etiqueta et-neutro"><%= processo.subtipos_processo %></span><% } %>
         <% if (processo.etapa_atual) { %><span class="etiqueta et-neutro"><%= processo.etapa_atual %></span><% } %>
       </div>
     </div>

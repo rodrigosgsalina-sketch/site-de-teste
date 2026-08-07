@@ -324,16 +324,59 @@ O tipo diz **o que é** ("Alteração Contratual"); o subtipo diz **qual** — "
   pertence a um tipo, e o nome é único **dentro do tipo**: dois tipos podem ter um subtipo com o
   mesmo nome, porque são coisas diferentes.
 - **Na abertura:** o campo aparece assim que o tipo é escolhido e mostra só os subtipos daquele
-  tipo. Tipo sem subtipo cadastrado **esconde o campo** — abre processo como sempre abriu.
+  tipo. **Pode marcar mais de um** — uma alteração contratual costuma mudar endereço e capital na
+  mesma ida ao cartório. Tipo sem subtipo cadastrado **esconde o campo**.
+- **Depois de aberto:** os subtipos são editáveis na tela **Editar cadastro**, e o checklist
+  acompanha (abaixo).
 - **Opcional por decisão:** nenhum processo é obrigado a ter subtipo. Os processos abertos antes
-  desta versão continuam válidos, sem nenhum, e podem receber um na edição.
+  desta versão continuam válidos, sem nenhum.
 - **Exclusão:** livre enquanto nenhum processo usa o subtipo. Depois disso a exclusão é **recusada**
-  — apagar deixaria esses processos sem o detalhe que alguém registrou, e sem como recuperar. O
-  caminho nesse caso é desmarcar **Ativo**: o subtipo some da abertura e continua legível em quem
-  já o usa. Apagar o **tipo** leva os subtipos dele junto.
+  — apagar deixaria esses processos sem o detalhe que alguém registrou. O caminho é desmarcar
+  **Ativo**: o subtipo some da abertura e continua legível em quem já o usa. Apagar o **tipo** leva
+  os subtipos dele junto.
 
-A lista de subtipos por tipo viaja junto com a tela de abertura (são poucas linhas), então trocar o
-tipo não custa uma ida ao servidor.
+### Checklist por subtipo
+
+Um item do **checklist modelo** pode valer para três alcances, do mais largo ao mais estreito:
+
+| Tipo | Subtipo | Vale para |
+|---|---|---|
+| *Todos os processos* | — | todo processo aberto |
+| um tipo | *Todo o tipo* | todo processo daquele tipo |
+| um tipo | um subtipo | só os processos que marcaram **aquele** subtipo |
+
+O checklist do processo é a **soma** dos três, montada na abertura.
+
+#### Como o item repetido é reconhecido
+
+Com dois subtipos marcados, é comum que os dois peçam a mesma coisa — "Emitir certidão negativa
+federal" aparece tanto em *Entrada de sócio* quanto em *Alteração de capital*. Sem juntar, o item
+nasceria duas vezes e alguém responderia o mesmo trabalho duas vezes.
+
+A identidade do item é **setor + texto**, comparados assim:
+
+- **sem acento, sem caixa, sem espaço sobrando e sem pontuação no fim** — "Emitir certidão
+  negativa." e `emitir certidao negativa` são a mesma coisa escrita por duas pessoas;
+- **o setor entra na chave de propósito.** A mesma frase em setores diferentes é tarefa de gente
+  diferente: "Conferir documentação" no Fiscal e no Contábil são duas conferências, e as duas
+  precisam acontecer. Só o texto não bastaria.
+
+Quando o mesmo item chega por caminhos diferentes com exigências diferentes, **vence o mais
+exigente**: se for obrigatório em algum deles, entra obrigatório. A posição é a da primeira
+aparição, para o checklist não trocar de ordem conforme os subtipos escolhidos.
+
+#### Ao trocar os subtipos de um processo já aberto
+
+O checklist é recalculado e a tela diz exatamente o que mudou:
+
+- **entra** o que passou a valer;
+- **sai** o que deixou de valer — **desde que ninguém tenha mexido**;
+- **fica** o item que já tem resposta, observação, impedimento ou conferência. Apagá-lo destruiria
+  trabalho registrado, e quem respondeu não teria como saber que sumiu. A mensagem informa quantos
+  foram mantidos por esse motivo.
+
+Tudo vai para o histórico do processo: quais subtipos entraram e saíram, e quantos itens foram
+adicionados, removidos e mantidos.
 
 ## Excluir um processo
 

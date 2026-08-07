@@ -202,6 +202,7 @@ router.get('/:id/editar', carregar, (req, res) => {
     processo: req.processo,
     erro: null,
     subtiposDoTipo: subtipos.doTipo(req.processo.tipo_processo_id),
+    subtiposDoProcesso: subtipos.doProcesso(req.processo.id),
     ...dadosDoSeletor(req.processo.cliente_id),
     ...listasAuxiliares(),
   });
@@ -212,8 +213,24 @@ router.post('/:id/editar', carregar, (req, res, next) => {
     if (!acesso.podeGerenciarProcesso(req.session.usuario, req.processo)) {
       throw new ErroValidacao('Sem permissão para editar este processo.');
     }
-    processos.atualizar(req.processo.id, req.body, req.session.usuario);
-    flash(req, 'sucesso', 'Cadastro atualizado.');
+    const salvo = processos.atualizar(req.processo.id, req.body, req.session.usuario);
+
+    // Mudar os subtipos mexe no checklist: a tela diz exatamente o que mudou,
+    // senão o usuário volta para o processo e encontra itens que não esperava.
+    const ajuste = salvo.ajusteChecklist;
+    let recado = 'Cadastro atualizado.';
+    if (ajuste) {
+      const partes = [];
+      if (ajuste.adicionados.length) partes.push(`${ajuste.adicionados.length} item(ns) adicionado(s)`);
+      if (ajuste.removidos.length) partes.push(`${ajuste.removidos.length} removido(s)`);
+      if (ajuste.mantidos.length) {
+        partes.push(`${ajuste.mantidos.length} mantido(s) por já terem resposta`);
+      }
+      recado = partes.length
+        ? `Cadastro atualizado. Checklist: ${partes.join(', ')}.`
+        : 'Cadastro atualizado. O checklist não mudou.';
+    }
+    flash(req, 'sucesso', recado);
     res.redirect(`/processos/${req.processo.id}`);
   } catch (err) {
     if (err instanceof ErroValidacao) {
@@ -222,6 +239,7 @@ router.post('/:id/editar', carregar, (req, res, next) => {
         processo: { ...req.processo, ...req.body },
         erro: err.message,
         subtiposDoTipo: subtipos.doTipo(req.processo.tipo_processo_id),
+        subtiposDoProcesso: subtipos.doProcesso(req.processo.id),
         ...dadosDoSeletor(req.body.cliente_id || req.processo.cliente_id),
         ...listasAuxiliares(),
       });

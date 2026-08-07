@@ -32,13 +32,16 @@ const STATUS_ANALISE = {
 };
 
 const SELECT_PROCESSO = `
-  SELECT p.*, t.nome AS tipo_processo, sub.nome AS subtipo_processo,
+  SELECT p.*, t.nome AS tipo_processo,
+         (SELECT GROUP_CONCAT(s2.nome, ' · ')
+            FROM processos_subtipos ps2
+            JOIN subtipos_processo s2 ON s2.id = ps2.subtipo_id
+           WHERE ps2.processo_id = p.id) AS subtipos_processo,
          st.nome AS status, st.final AS status_final,
          st.espera AS status_espera, u.nome AS responsavel_interno, uc.nome AS criado_por,
          cl.codigo AS cliente_codigo, cl.apelido AS cliente_apelido
     FROM processos p
     JOIN tipos_processo t ON t.id = p.tipo_processo_id
-    LEFT JOIN subtipos_processo sub ON sub.id = p.subtipo_processo_id
     JOIN status_processo st ON st.id = p.status_id
     LEFT JOIN usuarios u ON u.id = p.responsavel_interno_id
     LEFT JOIN usuarios uc ON uc.id = p.criado_por_id
@@ -136,7 +139,9 @@ function criar(dados, usuario) {
   if (!tipo.ativo) throw new ErroValidacao(`O tipo de processo "${tipo.nome}" está inativo.`);
 
   // Opcional: tipo sem subtipos cadastrados abre processo como sempre abriu.
-  const subtipoId = subtipos.paraProcesso(tipo.id, dados.subtipo_processo_id);
+  // Vários são aceitos — uma alteração contratual costuma mudar mais de uma
+  // coisa na mesma ida ao cartório.
+  const subtipoIds = subtipos.paraProcesso(tipo.id, dados.subtipo_processo_id);
 
   const abertura = dados.data_abertura ? String(dados.data_abertura).slice(0, 10) : hojeISO();
   const prazoDias = parametros.num('PRAZO_PADRAO_PROCESSO_DIAS', 15);
@@ -152,10 +157,10 @@ function criar(dados, usuario) {
       .get()
       .prepare(
         `INSERT INTO processos
-           (codigo, data_abertura, tipo_processo_id, subtipo_processo_id, status_id, etapa_atual, cliente_id, razao_social,
+           (codigo, data_abertura, tipo_processo_id, status_id, etapa_atual, cliente_id, razao_social,
             nome_fantasia, cnpj, inscricao_estadual, inscricao_municipal, municipio, uf, cliente_responsavel,
             telefone, email, responsavel_interno_id, data_previsao, observacoes, criado_por_id, criado_em, atualizado_em)
-         VALUES (@codigo, @data_abertura, @tipo_processo_id, @subtipo_processo_id, @status_id, @etapa_atual, @cliente_id, @razao_social,
+         VALUES (@codigo, @data_abertura, @tipo_processo_id, @status_id, @etapa_atual, @cliente_id, @razao_social,
                  @nome_fantasia, @cnpj, @inscricao_estadual, @inscricao_municipal, @municipio, @uf,
                  @cliente_responsavel, @telefone, @email, @responsavel_interno_id, @data_previsao,
                  @observacoes, @criado_por_id, @agora, @agora)`
@@ -164,7 +169,6 @@ function criar(dados, usuario) {
         codigo,
         data_abertura: abertura,
         tipo_processo_id: tipo.id,
-        subtipo_processo_id: subtipoId,
         status_id: statusId(STATUS.ABERTO),
         cliente_id: cliente.id,
         responsavel_interno_id: dados.responsavel_interno_id ? Number(dados.responsavel_interno_id) : null,
@@ -175,13 +179,19 @@ function criar(dados, usuario) {
       });
 
     const id = Number(info.lastInsertRowid);
-    const itens = checklist.gerarParaProcesso(id, tipo.id, `${abertura}T12:00:00`);
+    subtipos.definirDoProcesso(id, subtipoIds);
+    // O checklist já nasce com os itens do tipo E dos subtipos escolhidos, sem
+    // repetir o que aparece em mais de um.
+    const itens = checklist.gerarParaProcesso(id, tipo.id, `${abertura}T12:00:00`, subtipoIds);
 
     historico.registrar({
       processoId: id,
       acao: 'Processo Criado',
       usuario,
-      observacao: `${codigo} — ${tipo.nome} para ${campos.razao_social} (cliente ${cliente.codigo}). ${itens.length} itens de checklist gerados.`,
+      observacao:
+        `${codigo} — ${tipo.nome}` +
+        (subtipoIds.length ? ` (${subtipos.doProcesso(id).map((x) => x.nome).join(', ')})` : '') +
+        ` para ${campos.razao_social} (cliente ${cliente.codigo}). ${itens.length} itens de checklist gerados.`,
     });
     return id;
   });
@@ -208,10 +218,9 @@ function atualizar(id, dados, usuario) {
   const trocouCliente = Number(atual.cliente_id) !== cliente.id;
   const campos = { ...limpar(dados), ...dadosDoCliente(cliente) };
 
-  // O tipo não muda na edição (o checklist já foi gerado a partir dele), mas o
-  // subtipo sim: é só um detalhamento, e processos antigos nasceram sem nenhum.
-  const subtipoId = subtipos.paraProcesso(atual.tipo_processo_id, dados.subtipo_processo_id);
-  const trocouSubtipo = Number(atual.subtipo_processo_id || 0) !== Number(subtipoId || 0);
+  // O tipo não muda na edição (o checklist foi gerado a partir dele), mas os
+  // subtipos sim: são detalhamento, e o checklist acompanha a mudança.
+  const subtipoIds = subtipos.paraProcesso(atual.tipo_processo_id, dados.subtipo_processo_id);
 
   db.get()
     .prepare(
@@ -221,38 +230,64 @@ function atualizar(id, dados, usuario) {
               municipio = @municipio, uf = @uf, cliente_responsavel = @cliente_responsavel,
               telefone = @telefone, email = @email, etapa_atual = @etapa_atual,
               observacoes = @observacoes, responsavel_interno_id = @responsavel_interno_id,
-              subtipo_processo_id = @subtipo_processo_id,
               data_previsao = @data_previsao, atualizado_em = @agora
         WHERE id = @id`
     )
     .run({
       id,
       cliente_id: cliente.id,
-      subtipo_processo_id: subtipoId,
       responsavel_interno_id: dados.responsavel_interno_id ? Number(dados.responsavel_interno_id) : null,
       data_previsao: dados.data_previsao ? String(dados.data_previsao).slice(0, 10) : atual.data_previsao,
       agora: agoraISO(),
       ...campos,
     });
 
+  // Trocar os subtipos mexe no checklist: entra o que passou a valer, sai o que
+  // deixou de valer — e o que já foi respondido fica.
+  const mudanca = subtipos.definirDoProcesso(id, subtipoIds);
+  let ajuste = null;
+  if (mudanca.mudou) {
+    ajuste = checklist.sincronizarComSubtipos(
+      id,
+      atual.tipo_processo_id,
+      subtipoIds,
+      `${atual.data_abertura}T12:00:00`
+    );
+  }
+
+  const notas = [];
+  if (trocouCliente) {
+    notas.push(`Cliente alterado de ${atual.razao_social} para ${campos.razao_social} (cliente ${cliente.codigo}).`);
+  }
+  if (mudanca.mudou) {
+    const lista = (itens) => itens.map((x) => x.nome).join(', ');
+    notas.push(
+      `Subtipos: ${mudanca.depois.length ? lista(mudanca.depois) : '(nenhum)'}` +
+        (mudanca.entraram.length ? ` — entrou: ${lista(mudanca.entraram)}` : '') +
+        (mudanca.sairam.length ? ` — saiu: ${lista(mudanca.sairam)}` : '') +
+        '.'
+    );
+  }
+  if (ajuste) {
+    notas.push(
+      `Checklist: ${ajuste.adicionados.length} item(ns) adicionado(s), ` +
+        `${ajuste.removidos.length} removido(s)` +
+        (ajuste.mantidos.length ? `, ${ajuste.mantidos.length} mantido(s) por já terem resposta` : '') +
+        '.'
+    );
+  }
+
   historico.registrar({
     processoId: id,
     acao: 'Cadastro Atualizado',
     usuario,
-    observacao: [
-      trocouCliente
-        ? `Cliente alterado de ${atual.razao_social} para ${campos.razao_social} (cliente ${cliente.codigo}).`
-        : null,
-      trocouSubtipo
-        ? `Subtipo alterado de "${atual.subtipo_processo || '—'}" para "${
-            subtipoId ? subtipos.obter(subtipoId).nome : '—'
-          }".`
-        : null,
-    ]
-      .filter(Boolean)
-      .join(' ') || 'Dados cadastrais do processo alterados.',
+    observacao: notas.join(' ') || 'Dados cadastrais do processo alterados.',
   });
-  return obter(id);
+
+  // O checklist mudou: o status do processo pode ter mudado com ele.
+  if (ajuste) recalcularStatus(id, usuario, { silencioso: true });
+
+  return { ...obter(id), ajusteChecklist: ajuste, mudancaSubtipos: mudanca };
 }
 
 /* ------------------------------------------------------------------ *

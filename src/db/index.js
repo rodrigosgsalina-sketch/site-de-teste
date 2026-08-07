@@ -156,17 +156,47 @@ function migrarEscopoDeAvisos(conn) {
 }
 
 /**
- * Subtipos de processo entraram depois. A coluna é opcional e nasce vazia: os
- * processos já abertos continuam válidos, apenas sem subtipo — e passam a
- * aceitar um na edição.
+ * O subtipo do processo nasceu como uma coluna única e virou uma lista: um
+ * processo pode ter vários. O que estava na coluna passa para a tabela de
+ * ligação e a coluna sai — duas fontes para o mesmo dado é o começo de uma
+ * divergir da outra.
  */
-function migrarSubtipoEmProcessos(conn) {
+function migrarSubtiposDoProcesso(conn) {
   if (!tabelaExiste(conn, 'processos')) return;
-  if (colunas(conn, 'processos').includes('subtipo_processo_id')) return;
+  if (!colunas(conn, 'processos').includes('subtipo_processo_id')) return;
 
-  conn.exec('ALTER TABLE processos ADD COLUMN subtipo_processo_id INTEGER REFERENCES subtipos_processo (id);');
+  const antigos = conn
+    .prepare('SELECT id, subtipo_processo_id FROM processos WHERE subtipo_processo_id IS NOT NULL')
+    .all();
+
+  conn.pragma('foreign_keys = OFF');
+  conn.transaction(() => {
+    const inserir = conn.prepare(
+      'INSERT OR IGNORE INTO processos_subtipos (processo_id, subtipo_id) VALUES (?, ?)'
+    );
+    for (const linha of antigos) inserir.run(linha.id, linha.subtipo_processo_id);
+    conn.exec('ALTER TABLE processos DROP COLUMN subtipo_processo_id;');
+  })();
+  conn.pragma('foreign_keys = ON');
+
   // eslint-disable-next-line no-console
-  console.log('[migração] coluna "subtipo_processo_id" criada em processos.');
+  console.log(`[migração] subtipos do processo passaram para a tabela de ligação (${antigos.length} processo(s)).`);
+}
+
+/**
+ * O item do checklist modelo passou a poder ser de um subtipo, e não só de um
+ * tipo. A coluna nasce vazia: todo item existente continua valendo para o tipo
+ * inteiro, como antes.
+ */
+function migrarSubtipoNoChecklistModelo(conn) {
+  if (!tabelaExiste(conn, 'checklist_modelo')) return;
+  if (colunas(conn, 'checklist_modelo').includes('subtipo_processo_id')) return;
+
+  conn.exec(
+    'ALTER TABLE checklist_modelo ADD COLUMN subtipo_processo_id INTEGER REFERENCES subtipos_processo (id);'
+  );
+  // eslint-disable-next-line no-console
+  console.log('[migração] coluna "subtipo_processo_id" criada em checklist_modelo.');
 }
 
 function migrate(conn) {
@@ -174,10 +204,12 @@ function migrate(conn) {
   migrarLoginDeUsuarios(conn);
   migrarClienteEmProcessos(conn);
   migrarEscopoDeAvisos(conn);
+  // Antes do schema: ele cria um índice sobre a coluna nova do checklist
+  // modelo, e o índice não existe sem a coluna.
+  migrarSubtipoNoChecklistModelo(conn);
   conn.exec(schema);
-  // Depois do schema: a coluna aponta para subtipos_processo, que o schema
-  // acabou de criar.
-  migrarSubtipoEmProcessos(conn);
+  // Depois do schema: esta depende da tabela de ligação que ele acabou de criar.
+  migrarSubtiposDoProcesso(conn);
 }
 
 function get() {

@@ -71,6 +71,10 @@ CREATE TABLE IF NOT EXISTS usuarios (
 CREATE TABLE IF NOT EXISTS checklist_modelo (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
   tipo_processo_id INTEGER REFERENCES tipos_processo (id) ON DELETE CASCADE,
+  -- Quando preenchido, o item só entra nos processos que escolheram ESTE
+  -- subtipo. Vazio: vale para todo processo do tipo (ou para todos, se o tipo
+  -- também estiver vazio).
+  subtipo_processo_id INTEGER REFERENCES subtipos_processo (id) ON DELETE CASCADE,
   setor_id         INTEGER NOT NULL REFERENCES setores (id),
   item             TEXT    NOT NULL,
   obrigatorio      INTEGER NOT NULL DEFAULT 1 CHECK (obrigatorio IN (0, 1)),
@@ -78,6 +82,7 @@ CREATE TABLE IF NOT EXISTS checklist_modelo (
   ordem            INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_modelo_tipo ON checklist_modelo (tipo_processo_id);
+CREATE INDEX IF NOT EXISTS idx_modelo_subtipo ON checklist_modelo (subtipo_processo_id);
 
 -- ------------------------------------------------- ORDEM_SETORES_TIPO
 -- Ordem de atendimento dos setores dentro de um tipo de processo: define
@@ -97,7 +102,6 @@ CREATE TABLE IF NOT EXISTS processos (
   codigo                 TEXT    NOT NULL UNIQUE,          -- ID_PROCESSO (PR-2026-0001)
   data_abertura          TEXT    NOT NULL,                 -- ISO date
   tipo_processo_id       INTEGER NOT NULL REFERENCES tipos_processo (id),
-  subtipo_processo_id    INTEGER REFERENCES subtipos_processo (id),  -- opcional
   status_id              INTEGER NOT NULL REFERENCES status_processo (id),
   status_manual          INTEGER NOT NULL DEFAULT 0 CHECK (status_manual IN (0, 1)),
   etapa_atual            TEXT,
@@ -123,6 +127,18 @@ CREATE TABLE IF NOT EXISTS processos (
 CREATE INDEX IF NOT EXISTS idx_processos_status ON processos (status_id);
 CREATE INDEX IF NOT EXISTS idx_processos_tipo   ON processos (tipo_processo_id);
 CREATE INDEX IF NOT EXISTS idx_processos_cliente ON processos (cliente_id);
+
+-- ------------------------------------------------- PROCESSOS_SUBTIPOS
+-- Um processo pode ter VÁRIOS subtipos: uma alteração contratual costuma
+-- mudar endereço e capital na mesma ida ao cartório. O checklist do processo
+-- é a soma dos itens do tipo com os dos subtipos escolhidos, sem repetir o
+-- que aparece em mais de um (ver src/domain/checklist.js).
+CREATE TABLE IF NOT EXISTS processos_subtipos (
+  processo_id INTEGER NOT NULL REFERENCES processos (id) ON DELETE CASCADE,
+  subtipo_id  INTEGER NOT NULL REFERENCES subtipos_processo (id) ON DELETE CASCADE,
+  PRIMARY KEY (processo_id, subtipo_id)
+);
+CREATE INDEX IF NOT EXISTS idx_proc_subtipos_subtipo ON processos_subtipos (subtipo_id);
 
 -- -------------------------------------------------------------- CHECKLIST
 CREATE TABLE IF NOT EXISTS checklist (

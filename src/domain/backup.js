@@ -44,6 +44,7 @@ const TABELAS = [
   'ordem_setores_tipo',
   'clientes',
   'processos',
+  'processos_subtipos',
   'checklist',
   'historico',
   'documentos',

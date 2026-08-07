@@ -92,16 +92,16 @@ test('a abertura recebe só os subtipos ativos, agrupados por tipo', () => {
   assert.equal(mapa[String(semSubtipo.id)], undefined);
 });
 
-test('o processo guarda o subtipo — e recusa o subtipo de outro tipo', () => {
+test('o processo guarda os subtipos — e recusa o subtipo de outro tipo', () => {
   const sub = subtipos.doTipo(tipoA.id).find((s) => s.nome === 'Mudança de endereço');
   const processo = novoProcesso({ subtipo_processo_id: sub.id });
-  assert.equal(processo.subtipo_processo_id, sub.id);
-  assert.equal(processo.subtipo_processo, 'Mudança de endereço');
+  assert.deepEqual(subtipos.doProcesso(processo.id).map((s) => s.nome), ['Mudança de endereço']);
+  assert.equal(processo.subtipos_processo, 'Mudança de endereço');
 
   // Sem subtipo continua valendo: o campo é opcional.
   const semSubtipo = novoProcesso();
-  assert.equal(semSubtipo.subtipo_processo_id, null);
-  assert.equal(semSubtipo.subtipo_processo, null);
+  assert.deepEqual(subtipos.doProcesso(semSubtipo.id), []);
+  assert.equal(semSubtipo.subtipos_processo, null);
 
   // Subtipo de OUTRO tipo é recusado — o formulário não pode misturar.
   const deOutroTipo = subtipos.doTipo(tipoB.id)[0];
@@ -109,26 +109,27 @@ test('o processo guarda o subtipo — e recusa o subtipo de outro tipo', () => {
     () => novoProcesso({ subtipo_processo_id: deOutroTipo.id }),
     /não pertence ao tipo/i
   );
+  // E também quando vem junto com um válido.
+  assert.throws(
+    () => novoProcesso({ subtipo_processo_id: [sub.id, deOutroTipo.id] }),
+    /não pertence ao tipo/i
+  );
 });
 
-test('o subtipo pode ser escolhido depois, na edição', () => {
+test('os subtipos podem ser escolhidos e trocados depois, na edição', () => {
   const processo = novoProcesso();
-  assert.equal(processo.subtipo_processo_id, null);
+  assert.deepEqual(subtipos.doProcesso(processo.id), []);
 
   const sub = subtipos.doTipo(tipoA.id).find((s) => s.nome === 'Mudança de endereço');
-  const salvo = processosDom.atualizar(
-    processo.id,
-    { cliente_id: cliente.id, subtipo_processo_id: sub.id },
-    admin
-  );
-  assert.equal(salvo.subtipo_processo, 'Mudança de endereço');
+  processosDom.atualizar(processo.id, { cliente_id: cliente.id, subtipo_processo_id: sub.id }, admin);
+  assert.deepEqual(subtipos.doProcesso(processo.id).map((s) => s.nome), ['Mudança de endereço']);
 
-  const registro = historico.doProcesso(processo.id).find((h) => h.observacao.includes('Subtipo alterado'));
-  assert.ok(registro, 'a troca de subtipo precisa ficar no histórico');
+  const registro = historico.doProcesso(processo.id).find((h) => h.observacao.includes('Subtipos:'));
+  assert.ok(registro, 'a troca de subtipos precisa ficar no histórico');
 
   // E pode voltar a ficar sem nenhum.
-  const limpo = processosDom.atualizar(processo.id, { cliente_id: cliente.id, subtipo_processo_id: '' }, admin);
-  assert.equal(limpo.subtipo_processo_id, null);
+  processosDom.atualizar(processo.id, { cliente_id: cliente.id, subtipo_processo_id: '' }, admin);
+  assert.deepEqual(subtipos.doProcesso(processo.id), []);
 });
 
 test('subtipo em uso não é excluído; sem uso, é', () => {
@@ -297,6 +298,188 @@ test('o backup carrega os subtipos', () => {
   assert.ok(dados.tabelas.subtipos_processo, 'sem isso, restaurar um backup perderia os subtipos');
   assert.ok(dados.tabelas.subtipos_processo.length > 0);
   assert.equal(dados.totais.subtipos_processo, dados.tabelas.subtipos_processo.length);
+});
+
+
+/* ------------------------------- checklist por subtipo (com deduplicação) */
+
+/** Item de modelo direto no banco, para montar os cenários. */
+function itemModelo({ tipo = null, subtipo = null, setor, item, obrigatorio = 1 }) {
+  const setorId = conn.prepare('SELECT id FROM setores WHERE nome = ?').get(setor).id;
+  const info = conn
+    .prepare(
+      `INSERT INTO checklist_modelo (tipo_processo_id, subtipo_processo_id, setor_id, item, obrigatorio, ativo, ordem)
+       VALUES (?, ?, ?, ?, ?, 1, 500)`
+    )
+    .run(tipo, subtipo, setorId, item, obrigatorio);
+  return Number(info.lastInsertRowid);
+}
+
+const tipoC = conn.prepare("SELECT * FROM tipos_processo WHERE nome = 'Alteração Contratual'").get();
+const subEndereco = subtipos.criar({ tipo_processo_id: tipoC.id, nome: 'Mudança de endereço' });
+const subCapital = subtipos.criar({ tipo_processo_id: tipoC.id, nome: 'Alteração de capital' });
+
+// O item de cada subtipo, e um que os DOIS pedem — escrito diferente de
+// propósito, como duas pessoas cadastrariam.
+itemModelo({ tipo: tipoC.id, subtipo: subEndereco.id, setor: 'Paralegal', item: 'Comprovante de endereço novo' });
+itemModelo({ tipo: tipoC.id, subtipo: subCapital.id, setor: 'Paralegal', item: 'Demonstrativo de integralização' });
+itemModelo({ tipo: tipoC.id, subtipo: subEndereco.id, setor: 'Paralegal', item: 'Emitir certidão negativa federal' });
+itemModelo({
+  tipo: tipoC.id,
+  subtipo: subCapital.id,
+  setor: 'Paralegal',
+  item: 'emitir certidao negativa federal.',
+  obrigatorio: 0,
+});
+// Mesmo texto, OUTRO setor: são duas tarefas de gente diferente.
+itemModelo({ tipo: tipoC.id, subtipo: subCapital.id, setor: 'Contábil', item: 'Emitir certidão negativa federal' });
+
+function novoDeAlteracao(subtipoIds) {
+  return processosDom.criar(
+    {
+      cliente_id: cliente.id,
+      tipo_processo_id: tipoC.id,
+      data_abertura: '2026-03-01',
+      subtipo_processo_id: subtipoIds,
+    },
+    admin
+  );
+}
+
+const textos = (processoId) => checklist.doProcesso(processoId).map((i) => i.item);
+
+test('o checklist traz os itens do tipo mais os dos subtipos escolhidos', () => {
+  const semSubtipo = novoDeAlteracao([]);
+  const soEndereco = novoDeAlteracao([subEndereco.id]);
+
+  assert.ok(!textos(semSubtipo.id).includes('Comprovante de endereço novo'),
+    'item de subtipo não entra em quem não escolheu o subtipo');
+  assert.ok(textos(soEndereco.id).includes('Comprovante de endereço novo'));
+  assert.ok(!textos(soEndereco.id).includes('Demonstrativo de integralização'),
+    'item do outro subtipo não pode vazar');
+
+  // Os itens gerais do tipo continuam entrando nos dois.
+  const gerais = checklist
+    .doProcesso(semSubtipo.id)
+    .filter((i) => i.item !== 'Comprovante de endereço novo');
+  assert.ok(gerais.length > 0, 'o processo continua recebendo os itens do tipo e de "Todos"');
+});
+
+test('item pedido por dois subtipos aparece uma vez só', () => {
+  const dois = novoDeAlteracao([subEndereco.id, subCapital.id]);
+  const lista = textos(dois.id);
+
+  const certidoes = lista.filter((t) => /certid(ã|a)o negativa federal/i.test(t));
+  assert.equal(
+    certidoes.length,
+    2,
+    `esperava 2 (uma por setor), veio ${certidoes.length}: ${certidoes.join(' | ')}`
+  );
+
+  // Os dois subtipos trouxeram os seus itens próprios.
+  assert.ok(lista.includes('Comprovante de endereço novo'));
+  assert.ok(lista.includes('Demonstrativo de integralização'));
+
+  // O mesmo texto em setores diferentes NÃO é o mesmo item.
+  const porSetor = checklist
+    .doProcesso(dois.id)
+    .filter((i) => /certid/i.test(i.item))
+    .map((i) => i.setor)
+    .sort();
+  assert.deepEqual(porSetor, ['Contábil', 'Paralegal']);
+});
+
+test('quando um dos repetidos é obrigatório, o item entra como obrigatório', () => {
+  // "Emitir certidão negativa federal" é obrigatório em Mudança de endereço e
+  // opcional em Alteração de capital: vence o mais exigente.
+  const dois = novoDeAlteracao([subEndereco.id, subCapital.id]);
+  const certidao = checklist
+    .doProcesso(dois.id)
+    .find((i) => /certid/i.test(i.item) && i.setor === 'Paralegal');
+  assert.equal(certidao.obrigatorio, 1, 'quem é obrigatório em algum caminho entra obrigatório');
+});
+
+test('a comparação ignora acento, caixa e pontuação no fim', () => {
+  assert.equal(
+    checklist.chaveDoItem(1, 'Emitir certidão negativa federal'),
+    checklist.chaveDoItem(1, '  emitir  CERTIDAO negativa federal.  ')
+  );
+  assert.notEqual(
+    checklist.chaveDoItem(1, 'Emitir certidão'),
+    checklist.chaveDoItem(2, 'Emitir certidão'),
+    'setores diferentes são tarefas diferentes'
+  );
+});
+
+test('trocar os subtipos acerta o checklist do processo já aberto', () => {
+  const processo = novoDeAlteracao([subEndereco.id]);
+  assert.ok(textos(processo.id).includes('Comprovante de endereço novo'));
+  assert.ok(!textos(processo.id).includes('Demonstrativo de integralização'));
+
+  // Passa a ter os dois: entra o item do subtipo novo, sem duplicar a certidão.
+  const comDois = processosDom.atualizar(
+    processo.id,
+    { cliente_id: cliente.id, subtipo_processo_id: [subEndereco.id, subCapital.id] },
+    admin
+  );
+  assert.ok(textos(processo.id).includes('Demonstrativo de integralização'));
+  assert.equal(comDois.ajusteChecklist.adicionados.length, 2, 'entram o item próprio e a certidão do Contábil');
+  assert.equal(
+    textos(processo.id).filter((t) => /certid(ã|a)o negativa federal/i.test(t) ).length,
+    2
+  );
+
+  // Tira o de capital: o item dele sai, porque ninguém respondeu.
+  const soEndereco = processosDom.atualizar(
+    processo.id,
+    { cliente_id: cliente.id, subtipo_processo_id: [subEndereco.id] },
+    admin
+  );
+  assert.ok(!textos(processo.id).includes('Demonstrativo de integralização'));
+  assert.equal(soEndereco.ajusteChecklist.removidos.length, 2);
+  assert.equal(soEndereco.ajusteChecklist.mantidos.length, 0);
+});
+
+test('item já respondido NÃO some ao desmarcar o subtipo', () => {
+  const processo = novoDeAlteracao([subEndereco.id, subCapital.id]);
+  const alvo = checklist.doProcesso(processo.id).find((i) => i.item === 'Demonstrativo de integralização');
+  assert.ok(alvo, 'o item do subtipo precisa estar lá');
+
+  checklist.responder(alvo.id, { resposta: 'Sim' }, admin);
+
+  const salvo = processosDom.atualizar(
+    processo.id,
+    { cliente_id: cliente.id, subtipo_processo_id: [subEndereco.id] },
+    admin
+  );
+
+  assert.ok(
+    textos(processo.id).includes('Demonstrativo de integralização'),
+    'apagar um item respondido destruiria trabalho registrado'
+  );
+  assert.equal(salvo.ajusteChecklist.mantidos.length, 1);
+  assert.equal(salvo.ajusteChecklist.mantidos[0].item, 'Demonstrativo de integralização');
+});
+
+test('o histórico conta o que mudou nos subtipos e no checklist', () => {
+  const processo = novoDeAlteracao([subEndereco.id]);
+  processosDom.atualizar(
+    processo.id,
+    { cliente_id: cliente.id, subtipo_processo_id: [subEndereco.id, subCapital.id] },
+    admin
+  );
+
+  const registro = historico.doProcesso(processo.id).find((h) => h.observacao.includes('Subtipos:'));
+  assert.ok(registro);
+  assert.match(registro.observacao, /entrou: Alteração de capital/);
+  assert.match(registro.observacao, /Checklist: 2 item\(ns\) adicionado\(s\)/);
+});
+
+test('o backup carrega a ligação processo-subtipo', () => {
+  const backup = require('../src/domain/backup');
+  const dados = backup.gerar({ usuario: admin, incluirArquivos: false });
+  assert.ok(dados.tabelas.processos_subtipos, 'sem isso, restaurar perderia os subtipos dos processos');
+  assert.ok(dados.tabelas.processos_subtipos.length > 0);
 });
 
 test.after(() => {

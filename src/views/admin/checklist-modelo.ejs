@@ -161,6 +161,14 @@
         </select>
       </div>
       <div class="campo">
+        <label for="subtipo_processo_id">Subtipo</label>
+        <select id="subtipo_processo_id" name="subtipo_processo_id"
+                data-subtipos-select-de="tipo_processo_id">
+          <option value="">Todo o tipo</option>
+        </select>
+        <div class="dica">Deixe em “Todo o tipo” para o item valer em qualquer processo do tipo.</div>
+      </div>
+      <div class="campo">
         <label for="setor_id">Setor <span class="obrig">*</span></label>
         <select id="setor_id" name="setor_id" required>
           <% setores.forEach(function (s) { %>
@@ -196,7 +204,7 @@
     <div class="tabela-scroll">
       <table class="tabela" id="tabela-modelo">
         <thead>
-          <tr><th>Tipo</th><th>Setor</th><th>Item</th><th>Obrigatório</th><th>Ativo</th><th></th></tr>
+          <tr><th>Tipo</th><th>Subtipo</th><th>Setor</th><th>Item</th><th>Obrigatório</th><th>Ativo</th><th></th></tr>
         </thead>
         <tbody>
           <% itens.forEach(function (m) { %>
@@ -206,6 +214,14 @@
                   <option value="todos" <%= m.tipo_processo_id ? '' : 'selected' %>>Todos</option>
                   <% tipos.forEach(function (t) { %>
                     <option value="<%= t.id %>" <%= m.tipo_processo_id === t.id ? 'selected' : '' %>><%= t.nome %></option>
+                  <% }) %>
+                </select>
+              </td>
+              <td>
+                <select form="modelo-<%= m.id %>" name="subtipo_processo_id">
+                  <option value="">Todo o tipo</option>
+                  <% (subtiposPorTipoLista[String(m.tipo_processo_id)] || []).forEach(function (sub) { %>
+                    <option value="<%= sub.id %>" <%= m.subtipo_processo_id === sub.id ? 'selected' : '' %>><%= sub.nome %></option>
                   <% }) %>
                 </select>
               </td>
@@ -248,5 +264,11 @@
     checklist clonado na abertura — só a ordem de atendimento é aplicada também a eles.
   </p>
 </div>
+
+<%# Subtipos por tipo, para o campo acompanhar o tipo escolhido sem ir ao
+    servidor a cada troca. %>
+<script nonce="<%= nonce %>">
+  window.__subtiposPorTipo = <%- jsonSeguro(subtiposPorTipoLista) %>;
+</script>
 
 <%- include('../partials/rodape') %>

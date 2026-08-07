@@ -24,51 +24,179 @@ function proximoCodigoItem(conn) {
 }
 
 /**
- * Clona o CHECKLIST_MODELO para um processo recém-criado:
- * itens do tipo escolhido + itens da linha "Todos" (tipo_processo_id IS NULL).
- * Deve rodar dentro da transação de criação do processo.
+ * Identidade de um item de checklist, para saber quando dois são o MESMO.
+ *
+ * Um processo pode ter vários subtipos, e é comum que mais de um peça a mesma
+ * coisa — "Emitir certidão negativa federal" aparece tanto em "Entrada de
+ * sócio" quanto em "Alteração de capital". Sem juntar, o checklist nasceria
+ * com o item repetido e alguém responderia duas vezes o mesmo trabalho.
+ *
+ * A chave é **setor + texto do item**, não só o texto: a mesma frase em setores
+ * diferentes é tarefa de gente diferente. "Conferir documentação" no Fiscal e
+ * no Contábil são duas conferências, e as duas precisam acontecer.
+ *
+ * O texto é comparado sem acento, sem caixa, sem espaço sobrando e sem
+ * pontuação no fim — "Emitir certidão negativa." e "emitir certidao negativa"
+ * são a mesma coisa escrita por duas pessoas.
  */
-function gerarParaProcesso(processoId, tipoProcessoId, aberturaISO = agoraISO()) {
+function chaveDoItem(setorId, item) {
+  const texto = String(item || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // tira o acento, deixando a letra
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    // A pontuação sai DEPOIS de aparar os espaços: "federal.  " termina em
+    // espaço, e a limpeza feita na ordem contrária não encontrava o ponto.
+    .replace(/[.,;:!?]+$/g, '')
+    .trim();
+  // O separador não pode aparecer no texto, senão setor 1 + "2 x" colidiria
+  // com setor 12 + "x".
+  return `${setorId}\u0000${texto}`;
+}
+
+/**
+ * Itens do modelo que valem para um processo: os de "Todos" (sem tipo), os do
+ * tipo escolhido e os dos subtipos escolhidos — já sem repetição.
+ *
+ * Quando o mesmo item chega por caminhos diferentes, vence o mais exigente:
+ * se um deles é obrigatório, o item entra como obrigatório. A posição é a da
+ * primeira aparição, para o checklist não mudar de ordem conforme os subtipos.
+ */
+function modeloDoProcesso(tipoProcessoId, subtipoIds = []) {
   const conn = db.get();
-  const modelos = conn
+  const ids = subtipoIds.map(Number).filter(Boolean);
+  const marcas = ids.map(() => '?').join(', ');
+
+  const linhas = conn
     .prepare(
-      `SELECT m.id, m.setor_id, m.item, m.obrigatorio, m.ordem, s.nome AS setor,
+      `SELECT m.id, m.setor_id, m.item, m.obrigatorio, m.ordem, m.subtipo_processo_id,
+              s.nome AS setor, sub.nome AS subtipo,
               ${ordemSetores.posicaoSQL()} AS setor_ordem
          FROM checklist_modelo m
          JOIN setores s ON s.id = m.setor_id
+         LEFT JOIN subtipos_processo sub ON sub.id = m.subtipo_processo_id
          ${ordemSetores.joinSQL('?', 's.id')}
         WHERE m.ativo = 1
           AND (m.tipo_processo_id = ? OR m.tipo_processo_id IS NULL)
-        ORDER BY setor_ordem, m.ordem, m.id`
+          AND (m.subtipo_processo_id IS NULL${ids.length ? ` OR m.subtipo_processo_id IN (${marcas})` : ''})
+        ORDER BY setor_ordem, (m.subtipo_processo_id IS NOT NULL), m.ordem, m.id`
     )
-    .all(tipoProcessoId, tipoProcessoId);
+    .all(tipoProcessoId, tipoProcessoId, ...ids);
 
-  const inserir = conn.prepare(
-    `INSERT INTO checklist
-       (codigo, processo_id, setor_id, item, obrigatorio, status_item, prazo, data_criacao, ordem)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
+  const porChave = new Map();
+  for (const linha of linhas) {
+    const chave = chaveDoItem(linha.setor_id, linha.item);
+    const jaTem = porChave.get(chave);
+    if (!jaTem) {
+      porChave.set(chave, { ...linha, chave, origens: [linha.subtipo || 'tipo'] });
+      continue;
+    }
+    // Repetido: guarda de onde mais veio e sobe para obrigatório se algum for.
+    jaTem.origens.push(linha.subtipo || 'tipo');
+    if (linha.obrigatorio) jaTem.obrigatorio = 1;
+  }
+
+  return [...porChave.values()];
+}
+
+/**
+ * Clona o CHECKLIST_MODELO para um processo recém-criado.
+ * Deve rodar dentro da transação de criação do processo.
+ */
+function gerarParaProcesso(processoId, tipoProcessoId, aberturaISO = agoraISO(), subtipoIds = []) {
+  const conn = db.get();
+  const modelos = modeloDoProcesso(tipoProcessoId, subtipoIds);
 
   let seq = proximoCodigoItem(conn);
   const criados = [];
   modelos.forEach((m, indice) => {
-    const horas = parametros.prazoHorasDoSetor(m.setor);
-    const prazo = somarHoras(aberturaISO, horas).toISOString();
-    const codigo = `CHK-${String(seq++).padStart(4, '0')}`;
-    const info = inserir.run(
+    criados.push(inserirItem(conn, processoId, m, aberturaISO, seq++, indice + 1));
+  });
+  return criados;
+}
+
+/** Grava um item do modelo no checklist do processo. */
+function inserirItem(conn, processoId, modelo, aberturaISO, sequencia, ordem) {
+  const horas = parametros.prazoHorasDoSetor(modelo.setor);
+  const prazo = somarHoras(aberturaISO, horas).toISOString();
+  const codigo = `CHK-${String(sequencia).padStart(4, '0')}`;
+  const info = conn
+    .prepare(
+      `INSERT INTO checklist
+         (codigo, processo_id, setor_id, item, obrigatorio, status_item, prazo, data_criacao, ordem)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
       codigo,
       processoId,
-      m.setor_id,
-      m.item,
-      m.obrigatorio,
+      modelo.setor_id,
+      modelo.item,
+      modelo.obrigatorio,
       STATUS_ITEM.PENDENTE,
       prazo,
       agoraISO(),
-      indice + 1
+      ordem
     );
-    criados.push({ id: info.lastInsertRowid, codigo, setor: m.setor });
-  });
-  return criados;
+  return { id: info.lastInsertRowid, codigo, setor: modelo.setor, item: modelo.item };
+}
+
+/** Item ainda intocado: ninguém respondeu, comentou nem marcou impedimento. */
+function intocado(item) {
+  return (
+    item.status_item === STATUS_ITEM.PENDENTE &&
+    !item.resposta &&
+    !item.possui_impedimento &&
+    !item.descricao_impedimento &&
+    !item.observacao &&
+    !item.responsavel_id &&
+    !item.conferido_por_id
+  );
+}
+
+/**
+ * Acerta o checklist depois de mudarem os subtipos do processo.
+ *
+ * Entra o que passou a valer; sai o que deixou de valer — **desde que ninguém
+ * tenha mexido**. Item já respondido fica onde está: apagar destruiria
+ * trabalho registrado, e quem respondeu não tem como saber que sumiu. Eles
+ * ficam listados no retorno para a tela avisar.
+ */
+function sincronizarComSubtipos(processoId, tipoProcessoId, subtipoIds, aberturaISO = agoraISO()) {
+  const conn = db.get();
+  const esperado = modeloDoProcesso(tipoProcessoId, subtipoIds);
+  const atuais = conn.prepare('SELECT * FROM checklist WHERE processo_id = ?').all(processoId);
+
+  const chavesAtuais = new Map();
+  for (const item of atuais) chavesAtuais.set(chaveDoItem(item.setor_id, item.item), item);
+  const chavesEsperadas = new Set(esperado.map((m) => m.chave));
+
+  const adicionados = [];
+  const removidos = [];
+  const mantidos = [];
+
+  let seq = proximoCodigoItem(conn);
+  const maiorOrdem = atuais.reduce((maior, i) => Math.max(maior, i.ordem || 0), 0);
+  let ordem = maiorOrdem;
+
+  for (const modelo of esperado) {
+    if (chavesAtuais.has(modelo.chave)) continue;
+    ordem += 1;
+    adicionados.push(inserirItem(conn, processoId, modelo, aberturaISO, seq++, ordem));
+  }
+
+  const apagar = conn.prepare('DELETE FROM checklist WHERE id = ?');
+  for (const [chave, item] of chavesAtuais) {
+    if (chavesEsperadas.has(chave)) continue;
+    if (intocado(item)) {
+      apagar.run(item.id);
+      removidos.push({ codigo: item.codigo, item: item.item });
+    } else {
+      mantidos.push({ codigo: item.codigo, item: item.item, status: item.status_item });
+    }
+  }
+
+  return { adicionados, removidos, mantidos };
 }
 
 const SELECT_ITEM = `
@@ -321,6 +449,9 @@ module.exports = {
   STATUS_ITEM,
   ErroValidacao,
   gerarParaProcesso,
+  modeloDoProcesso,
+  sincronizarComSubtipos,
+  chaveDoItem,
   obterItem,
   doProcesso,
   agrupadoPorSetor,

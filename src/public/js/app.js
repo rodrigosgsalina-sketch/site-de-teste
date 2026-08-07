@@ -218,6 +218,9 @@
 
   /* Subtipos que acompanham o tipo escolhido (data-subtipos-de="id-do-select").
 
+     Vários podem ser marcados: um processo costuma resolver mais de uma coisa
+     na mesma ida ao cartório, e o checklist vira a soma dos itens.
+
      A lista de subtipos por tipo vem junto com a tela (window.__subtiposPorTipo),
      porque são poucas linhas: uma consulta ao servidor a cada troca de tipo
      custaria mais do que mandar tudo de uma vez.
@@ -227,23 +230,74 @@
   function ligarSubtipos(raiz) {
     var porTipo = window.__subtiposPorTipo || {};
 
-    raiz.querySelectorAll('[data-subtipos-de]').forEach(function (select) {
-      var tipo = document.getElementById(select.dataset.subtiposDe);
+    raiz.querySelectorAll('[data-subtipos-de]').forEach(function (caixa) {
+      var tipo = document.getElementById(caixa.dataset.subtiposDe);
       if (!tipo) return;
-      var campo = select.closest('[data-campo-subtipo]') || select.parentNode;
-      // Guarda a escolha anterior para reaparecer quando o formulário volta com
-      // erro de validação.
-      var desejado = select.dataset.selecionado || '';
+      var campo = caixa.closest('[data-campo-subtipo]') || caixa.parentNode;
+      // Guarda as escolhas para reaparecerem quando o formulário volta com erro
+      // de validação.
+      var marcados = (caixa.dataset.selecionados || '').split(',').filter(Boolean);
+
+      function lembrarMarcados() {
+        marcados = [].slice
+          .call(caixa.querySelectorAll('input[type="checkbox"]:checked'))
+          .map(function (i) { return i.value; });
+      }
 
       function montar() {
         var lista = porTipo[String(tipo.value)] || [];
-        var anterior = select.value || desejado;
+        caixa.innerHTML = '';
 
+        lista.forEach(function (sub) {
+          var rotulo = document.createElement('label');
+          rotulo.className = 'subtipo-opcao';
+
+          var marca = document.createElement('input');
+          marca.type = 'checkbox';
+          marca.name = 'subtipo_processo_id';
+          marca.value = String(sub.id);
+          // Só continua marcado se o subtipo pertencer ao tipo atual.
+          marca.checked = marcados.indexOf(String(sub.id)) !== -1;
+          marca.addEventListener('change', lembrarMarcados);
+
+          var texto = document.createElement('span');
+          texto.textContent = sub.nome;
+
+          rotulo.appendChild(marca);
+          rotulo.appendChild(texto);
+          caixa.appendChild(rotulo);
+        });
+
+        lembrarMarcados();
+        campo.hidden = lista.length === 0;
+      }
+
+      tipo.addEventListener('change', montar);
+      montar();
+    });
+  }
+
+  /* Um <select> de subtipos que acompanha o tipo escolhido
+     (data-subtipos-select-de="id-do-select-de-tipo").
+
+     Usado no checklist modelo, onde o item pertence a UM subtipo — diferente da
+     abertura de processo, em que vários podem ser marcados. */
+  function ligarSubtipoUnico(raiz) {
+    var porTipo = window.__subtiposPorTipo || {};
+
+    raiz.querySelectorAll('[data-subtipos-select-de]').forEach(function (select) {
+      var tipo = document.getElementById(select.dataset.subtiposSelectDe);
+      if (!tipo) return;
+
+      function montar() {
+        var lista = porTipo[String(tipo.value)] || [];
+        var anterior = select.value;
         select.innerHTML = '';
-        var vazia = document.createElement('option');
-        vazia.value = '';
-        vazia.textContent = 'Selecione…';
-        select.appendChild(vazia);
+
+        var todo = document.createElement('option');
+        todo.value = '';
+        todo.textContent = 'Todo o tipo';
+        select.appendChild(todo);
 
         lista.forEach(function (sub) {
           var opcao = document.createElement('option');
@@ -252,12 +306,10 @@
           select.appendChild(opcao);
         });
 
-        // Só restaura a escolha se ela pertencer ao tipo que está selecionado.
         var cabe = lista.some(function (sub) { return String(sub.id) === String(anterior); });
-        select.value = cabe ? String(anterior) : '';
-        desejado = select.value;
-
-        campo.hidden = lista.length === 0;
+        select.value = cabe ? anterior : '';
+        // "Todos os processos" não tem subtipo: o campo não teria o que oferecer.
+        select.disabled = lista.length === 0;
       }
 
       tipo.addEventListener('change', montar);
@@ -362,6 +414,7 @@
     ligarFiltroDeLista(document);
     ligarBuscaDeCliente(document);
     ligarSubtipos(document);
+    ligarSubtipoUnico(document);
     ligarResumoDeCliente(document);
     ligarTopo();
     ligarContadores();

@@ -17,17 +17,25 @@
           <input type="text" value="<%= processo.tipo_processo %>" disabled>
           <div class="dica">O tipo define o checklist e não pode ser alterado após a abertura.</div>
         </div>
-        <%# O subtipo é só um detalhamento: pode ser escolhido ou trocado depois,
-            inclusive nos processos abertos antes de existirem subtipos. %>
+        <%# Os subtipos são detalhamento e podem mudar depois. O checklist
+            acompanha: entra o que passou a valer, sai o que deixou — e o que
+            já foi respondido fica onde está. %>
         <% if (subtiposDoTipo.length) { %>
-          <div class="campo">
-            <label for="subtipo_processo_id">Subtipo</label>
-            <select id="subtipo_processo_id" name="subtipo_processo_id">
-              <option value="">—</option>
+          <div class="campo largo">
+            <label>Subtipos</label>
+            <div class="subtipos-lista">
               <% subtiposDoTipo.forEach(function (sub) { %>
-                <option value="<%= sub.id %>" <%= String(processo.subtipo_processo_id) === String(sub.id) ? 'selected' : '' %>><%= sub.nome %></option>
+                <label class="subtipo-opcao">
+                  <input type="checkbox" name="subtipo_processo_id" value="<%= sub.id %>"
+                         <%= subtiposDoProcesso.some(function (x) { return x.id === sub.id; }) ? 'checked' : '' %>>
+                  <span><%= sub.nome %></span>
+                </label>
               <% }) %>
-            </select>
+            </div>
+            <div class="dica">
+              Marcar ou desmarcar acerta o checklist deste processo. Itens que já receberam resposta
+              não são removidos — eles continuam listados.
+            </div>
           </div>
         <% } %>
         <div class="campo">

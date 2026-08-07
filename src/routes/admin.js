@@ -533,13 +533,15 @@ router.get('/checklist-modelo', (req, res) => {
 
   let itens = conn
     .prepare(
-      `SELECT m.*, s.nome AS setor, t.nome AS tipo, ${posicao} AS posicao_setor
+      `SELECT m.*, s.nome AS setor, t.nome AS tipo, sub.nome AS subtipo, ${posicao} AS posicao_setor
          FROM checklist_modelo m
          JOIN setores s ON s.id = m.setor_id
          LEFT JOIN tipos_processo t ON t.id = m.tipo_processo_id
+         LEFT JOIN subtipos_processo sub ON sub.id = m.subtipo_processo_id
          ${juncaoOrdem}
          ${where}
-        ORDER BY posicao_setor, (m.tipo_processo_id IS NULL), t.ordem, m.ordem, m.id`
+        ORDER BY posicao_setor, (m.tipo_processo_id IS NULL), t.ordem,
+                 (m.subtipo_processo_id IS NOT NULL), m.ordem, m.id`
     )
     .all(...args);
 
@@ -548,7 +550,7 @@ router.get('/checklist-modelo', (req, res) => {
     // e no tipo. Vários termos funcionam como "e" ("debitos federais").
     const termos = paraBusca(filtros.q).split(' ').filter(Boolean);
     itens = itens.filter((m) => {
-      const alvo = paraBusca(`${m.item} ${m.setor} ${m.tipo || 'todos os processos'}`);
+      const alvo = paraBusca(`${m.item} ${m.setor} ${m.tipo || 'todos os processos'} ${m.subtipo || ''}`);
       return termos.every((t) => alvo.includes(t));
     });
   }
@@ -564,6 +566,14 @@ router.get('/checklist-modelo', (req, res) => {
     ordemSetores: tipoSelecionado ? ordemSetores.doTipo(tipoSelecionado) : [],
     tipos: conn.prepare('SELECT id, nome FROM tipos_processo ORDER BY nome').all(),
     tiposComOrdem: ordemSetores.tiposComOrdemPropria(),
+    // Inclui os inativos: um item de modelo pode apontar para um subtipo que
+    // saiu de circulação, e a linha dele precisa continuar legível.
+    subtiposPorTipoLista: subtiposDom.listar().reduce((mapa, sub) => {
+      const chave = String(sub.tipo_processo_id);
+      if (!mapa[chave]) mapa[chave] = [];
+      mapa[chave].push({ id: sub.id, nome: sub.nome + (sub.ativo ? '' : ' (inativo)') });
+      return mapa;
+    }, {}),
     setores: conn.prepare('SELECT id, nome, auxiliar FROM setores WHERE ativo = 1 ORDER BY ordem').all(),
   });
 });
@@ -623,14 +633,35 @@ router.post('/checklist-modelo', (req, res, next) => {
     const setorId = Number(req.body.setor_id);
     if (!setorId) throw new ErroValidacao('Selecione o setor responsável.');
 
+    // O subtipo só faz sentido dentro de um tipo, e só do tipo escolhido.
+    let subtipoId = req.body.subtipo_processo_id ? Number(req.body.subtipo_processo_id) : null;
+    if (subtipoId) {
+      const subtipo = subtiposDom.obter(subtipoId);
+      if (!subtipo) throw new ErroValidacao('Subtipo não encontrado.');
+      if (!tipoId || Number(subtipo.tipo_processo_id) !== tipoId) {
+        throw new ErroValidacao(
+          `O subtipo "${subtipo.nome}" pertence a outro tipo de processo. Escolha o tipo correspondente.`
+        );
+      }
+    }
+
     if (req.body.id) {
       conn
         .prepare(
           `UPDATE checklist_modelo
-              SET tipo_processo_id = ?, setor_id = ?, item = ?, obrigatorio = ?, ativo = ?
+              SET tipo_processo_id = ?, subtipo_processo_id = ?, setor_id = ?, item = ?,
+                  obrigatorio = ?, ativo = ?
             WHERE id = ?`
         )
-        .run(tipoId, setorId, item, req.body.obrigatorio ? 1 : 0, req.body.ativo ? 1 : 0, Number(req.body.id));
+        .run(
+          tipoId,
+          subtipoId,
+          setorId,
+          item,
+          req.body.obrigatorio ? 1 : 0,
+          req.body.ativo ? 1 : 0,
+          Number(req.body.id)
+        );
     } else {
       const ordem = conn
         .prepare(
@@ -640,10 +671,11 @@ router.post('/checklist-modelo', (req, res, next) => {
         .get(setorId, tipoId, tipoId).o;
       conn
         .prepare(
-          `INSERT INTO checklist_modelo (tipo_processo_id, setor_id, item, obrigatorio, ativo, ordem)
-           VALUES (?, ?, ?, ?, 1, ?)`
+          `INSERT INTO checklist_modelo
+             (tipo_processo_id, subtipo_processo_id, setor_id, item, obrigatorio, ativo, ordem)
+           VALUES (?, ?, ?, ?, ?, 1, ?)`
         )
-        .run(tipoId, setorId, item, req.body.obrigatorio ? 1 : 0, ordem);
+        .run(tipoId, subtipoId, setorId, item, req.body.obrigatorio ? 1 : 0, ordem);
     }
     historico.registrar({
       processoId: null,
