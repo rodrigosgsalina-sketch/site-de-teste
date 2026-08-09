@@ -29,7 +29,7 @@
               </td>
               <td><a class="mono" href="/processos/<%= item.processo_id %>#item-<%= item.id %>"><%= item.processo_codigo %></a></td>
               <td><%= item.razao_social %><div class="item-meta"><%= item.tipo_processo %></div></td>
-              <td><%= item.setor %></td>
+              <td><%= item.setor %><% if (!item.liberado) { %><div class="item-meta">aguardando <%= item.aguardando %></div><% } %></td>
               <td>
                 <%= item.item %>
                 <% if (!item.obrigatorio) { %><span class="etiqueta et-opcional">opcional</span><% } %>

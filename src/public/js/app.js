@@ -317,6 +317,178 @@
     });
   }
 
+  /* Ordem de atendimento dos setores: arrastar para reordenar.
+
+     O <ol> já vem do servidor na ordem certa. Arrastar (ou ↑/↓ com o setor em
+     foco) reposiciona o <li>, renumera e grava sozinho — sem recarregar a
+     página, porque quem arrastou precisa ver o resultado onde soltou.
+
+     Sem JavaScript nada disso existe e o formulário comum continua salvando
+     pelo botão, que só é escondido aqui. */
+  function ligarOrdenacaoArrastavel(raiz) {
+    raiz.querySelectorAll('[data-ordem-setores]').forEach(function (form) {
+      var lista = form.querySelector('.ordem-setores');
+      var campo = form.querySelector('input[name="setor_ids"]');
+      var estado = form.querySelector('[data-ordem-estado]');
+      var manual = form.querySelector('[data-ordem-manual]');
+      if (!lista || !campo) return;
+
+      // Com JS o salvamento é automático: o botão manual vira ruído.
+      if (manual) manual.hidden = true;
+
+      var arrastando = null;
+      var gravando = false;
+      var pendente = false;
+      var ultimaSalva = campo.value;
+
+      function itens() {
+        return Array.prototype.slice.call(lista.querySelectorAll('li[data-setor]'));
+      }
+
+      function renumerar() {
+        var todos = itens();
+        todos.forEach(function (li, i) {
+          var pos = li.querySelector('.ordem-posicao');
+          if (pos) pos.textContent = String(i + 1);
+          var nome = li.querySelector('.ordem-nome strong');
+          li.setAttribute(
+            'aria-label',
+            (nome ? nome.textContent.trim() : 'setor') + ', posição ' + (i + 1) + ' de ' + todos.length
+          );
+        });
+        campo.value = todos
+          .map(function (li) { return li.dataset.setor; })
+          .join(',');
+      }
+
+      function dizer(texto, erro) {
+        if (!estado) return;
+        estado.textContent = texto;
+        estado.classList.toggle('ordem-erro', Boolean(erro));
+      }
+
+      function gravar() {
+        // Soltar o setor no mesmo lugar — ou um clique simples — não é mudança:
+        // não vale um POST.
+        if (campo.value === ultimaSalva) return;
+        // Uma gravação por vez; o que chegar durante ela vira uma única
+        // regravação no fim, com a ordem mais recente.
+        if (gravando) { pendente = true; return; }
+        gravando = true;
+        var enviada = campo.value;
+        dizer('salvando…', false);
+
+        var dados = new URLSearchParams();
+        dados.set('_csrf', (form.querySelector('input[name="_csrf"]') || {}).value || '');
+        dados.set('tipo_processo_id', form.dataset.tipo || '');
+        dados.set('setor_ids', campo.value);
+
+        fetch(form.action, {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: dados.toString(),
+          credentials: 'same-origin',
+        })
+          .then(function (resposta) {
+            return resposta.json().catch(function () { return { ok: false }; });
+          })
+          .then(function (corpo) {
+            if (corpo && corpo.ok) {
+              ultimaSalva = enviada;
+              dizer('ordem salva', false);
+            } else {
+              dizer((corpo && corpo.erro) || 'não foi possível salvar — recarregue a página', true);
+            }
+          })
+          .catch(function () {
+            dizer('sem conexão com o servidor — a ordem não foi salva', true);
+          })
+          .then(function () {
+            gravando = false;
+            if (pendente) { pendente = false; gravar(); }
+          });
+      }
+
+      /* Vizinho sob o ponteiro: o primeiro item cuja metade de cima já passou. */
+      function alvoEm(y) {
+        var candidatos = itens().filter(function (li) { return li !== arrastando; });
+        for (var i = 0; i < candidatos.length; i++) {
+          var caixa = candidatos[i].getBoundingClientRect();
+          if (y < caixa.top + caixa.height / 2) return candidatos[i];
+        }
+        return null;
+      }
+
+      /* Arrasto por ponteiro (mouse, dedo ou caneta).
+
+         Não é o arrastar nativo do HTML5 de propósito: aquele simplesmente não
+         existe em tela sensível ao toque, e a plataforma é usada no celular.
+         Pointer Events atendem os três com o mesmo código.
+
+         O acompanhamento é feito no documento, não na lista: com o dedo o
+         Chromium solta a captura no meio do caminho, e ouvir só a lista faria
+         o setor escapar assim que o ponteiro passasse da borda dela. */
+      function mover(evento) {
+        if (!arrastando) return;
+        evento.preventDefault();
+        var vizinho = alvoEm(evento.clientY);
+        if (vizinho) lista.insertBefore(arrastando, vizinho);
+        else if (lista.lastElementChild !== arrastando) lista.appendChild(arrastando);
+      }
+
+      function largar() {
+        if (!arrastando) return;
+        var solto = arrastando;
+        arrastando = null;
+        document.removeEventListener('pointermove', mover);
+        document.removeEventListener('pointerup', largar);
+        document.removeEventListener('pointercancel', largar);
+
+        solto.classList.remove('arrastando');
+        solto.focus({ preventScroll: true });
+        renumerar();
+        gravar();
+      }
+
+      lista.addEventListener('pointerdown', function (evento) {
+        if (evento.button !== undefined && evento.button !== 0) return;
+        var li = evento.target.closest('li[data-setor]');
+        if (!li) return;
+
+        arrastando = li;
+        li.classList.add('arrastando');
+        document.addEventListener('pointermove', mover, { passive: false });
+        // Soltar fora da lista, ou o sistema tomar o gesto (chamada, alt+tab),
+        // termina o arrasto onde ele parou em vez de deixá-lo preso.
+        document.addEventListener('pointerup', largar);
+        document.addEventListener('pointercancel', largar);
+        // No toque, segurar o item rolaria a página junto.
+        evento.preventDefault();
+      });
+
+      /* Teclado: mesma reordenação sem mouse. */
+      lista.addEventListener('keydown', function (evento) {
+        if (evento.key !== 'ArrowUp' && evento.key !== 'ArrowDown') return;
+        var li = evento.target.closest('li[data-setor]');
+        if (!li) return;
+        evento.preventDefault();
+
+        if (evento.key === 'ArrowUp' && li.previousElementSibling) {
+          lista.insertBefore(li, li.previousElementSibling);
+        } else if (evento.key === 'ArrowDown' && li.nextElementSibling) {
+          lista.insertBefore(li.nextElementSibling, li);
+        } else {
+          return;
+        }
+        li.focus({ preventScroll: true });
+        renumerar();
+        gravar();
+      });
+
+      renumerar();
+    });
+  }
+
   /* Mostra o resumo do cliente escolhido (data-resumo-cliente="id-do-painel"). */
   function ligarResumoDeCliente(raiz) {
     raiz.querySelectorAll('[data-resumo-cliente]').forEach(function (select) {
@@ -415,6 +587,7 @@
     ligarBuscaDeCliente(document);
     ligarSubtipos(document);
     ligarSubtipoUnico(document);
+    ligarOrdenacaoArrastavel(document);
     ligarResumoDeCliente(document);
     ligarTopo();
     ligarContadores();

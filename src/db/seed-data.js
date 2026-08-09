@@ -198,6 +198,7 @@ const PARAMETROS = [
   { chave: 'EXIGIR_OBSERVACAO_IMPEDIMENTO', valor: 'Sim', tipo: 'booleano', categoria: 'Fluxo', descricao: 'Descrição do impedimento é obrigatória.' },
   { chave: 'EXIGIR_REVISAO_FINAL', valor: 'Sim', tipo: 'booleano', categoria: 'Fluxo', descricao: 'Exige o item de Qualidade (revisão final) respondido antes de concluir.' },
   { chave: 'EXIGIR_DUPLA_CONFERENCIA', valor: 'Não', tipo: 'booleano', categoria: 'Fluxo', descricao: 'Exige que a resposta do item seja confirmada por um segundo colaborador.' },
+  { chave: 'EXIGIR_ORDEM_SETORES', valor: 'Sim', tipo: 'booleano', categoria: 'Fluxo', descricao: 'Cada setor do checklist só abre depois que o anterior for respondido, na ordem definida para o tipo de processo.' },
   { chave: 'EXIGIR_APROVACAO_GESTOR', valor: 'Sim', tipo: 'booleano', categoria: 'Fluxo', descricao: 'Somente Administrador/Diretoria pode concluir o processo.' },
   { chave: 'UTILIZAR_VIABILIDADE', valor: 'Sim', tipo: 'booleano', categoria: 'Fluxo', descricao: 'Fluxo considera a etapa de viabilidade (Junta Comercial).' },
   { chave: 'EXIGIR_DBE', valor: 'Sim', tipo: 'booleano', categoria: 'Fluxo', descricao: 'Fluxo considera a emissão do DBE.' },

@@ -70,17 +70,6 @@ function definir(tipoProcessoId, setorIds) {
   return doTipo(tipoProcessoId);
 }
 
-/** Move um setor uma posição para cima (-1) ou para baixo (+1). */
-function mover(tipoProcessoId, setorId, direcao) {
-  const atual = doTipo(tipoProcessoId).map((s) => s.id);
-  const de = atual.indexOf(Number(setorId));
-  if (de === -1) return doTipo(tipoProcessoId);
-  const para = de + (direcao < 0 ? -1 : 1);
-  if (para < 0 || para >= atual.length) return doTipo(tipoProcessoId);
-  atual.splice(para, 0, atual.splice(de, 1)[0]);
-  return definir(tipoProcessoId, atual);
-}
-
 /** Remove a ordem personalizada: o tipo volta a seguir a ordem geral. */
 function limpar(tipoProcessoId) {
   db.get().prepare('DELETE FROM ordem_setores_tipo WHERE tipo_processo_id = ?').run(tipoProcessoId);
@@ -95,4 +84,4 @@ function tiposComOrdemPropria() {
     .map((r) => r.tipo_processo_id);
 }
 
-module.exports = { posicaoSQL, joinSQL, doTipo, definir, mover, limpar, tiposComOrdemPropria };
+module.exports = { posicaoSQL, joinSQL, doTipo, definir, limpar, tiposComOrdemPropria };

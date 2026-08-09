@@ -102,37 +102,40 @@
     <% if (!ordemSetores.length) { %>
       <p class="vazio">Este tipo ainda não tem itens de checklist cadastrados.</p>
     <% } else { %>
-      <ol class="ordem-setores">
-        <% ordemSetores.forEach(function (s, i) { %>
-          <li>
-            <span class="ordem-posicao"><%= i + 1 %></span>
-            <span class="ordem-nome">
-              <strong><%= s.nome %></strong>
-              <% if (s.auxiliar) { %><span class="etiqueta et-opcional">auxiliar</span><% } %>
-              <small><%= s.itens %> item(ns)</small>
-            </span>
-            <span class="acoes">
-              <form method="post" action="/admin/checklist-modelo/ordem/mover">
-                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <input type="hidden" name="tipo_processo_id" value="<%= tipoAtual.id %>">
-                <input type="hidden" name="setor_id" value="<%= s.id %>">
-                <input type="hidden" name="direcao" value="cima">
-                <button class="botao botao-secundario botao-pequeno" title="Subir"
-                        aria-label="Mover <%= s.nome %> para cima" <%= i === 0 ? 'disabled' : '' %>>&uarr;</button>
-              </form>
-              <form method="post" action="/admin/checklist-modelo/ordem/mover">
-                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                <input type="hidden" name="tipo_processo_id" value="<%= tipoAtual.id %>">
-                <input type="hidden" name="setor_id" value="<%= s.id %>">
-                <input type="hidden" name="direcao" value="baixo">
-                <button class="botao botao-secundario botao-pequeno" title="Descer"
-                        aria-label="Mover <%= s.nome %> para baixo"
-                        <%= i === ordemSetores.length - 1 ? 'disabled' : '' %>>&darr;</button>
-              </form>
-            </span>
-          </li>
-        <% }) %>
-      </ol>
+      <p class="dica" data-ordem-ajuda>
+        <strong>Arraste</strong> os setores para mudar a ordem. Com o teclado, dê
+        <kbd>Tab</kbd> até o setor e use <kbd>↑</kbd> <kbd>↓</kbd>.
+      </p>
+
+      <form method="post" action="/admin/checklist-modelo/ordem" data-ordem-setores
+            data-tipo="<%= tipoAtual.id %>">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="tipo_processo_id" value="<%= tipoAtual.id %>">
+        <input type="hidden" name="setor_ids" value="<%= ordemSetores.map(function (s) { return s.id; }).join(',') %>">
+
+        <ol class="ordem-setores">
+          <% ordemSetores.forEach(function (s, i) { %>
+            <li tabindex="0" data-setor="<%= s.id %>"
+                aria-label="<%= s.nome %>, posição <%= i + 1 %> de <%= ordemSetores.length %>">
+              <span class="ordem-pegador" aria-hidden="true" title="Arraste para reordenar">⠿</span>
+              <span class="ordem-posicao"><%= i + 1 %></span>
+              <span class="ordem-nome">
+                <strong><%= s.nome %></strong>
+                <% if (s.auxiliar) { %><span class="etiqueta et-opcional">auxiliar</span><% } %>
+                <small><%= s.itens %> item(ns)</small>
+              </span>
+            </li>
+          <% }) %>
+        </ol>
+
+        <%# Sem JavaScript o botão continua salvando; com JavaScript ele some,
+            porque o arrastar já grava sozinho. %>
+        <div class="acoes" data-ordem-manual>
+          <button class="botao botao-secundario botao-pequeno">Salvar ordem</button>
+          <span class="dica">Sem arrastar? Use os campos acima e salve aqui.</span>
+        </div>
+        <span class="dica" data-ordem-estado role="status" aria-live="polite"></span>
+      </form>
     <% } %>
   </div>
 <% } else { %>

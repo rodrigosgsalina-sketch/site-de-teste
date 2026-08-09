@@ -84,13 +84,22 @@
 
 <!-- ----------------------------------------------------------- checklist -->
 <% grupos.forEach(function (grupo) { %>
-  <details class="setor-bloco" id="setor-<%= grupo.setor_id %>" <%= grupo.pendentes || grupo.impedidos ? 'open' : '' %>>
+  <details class="setor-bloco <%= grupo.liberado ? '' : 'setor-bloqueado' %>" id="setor-<%= grupo.setor_id %>"
+           <%= grupo.liberado && (grupo.pendentes || grupo.impedidos) ? 'open' : '' %>>
     <summary>
       <%= grupo.setor %>
+      <% if (!grupo.liberado) { %><span class="etiqueta et-neutro">aguardando <%= grupo.aguardando %></span><% } %>
       <% if (grupo.impedidos) { %><span class="etiqueta et-vermelho"><%= grupo.impedidos %> impedido(s)</span><% } %>
       <% if (!grupo.editavel) { %><span class="somente-leitura">somente leitura</span><% } %>
       <span class="contagem"><%= grupo.concluidos %>/<%= grupo.total %> · <%= grupo.percentual %>%</span>
     </summary>
+
+    <% if (!grupo.liberado) { %>
+      <div class="aviso aviso-info" style="margin:.6rem 0">
+        Este setor abre quando o <strong><%= grupo.aguardando %></strong> terminar de responder os itens dele.
+        O checklist é atendido na ordem definida para este tipo de processo.
+      </div>
+    <% } %>
 
     <% grupo.itens.forEach(function (item) { %>
       <div class="item-checklist" id="item-<%= item.id %>">
@@ -120,7 +129,7 @@
           <div class="item-meta">Observação: <%= item.observacao %></div>
         <% } %>
 
-        <% if (grupo.editavel && !processo.status_final) { %>
+        <% if (grupo.editavel && grupo.liberado && !processo.status_final) { %>
           <form method="post" action="/checklist/<%= item.id %>/responder" class="item-form">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>">
             <input type="hidden" name="retorno" value="/processos/<%= processo.id %>#setor-<%= grupo.setor_id %>">

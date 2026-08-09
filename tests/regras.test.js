@@ -37,6 +37,7 @@ const clientesDom = require('../src/domain/clientes');
 const importacao = require('../src/domain/importacao-clientes');
 const XLSX = require('xlsx');
 const usuariosDom = require('../src/domain/usuarios');
+const { liberarAteOSetor } = require('./apoio');
 
 /* ----------------------------------------------------------- preparação */
 function carregar() {
@@ -149,6 +150,7 @@ test('status inicial é Aberto e evolui para "Em Análise" do setor pendente', (
 
 test('impedimento exige descrição e leva o processo para Impedido', () => {
   const processo = novoProcesso(tipoBaixa.id);
+  liberarAteOSetor(processo.id, 'Fiscal', admin);
   const item = checklist.doProcesso(processo.id).find((i) => i.setor === 'Fiscal');
 
   assert.throws(
@@ -365,6 +367,7 @@ test('conclusão e impedimento publicam aviso visível para todos os usuários',
 
   // impedimento
   const impedido = novoProcesso(tipoBaixa.id);
+  liberarAteOSetor(impedido.id, 'Fiscal', admin);
   const itemFiscal = checklist.doProcesso(impedido.id).find((i) => i.setor === 'Fiscal');
   checklist.responder(
     itemFiscal.id,
@@ -444,10 +447,13 @@ test('ordem dos setores definida por tipo governa checklist, etapa e status', ()
   const novo = novoProcesso(tipoBaixa.id);
   assert.strictEqual(processos.obter(novo.id).status, 'Em Análise Departamento Pessoal');
 
-  // "Mover" reposiciona um setor de cada vez.
-  ordemSetores.mover(tipoBaixa.id, dp.id, 1);
+  // "Definir" grava a lista inteira — é o que a tela envia depois de arrastar.
+  const arrastado = ordemSetores.doTipo(tipoBaixa.id).map((s) => s.id);
+  arrastado.splice(1, 0, arrastado.splice(0, 1)[0]); // desce o primeiro uma posição
+  ordemSetores.definir(tipoBaixa.id, arrastado);
   assert.strictEqual(ordemSetores.doTipo(tipoBaixa.id)[1].nome, 'Departamento Pessoal');
-  ordemSetores.mover(tipoBaixa.id, dp.id, -1);
+  arrastado.splice(0, 0, arrastado.splice(1, 1)[0]); // e sobe de volta
+  ordemSetores.definir(tipoBaixa.id, arrastado);
   assert.strictEqual(ordemSetores.doTipo(tipoBaixa.id)[0].nome, 'Departamento Pessoal');
 
   // Limpar devolve o tipo à ordem geral, sem afetar outros tipos.

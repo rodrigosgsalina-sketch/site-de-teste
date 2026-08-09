@@ -199,6 +199,36 @@ function migrarSubtipoNoChecklistModelo(conn) {
   console.log('[migração] coluna "subtipo_processo_id" criada em checklist_modelo.');
 }
 
+/**
+ * Parâmetros novos chegam a bancos que já existem.
+ *
+ * A carga inicial (`npm run seed`) só roda uma vez. Sem isto, um parâmetro
+ * criado numa versão nova ficaria fora da tela de Parâmetros em toda
+ * instalação já em uso — funcionando pelo valor padrão do código, mas sem
+ * ninguém conseguir mudá-lo. Só INSERE o que falta: nada que o escritório já
+ * ajustou é tocado.
+ */
+function semearParametrosNovos(conn) {
+  if (!tabelaExiste(conn, 'parametros')) return;
+  // Banco vazio é banco recém-criado: a carga inicial (`npm run seed`) é que
+  // preenche a tabela. Aqui só interessa a instalação que já está em uso.
+  if (!conn.prepare('SELECT 1 FROM parametros LIMIT 1').get()) return;
+
+  const seed = require('./seed-data');
+  const existe = conn.prepare('SELECT 1 FROM parametros WHERE chave = ?');
+  const inserir = conn.prepare(
+    `INSERT INTO parametros (chave, valor, tipo, categoria, descricao)
+     VALUES (@chave, @valor, @tipo, @categoria, @descricao)`
+  );
+
+  const novos = seed.PARAMETROS.filter((p) => !existe.get(p.chave));
+  if (!novos.length) return;
+
+  conn.transaction(() => novos.forEach((p) => inserir.run(p)))();
+  // eslint-disable-next-line no-console
+  console.log(`[migração] ${novos.length} parâmetro(s) novo(s): ${novos.map((p) => p.chave).join(', ')}.`);
+}
+
 function migrate(conn) {
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   migrarLoginDeUsuarios(conn);
@@ -210,6 +240,7 @@ function migrate(conn) {
   conn.exec(schema);
   // Depois do schema: esta depende da tabela de ligação que ele acabou de criar.
   migrarSubtiposDoProcesso(conn);
+  semearParametrosNovos(conn);
 }
 
 function get() {

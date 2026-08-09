@@ -146,6 +146,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* `hidden` precisa vencer qualquer display de classe: sem isto, esconder um
+   elemento por JavaScript não surte efeito em nada que seja flex ou grid. */
+[hidden] { display: none !important; }
+
 a { color: var(--azul-600); text-underline-offset: 2px; }
 a:hover { color: var(--azul-500); }
 
@@ -727,10 +731,29 @@ legend {
   display: flex; align-items: center; gap: .8rem;
   padding: .6rem .75rem; border: 1px solid var(--linha); border-radius: var(--raio-sm);
   background: var(--superficie-2);
+  /* Arrastar com o dedo move o setor, não a página; e o texto não vira seleção. */
+  touch-action: none; user-select: none; -webkit-user-select: none;
   transition: border-color var(--rapido) ease, background var(--rapido) ease, transform var(--rapido) var(--suave);
   animation: surgir var(--medio) var(--suave) both;
 }
 .ordem-setores li:hover { background: var(--superficie); border-color: var(--linha-forte); transform: translateX(2px); }
+.ordem-setores li:focus-visible { outline: 2px solid var(--azul-500); outline-offset: 2px; }
+/* Enquanto arrasta, o item some do lugar antigo em vez de duplicar a leitura. */
+.ordem-setores li.arrastando {
+  opacity: .45; border-style: dashed; border-color: var(--azul-500);
+  transform: none; animation: none;
+}
+.ordem-pegador {
+  flex: none; cursor: grab; color: var(--tinta-4); font-size: 1rem; line-height: 1;
+  padding: .1rem .15rem; user-select: none;
+}
+.ordem-setores li:active .ordem-pegador { cursor: grabbing; }
+.ordem-erro { color: var(--vermelho); font-weight: 600; }
+[data-ordem-ajuda] kbd {
+  display: inline-block; padding: 0 .3rem; border: 1px solid var(--linha-forte);
+  border-bottom-width: 2px; border-radius: var(--raio-xs);
+  background: var(--superficie-2); font-family: var(--mono, monospace); font-size: .78rem;
+}
 .ordem-posicao {
   flex: none; width: 26px; height: 26px; border-radius: var(--raio-xs);
   display: grid; place-items: center;
@@ -927,3 +950,8 @@ a.mono { font-weight: 500; white-space: nowrap; }
   cursor: pointer; font-size: .9rem; margin: 0;
 }
 .subtipo-opcao input { margin: 0; }
+
+/* Setor que ainda não abriu: fica visível, mas discreto — dá para ver o que
+   vem pela frente sem parecer que está disponível para responder. */
+.setor-bloco.setor-bloqueado > summary { color: var(--tinta-3); }
+.setor-bloco.setor-bloqueado .item-checklist { opacity: .72; }

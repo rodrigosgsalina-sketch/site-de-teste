@@ -18,7 +18,13 @@ function carregarSeed(db, { senha = 'teste123' } = {}) {
     const status = conn.prepare('INSERT INTO status_processo (nome, ordem, final, espera) VALUES (?, ?, ?, ?)');
     seed.STATUS_PROCESSO.forEach((s) => status.run(s.nome, s.ordem, s.final, s.espera));
 
-    const param = conn.prepare('INSERT INTO parametros (chave, valor, tipo, categoria, descricao) VALUES (?, ?, ?, ?, ?)');
+    // A migração já semeia os parâmetros novos ao abrir o banco, então aqui a
+    // carga sobrescreve em vez de inserir cegamente.
+    const param = conn.prepare(
+      `INSERT INTO parametros (chave, valor, tipo, categoria, descricao) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (chave) DO UPDATE SET valor = excluded.valor, tipo = excluded.tipo,
+                                         categoria = excluded.categoria, descricao = excluded.descricao`
+    );
     seed.PARAMETROS.forEach((p) => param.run(p.chave, p.valor, p.tipo, p.categoria, p.descricao));
 
     const idSetor = conn.prepare('SELECT id FROM setores WHERE nome = ?');
@@ -99,4 +105,20 @@ function criarCliente(base) {
   };
 }
 
-module.exports = { carregarSeed, criarCliente };
+/**
+ * Responde os setores que vêm ANTES de `setor` no checklist do processo.
+ *
+ * O checklist é atendido em ordem (EXIGIR_ORDEM_SETORES), então um teste que
+ * quer exercitar o Fiscal precisa antes destravar quem vem na frente dele.
+ * Usa a mesma ordem que a tela: `doProcesso` já devolve na ordem de
+ * atendimento do tipo.
+ */
+function liberarAteOSetor(processoId, setor, usuario) {
+  const checklist = require('../src/domain/checklist');
+  for (const item of checklist.doProcesso(processoId)) {
+    if (item.setor === setor) return;
+    if (!item.resposta) checklist.responder(item.id, { resposta: 'Sim' }, usuario);
+  }
+}
+
+module.exports = { carregarSeed, criarCliente, liberarAteOSetor };

@@ -224,9 +224,76 @@ function doProcesso(processoId) {
     .all(processoId);
 }
 
+/**
+ * Um setor está **respondido** quando todo item que ele *precisa* responder já
+ * tem resposta — os obrigatórios de um setor cuja aprovação é exigida.
+ *
+ * Duas escolhas embutidas aqui:
+ *
+ * - "Respondido" e não "concluído": um item impedido tem resposta, e travar o
+ *   setor seguinte até o impedimento ser resolvido pararia o processo inteiro.
+ *   O impedimento já aparece no status e no aviso — quem precisa agir sabe.
+ * - Só os obrigatórios seguram a fila. Item opcional ninguém é obrigado a
+ *   responder; se ele travasse o setor seguinte, um item que existe justamente
+ *   para ser dispensável emperraria o processo sem ninguém errar nada. Vale o
+ *   mesmo para setores com a aprovação desligada em PARAMETROS (por exemplo
+ *   EXIGIR_APROVACAO_JURIDICA = Não): se a aprovação não é exigida para
+ *   concluir, também não é exigida para a fila andar.
+ */
+function setorRespondido(itens) {
+  return itens
+    .filter((i) => i.obrigatorio && parametros.aprovacaoObrigatoria(i.setor))
+    .every((i) => Boolean(i.resposta));
+}
+
+/**
+ * Ordem de atendimento aplicada ao processo: um setor só abre depois que o
+ * anterior foi respondido.
+ *
+ * Devolve, por setor, se ele está liberado e — quando não está — qual setor o
+ * está segurando, para a tela poder dizer o motivo em vez de só desabilitar.
+ *
+ * A regra vale para todo mundo, inclusive gestores. Para desligar, existe o
+ * parâmetro EXIGIR_ORDEM_SETORES: é o mesmo caminho de qualquer outra regra de
+ * fluxo da plataforma, e deixa a decisão registrada em vez de embutida no
+ * código.
+ */
+function liberacaoPorSetor(processoId) {
+  const exigir = parametros.bool('EXIGIR_ORDEM_SETORES', true);
+
+  // `doProcesso` já devolve na ordem de atendimento do tipo.
+  const naOrdem = [];
+  const porId = new Map();
+  for (const item of doProcesso(processoId)) {
+    if (!porId.has(item.setor_id)) {
+      const grupo = { setor_id: item.setor_id, setor: item.setor, itens: [] };
+      porId.set(item.setor_id, grupo);
+      naOrdem.push(grupo);
+    }
+    porId.get(item.setor_id).itens.push(item);
+  }
+
+  // O primeiro setor ainda sem responder segura todos os que vêm depois.
+  let segurando = null;
+  for (const grupo of naOrdem) {
+    grupo.respondido = setorRespondido(grupo.itens);
+    grupo.liberado = !exigir || segurando === null;
+    grupo.aguardando = grupo.liberado ? null : segurando;
+    if (segurando === null && !grupo.respondido) segurando = grupo.setor;
+  }
+
+  return porId;
+}
+
+/** Situação do setor de um item: liberado para responder, e por quem espera. */
+function setorLiberado(processoId, setorId) {
+  return liberacaoPorSetor(processoId).get(Number(setorId)) || { liberado: true, aguardando: null };
+}
+
 /** Agrupa os itens por setor, com o progresso de cada grupo. */
 function agrupadoPorSetor(processoId) {
   const itens = doProcesso(processoId);
+  const liberacao = liberacaoPorSetor(processoId);
   const grupos = new Map();
   for (const item of itens) {
     if (!grupos.has(item.setor)) {
@@ -250,10 +317,16 @@ function agrupadoPorSetor(processoId) {
     if (item.status_item === STATUS_ITEM.PENDENTE) g.pendentes += 1;
     if (item.obrigatorio && item.status_item !== STATUS_ITEM.CONCLUIDO) g.obrigatorios_pendentes += 1;
   }
-  return [...grupos.values()].map((g) => ({
-    ...g,
-    percentual: g.total ? Math.round((g.concluidos / g.total) * 100) : 0,
-  }));
+  return [...grupos.values()].map((g) => {
+    const situacao = liberacao.get(g.setor_id) || { liberado: true, aguardando: null };
+    return {
+      ...g,
+      percentual: g.total ? Math.round((g.concluidos / g.total) * 100) : 0,
+      liberado: situacao.liberado,
+      aguardando: situacao.aguardando,
+      respondido: setorRespondido(g.itens),
+    };
+  });
 }
 
 function progresso(processoId) {
@@ -298,6 +371,16 @@ function responder(itemId, dados, usuario) {
   const conn = db.get();
   const item = obterItem(itemId);
   if (!item) throw new ErroValidacao('Item de checklist não encontrado.');
+
+  // A ordem dos setores vale aqui, e não só na tela: quem montar a requisição
+  // por fora do formulário esbarra na mesma regra.
+  const liberacao = setorLiberado(item.processo_id, item.setor_id);
+  if (!liberacao.liberado) {
+    throw new ErroValidacao(
+      `O setor ${item.setor} ainda não abriu: falta o ${liberacao.aguardando} responder os itens dele. ` +
+        'O checklist é atendido na ordem definida para este tipo de processo.'
+    );
+  }
 
   const resposta = dados.resposta || null;
   const impedimento = dados.possui_impedimento === true || dados.possui_impedimento === 'Sim' || dados.possui_impedimento === '1';
@@ -398,7 +481,7 @@ function fila({ setorIds = null, apenasPendentes = true, limite = 200 } = {}) {
     args.push(...setorIds);
   }
   args.push(limite);
-  return db
+  const itens = db
     .get()
     .prepare(
       `${SELECT_ITEM}
@@ -408,6 +491,22 @@ function fila({ setorIds = null, apenasPendentes = true, limite = 200 } = {}) {
         LIMIT ?`
     )
     .all(...args);
+
+  // Marca o que ainda não abriu: aparecer na fila um item que não pode ser
+  // respondido é pior do que não aparecer — a pessoa clica, tenta e leva um
+  // erro. Aqui ela já vê de quem depende.
+  const porProcesso = new Map();
+  return itens.map((item) => {
+    if (!porProcesso.has(item.processo_id)) {
+      porProcesso.set(item.processo_id, liberacaoPorSetor(item.processo_id));
+    }
+    const situacao = porProcesso.get(item.processo_id).get(item.setor_id);
+    return {
+      ...item,
+      liberado: situacao ? situacao.liberado : true,
+      aguardando: situacao ? situacao.aguardando : null,
+    };
+  });
 }
 
 /** Setores com itens ainda pendentes, na ordem de atendimento. */
@@ -450,6 +549,8 @@ module.exports = {
   ErroValidacao,
   gerarParaProcesso,
   modeloDoProcesso,
+  liberacaoPorSetor,
+  setorLiberado,
   sincronizarComSubtipos,
   chaveDoItem,
   obterItem,

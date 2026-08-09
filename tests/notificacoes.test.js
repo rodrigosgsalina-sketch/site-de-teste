@@ -19,7 +19,7 @@ process.env.DATA_DIR = tmp;
 process.env.DB_FILE = path.join(tmp, 'teste.db');
 
 const db = require('../src/db');
-const { carregarSeed, criarCliente } = require('./apoio');
+const { carregarSeed, criarCliente, liberarAteOSetor } = require('./apoio');
 const avisos = require('../src/domain/avisos');
 const eventos = require('../src/lib/eventos');
 const clientesDom = require('../src/domain/clientes');
@@ -308,6 +308,7 @@ test('o ciclo de vida do processo publica os avisos correspondentes', () => {
   processosDom.reabrir(processo.id, admin, 'Cliente voltou atrás.');
   assert.ok(tipos().includes('reaberto'));
 
+  liberarAteOSetor(processo.id, 'Fiscal', admin);
   const item = checklist.doProcesso(processo.id).find((i) => i.setor === 'Fiscal');
   checklist.responder(
     item.id,

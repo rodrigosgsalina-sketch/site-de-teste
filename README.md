@@ -231,10 +231,31 @@ para escolher a empresa. Um cliente com processos vinculados não pode ser exclu
 
 **Ordem de atendimento por tipo** — em **Administração → Checklist modelo**, ao escolher um tipo
 de processo é possível definir quem responde primeiro (por exemplo, Departamento Pessoal antes do
-Paralegal na Baixa de Empresa). A ordem vale para o agrupamento do checklist, para a etapa atual,
-para o status `Em Análise <setor>` e para o aviso de vez do setor — e, por ser lida no momento do
-uso, também se aplica aos processos já em andamento. Tipos sem ordem própria seguem a ordem geral
-da tabela `setores`; setores sem posição definida vão para o fim.
+Paralegal na Baixa de Empresa). A ordem é montada **arrastando** os setores da lista: segura,
+move para a posição desejada e solta — a gravação é automática, sem botão e sem recarregar a
+página (com o teclado, `Tab` até o setor e `↑`/`↓`; sem JavaScript, um botão “Salvar ordem”
+aparece no lugar). Funciona com mouse, dedo e caneta, então também no celular. A ordem vale para o
+agrupamento do checklist, para a etapa atual, para o status `Em Análise <setor>` e para o aviso de
+vez do setor — e, por ser lida no momento do uso, também se aplica aos processos já em andamento.
+Tipos sem ordem própria seguem a ordem geral da tabela `setores`; setores sem posição definida vão
+para o fim.
+
+**Checklist na ordem (`EXIGIR_ORDEM_SETORES`)** — com o parâmetro ligado (padrão), **um setor só
+abre depois que o setor acima dele responder**: se o Fiscal vem antes do Paralegal, o Paralegal só
+responde quando o Fiscal terminar. Na tela do processo o setor preso aparece esmaecido, marcado
+como *aguardando &lt;setor&gt;*, sem o formulário de resposta e com a explicação de quem ele
+espera; na fila e no início, o item traz a mesma marca. A recusa também é feita no servidor — não
+adianta forjar o envio —, e vale para todo mundo, inclusive administradores.
+
+Três coisas de propósito **não** seguram a fila, para que ela não emperre sem ninguém errar nada:
+item **opcional** (ninguém é obrigado a respondê-lo), setor com a **aprovação desligada** em
+Parâmetros (`EXIGIR_APROVACAO_JURIDICA = Não`, por exemplo) e setor **impedido** — um impedimento
+já é uma resposta, e travar o escritório inteiro até resolvê-lo pararia o processo. Para voltar ao
+atendimento livre, basta `EXIGIR_ORDEM_SETORES = Não` em **Administração → Parâmetros**.
+
+> Parâmetros novos chegam sozinhos a bancos já em uso: na primeira abertura depois da atualização,
+> o que falta é inserido na tela de Parâmetros — sem tocar em nenhum valor que o escritório já
+> tenha ajustado.
 
 **Motor de status** — recalculado a cada resposta do checklist:
 

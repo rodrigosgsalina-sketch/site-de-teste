@@ -50,8 +50,14 @@ function upsertParametros(conn) {
     'UPDATE parametros SET tipo = @tipo, categoria = @categoria, descricao = @descricao WHERE chave = @chave'
   );
   dados.PARAMETROS.forEach((p) => {
-    if (existe.get(p.chave)) atualizarMeta.run(p);
-    else inserir.run(p);
+    // O UPDATE não cita @valor: passar um parâmetro nomeado que a instrução não
+    // usa é erro no driver do node:sqlite, e recarregar a semente num banco já
+    // em uso quebrava justamente aqui.
+    if (existe.get(p.chave)) {
+      atualizarMeta.run({ chave: p.chave, tipo: p.tipo, categoria: p.categoria, descricao: p.descricao });
+    } else {
+      inserir.run(p);
+    }
   });
 }
 

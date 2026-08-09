@@ -584,14 +584,36 @@ function voltarParaOrdem(req, res, tipoId, mensagem) {
   res.redirect(`/admin/checklist-modelo?tipo=${tipoId}#ordem`);
 }
 
-router.post('/checklist-modelo/ordem/mover', (req, res, next) => {
+/**
+ * Grava a ordem inteira de uma vez — é o que a tela envia depois de arrastar.
+ *
+ * Responde JSON: a tela atualiza a numeração sem recarregar, e quem arrastou
+ * vê o resultado no lugar onde soltou. Sem JavaScript o formulário comum
+ * continua funcionando (o botão "Salvar ordem" faz o POST normal).
+ */
+router.post('/checklist-modelo/ordem', (req, res, next) => {
+  const querJson = String(req.headers.accept || '').includes('application/json');
   try {
     const tipoId = Number(req.body.tipo_processo_id);
-    const setorId = Number(req.body.setor_id);
-    const direcao = req.body.direcao === 'cima' ? -1 : 1;
-    if (!tipoId || !setorId) throw new ErroValidacao('Informe o tipo e o setor.');
+    if (!tipoId) throw new ErroValidacao('Informe o tipo de processo.');
 
-    const lista = ordemSetores.mover(tipoId, setorId, direcao);
+    const ids = []
+      .concat(req.body.setor_ids || [])
+      .join(',')
+      .split(',')
+      .map(Number)
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (!ids.length) throw new ErroValidacao('Informe a ordem dos setores.');
+
+    // Só aceita a lista completa dos setores do tipo: uma lista pela metade
+    // faria os que ficaram de fora voltarem calados para o fim.
+    const atuais = ordemSetores.doTipo(tipoId).map((s) => s.id);
+    const faltando = atuais.filter((id) => !ids.includes(id));
+    if (faltando.length || ids.some((id) => !atuais.includes(id))) {
+      throw new ErroValidacao('A lista de setores não confere com a deste tipo. Recarregue a página.');
+    }
+
+    const lista = ordemSetores.definir(tipoId, ids);
     const tipo = db.get().prepare('SELECT nome FROM tipos_processo WHERE id = ?').get(tipoId);
     historico.registrar({
       processoId: null,
@@ -599,9 +621,12 @@ router.post('/checklist-modelo/ordem/mover', (req, res, next) => {
       usuario: req.session.usuario,
       observacao: `${tipo ? tipo.nome : tipoId}: ${lista.map((s) => s.nome).join(' → ')}`,
     });
-    voltarParaOrdem(req, res, tipoId, 'Ordem de atendimento atualizada.');
+
+    if (querJson) return res.json({ ok: true, ordem: lista.map((s) => ({ id: s.id, nome: s.nome })) });
+    return voltarParaOrdem(req, res, tipoId, 'Ordem de atendimento atualizada.');
   } catch (err) {
     if (err instanceof ErroValidacao) {
+      if (querJson) return res.status(400).json({ ok: false, erro: err.message });
       flash(req, 'erro', err.message);
       return res.redirect('/admin/checklist-modelo');
     }
