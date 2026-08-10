@@ -1,0 +1,28 @@
+<%# Quem já viu um aviso. Recebe `leitura` ({ viram, naoViram, total, vistos }).
+    Usado no mural e na tela do processo — só para administradores. %>
+<% if (!leitura || !leitura.total) { %>
+  <span class="item-meta">—</span>
+<% } else { %>
+  <details class="visto-por">
+    <summary>
+      <span class="etiqueta <%= leitura.vistos === leitura.total ? 'et-verde' : (leitura.vistos ? 'et-neutro' : 'et-amarelo') %>">
+        visto por <%= leitura.vistos %> de <%= leitura.total %>
+      </span>
+    </summary>
+    <% if (leitura.viram.length) { %>
+      <ul class="visto-lista">
+        <% leitura.viram.forEach(function (p) { %>
+          <li><strong><%= p.nome %></strong> <span class="item-meta"><%= p.setor || 'sem setor' %> · <%= fmtDataHora(p.lido_em) %></span></li>
+        <% }) %>
+      </ul>
+    <% } else { %>
+      <p class="item-meta" style="margin:.35rem 0 0">Ninguém marcou como visto ainda.</p>
+    <% } %>
+    <% if (leitura.naoViram.length) { %>
+      <p class="item-meta" style="margin:.45rem 0 0">
+        <strong>Ainda não viram:</strong>
+        <%= leitura.naoViram.map(function (p) { return p.nome; }).join(', ') %>
+      </p>
+    <% } %>
+  </details>
+<% } %>

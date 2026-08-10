@@ -713,6 +713,15 @@ legend {
   flex: 1; min-width: 240px; font-family: var(--display); font-weight: 600; font-size: .93rem; color: var(--tinta);
 }
 .item-meta { color: var(--tinta-4); font-size: .78rem; margin-top: .3rem; }
+
+/* ---------------------------------------------------- quem já viu o aviso */
+.visto-por > summary { cursor: pointer; list-style: none; }
+.visto-por > summary::-webkit-details-marker { display: none; }
+.visto-por > summary::after { content: ' ▾'; color: var(--tinta-4); font-size: .7rem; }
+.visto-por[open] > summary::after { content: ' ▴'; }
+.visto-lista { list-style: none; margin: .4rem 0 0; padding: 0; display: grid; gap: .2rem; }
+.visto-lista li { font-size: .82rem; }
+.visto-lista .item-meta { display: inline; margin: 0; }
 .item-impedimento {
   background: var(--vermelho-claro); border: 1px solid var(--vermelho-borda); color: #8d211a;
   border-radius: var(--raio-sm); padding: .5rem .7rem; margin-top: .55rem; font-size: .84rem;

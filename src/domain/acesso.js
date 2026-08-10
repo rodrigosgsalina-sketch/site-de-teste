@@ -3,9 +3,14 @@
 /**
  * Controle de acesso por perfil e setor.
  *
+ *  - **Ver, todo mundo vê.** Qualquer usuário abre qualquer processo que exista
+ *    (o excluído não existe mais). O escritório trabalha o mesmo processo em
+ *    várias mãos, e esconder o andamento de quem não responde o checklist só
+ *    fazia a informação circular por fora da plataforma.
+ *  - **Agir, só quem participa.** Quem não tem setor no checklist — nem abriu,
+ *    nem conduz o processo — está ali de leitura: não responde item, não anexa
+ *    documento, não mexe no status.
  *  - Perfil "Administrador" e setor "Diretoria": visão e edição totais.
- *  - Perfil "Usuário": enxerga apenas processos em que seu setor atua e
- *    responde somente os itens do próprio setor.
  *  - Setores auxiliares (Sócios, Cliente, TI, Qualidade) não têm equipe
  *    própria: quem responde por eles é o Administrativo (além dos gestores).
  */
@@ -49,8 +54,14 @@ function podeEditarItem(usuario, item) {
   return setoresDoUsuario(usuario).includes(item.setor);
 }
 
-/** O usuário pode abrir a tela do processo? */
-function podeVerProcesso(usuario, processoId) {
+/**
+ * O usuário participa do processo — isto é, pode **agir** nele?
+ *
+ * Participa quem tem setor no checklist, quem abriu e quem conduz. Os demais
+ * continuam vendo o processo inteiro; só não escrevem nada nele.
+ */
+function participaDoProcesso(usuario, processoId) {
+  if (!usuario) return false;
   if (ehGestor(usuario)) return true;
   const ids = setorIdsDoUsuario(usuario);
   if (ids === null) return true;
@@ -88,7 +99,7 @@ module.exports = {
   setoresDoUsuario,
   setorIdsDoUsuario,
   podeEditarItem,
-  podeVerProcesso,
+  participaDoProcesso,
   podeGerenciarProcesso,
   exigirAdministrador,
   SETORES_AUXILIARES_DO_ADMINISTRATIVO,

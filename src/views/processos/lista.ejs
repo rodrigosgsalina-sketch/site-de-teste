@@ -28,6 +28,10 @@
       <input type="checkbox" id="atrasados" name="atrasados" value="1" <%= filtros.atrasados ? 'checked' : '' %>>
       <label for="atrasados">Somente atrasados</label>
     </div>
+    <div class="campo checkbox" style="align-self:center">
+      <input type="checkbox" id="meu_setor" name="meu_setor" value="1" <%= filtros.meuSetor ? 'checked' : '' %>>
+      <label for="meu_setor" title="<%= setoresDoUsuario.join(', ') %>">Só do meu setor</label>
+    </div>
     <div class="acoes">
       <button class="botao botao-pequeno">Filtrar</button>
       <a class="botao botao-secundario botao-pequeno" href="/processos">Limpar</a>
@@ -39,6 +43,13 @@
 <div class="cartao">
   <div class="cartao-titulo">
     <h2><%= processos.length %> processo(s)</h2>
+    <p class="dica" style="margin:0">
+      <% if (filtros.meuSetor) { %>
+        Filtrando pelos processos em que <%= setoresDoUsuario.length > 1 ? 'seus setores atuam' : 'seu setor atua' %>.
+      <% } else { %>
+        Todos os processos do escritório. Você responde os itens do seu setor; nos demais, a tela fica de leitura.
+      <% } %>
+    </p>
   </div>
 
   <% if (!processos.length) { %>

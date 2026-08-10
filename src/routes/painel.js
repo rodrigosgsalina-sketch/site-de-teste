@@ -20,10 +20,8 @@ router.get('/', (req, res) => {
     usuarioId: usuario.id,
     limite: 10,
   });
-  const alertas = processos
-    .comAlertaDePrazo()
-    .filter((p) => acesso.podeVerProcesso(usuario, p.id))
-    .slice(0, 8);
+  // Prazo estourando é assunto do escritório inteiro, não só de quem responde.
+  const alertas = processos.comAlertaDePrazo().slice(0, 8);
 
   const resumo = {
     pendentes: itens.filter((i) => i.status_item === 'Pendente').length,

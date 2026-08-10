@@ -141,9 +141,9 @@ app.use((req, res, next) => {
   res.locals.flash = req.session ? req.session.flash : null;
   if (req.session) delete req.session.flash;
 
-  // A faixa no topo mostra os avisos que valem para o escritório inteiro
-  // (processo concluído ou impedido). Os dirigidos aos setores do processo
-  // chegam como notificação no canto da tela e ficam no mural em /avisos.
+  // A faixa no topo mostra o que muda o rumo do processo (concluído, impedido,
+  // cancelado). Os demais avisos chegam como cartão no canto da tela e ficam no
+  // mural em /avisos — todos eles agora valem para o escritório inteiro.
   //
   // Só quem vai desenhar uma tela precisa disso. Chamadas de JSON (dispensar
   // aviso, buscar cliente, inscrever no push) e o canal de eventos não montam
@@ -153,7 +153,7 @@ app.use((req, res, next) => {
   res.locals.avisosTotal = 0;
   if (usuario && pedeTela(req)) {
     try {
-      res.locals.avisos = avisosDom.naoLidos(usuario.id, 3, { escopo: 'todos' });
+      res.locals.avisos = avisosDom.naoLidos(usuario.id, 3, { faixa: true });
       res.locals.avisosTotal = avisosDom.contarNaoLidos(usuario.id);
     } catch (err) {
       /* a falta da faixa não pode derrubar a página */

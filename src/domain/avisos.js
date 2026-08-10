@@ -7,12 +7,19 @@
  * aviso aparece dentro do sistema: em tempo real, como um cartão no canto
  * inferior direito, e depois no mural em /avisos.
  *
- * Quem recebe depende do escopo:
- *  - `todos`   — a plataforma inteira. É o caso do processo concluído e do
- *                processo impedido, que interessam a todo o escritório.
- *  - `setores` — apenas os usuários dos setores que participam do processo,
- *                mais quem o abriu e quem o conduz. Abertura, cancelamento,
- *                reabertura, vez do setor e alerta de prazo funcionam assim.
+ * **Movimento de processo é assunto do escritório inteiro.** Abertura,
+ * conclusão, impedimento, cancelamento, reabertura e alerta de prazo vão para
+ * todos os usuários ativos, participem eles do checklist ou não — o mesmo
+ * princípio que abriu a visualização de todos os processos: quem não é avisado
+ * acaba sabendo por fora da plataforma.
+ *
+ * A única exceção é a **vez do setor**: "Fiscal: sua vez no PR-2026-0007" é um
+ * chamado endereçado, não uma notícia. Ele continua indo só para o setor que
+ * precisa agir, senão cada passagem de bastão viraria aviso para todo mundo.
+ * Por isso o escopo continua existindo:
+ *
+ *  - `todos`   — a plataforma inteira;
+ *  - `setores` — só os usuários nomeados em `avisos_destinos`.
  *
  * Cada usuário dispensa o seu aviso, sem afetar os demais.
  */
@@ -68,31 +75,15 @@ function cor(tipo) {
 /* ------------------------------------------------------------ destinatários */
 
 /**
- * Usuários ativos dos setores que participam do processo, mais quem abriu e
- * quem conduz. O Administrativo responde pelos setores auxiliares (Sócios,
- * Cliente, TI, Qualidade), então também é avisado quando eles estão no
- * checklist — a mesma regra que vale para responder o item.
+ * Tipos que aparecem na faixa do topo das telas.
+ *
+ * Antes a faixa era "tudo que é de escopo todos" — o que dava certo enquanto
+ * só conclusão e impedimento valiam para o escritório inteiro. Agora que todo
+ * movimento vale, a escolha passa a ser explícita: a faixa é para o que muda o
+ * rumo do processo. Abertura, prazo e vez do setor chegam pelo cartão no canto
+ * e ficam no mural, sem empilhar faixa em cima de faixa.
  */
-function destinatariosDoProcesso(processoId) {
-  return db
-    .get()
-    .prepare(
-      `SELECT DISTINCT u.id
-         FROM usuarios u
-         JOIN setores su ON su.id = u.setor_id
-        WHERE u.status = 'Ativo'
-          AND (
-            EXISTS (SELECT 1 FROM checklist c WHERE c.processo_id = @processo AND c.setor_id = u.setor_id)
-            OR (su.nome = 'Administrativo' AND EXISTS (
-                  SELECT 1 FROM checklist c JOIN setores s ON s.id = c.setor_id
-                   WHERE c.processo_id = @processo AND s.auxiliar = 1))
-            OR EXISTS (SELECT 1 FROM processos p
-                        WHERE p.id = @processo AND (p.criado_por_id = u.id OR p.responsavel_interno_id = u.id))
-          )`
-    )
-    .all({ processo: processoId })
-    .map((linha) => linha.id);
-}
+const TIPOS_DA_FAIXA = [TIPOS.CONCLUIDO, TIPOS.IMPEDIDO, TIPOS.CANCELADO];
 
 /** Usuários ativos de um setor, pelo nome. */
 function usuariosDoSetor(nomeSetor) {
@@ -252,7 +243,7 @@ function ultimoIdVisivel(usuarioId) {
 
 /* ------------------------------------------------- avisos de cada evento */
 
-/** Processo aberto — só quem participa dele precisa saber. */
+/** Processo aberto — o escritório inteiro fica sabendo. */
 function processoAberto(processo, setores, usuario) {
   const nomes = (setores || []).map((s) => s.nome || s).filter(Boolean);
   return publicar({
@@ -264,7 +255,6 @@ function processoAberto(processo, setores, usuario) {
       `${nomes.length ? `. Setores no checklist: ${nomes.join(', ')}.` : '.'}`,
     processoId: processo.id,
     usuario,
-    destinatarios: destinatariosDoProcesso(processo.id),
   });
 }
 
@@ -304,7 +294,6 @@ function processoCancelado(processo, motivo, usuario) {
       `${usuario ? ` por ${usuario.nome}` : ''}${motivo ? `: ${motivo}` : '.'}`,
     processoId: processo.id,
     usuario,
-    destinatarios: destinatariosDoProcesso(processo.id),
   });
 }
 
@@ -317,7 +306,6 @@ function processoReaberto(processo, motivo, usuario) {
       `${usuario ? ` (reaberto por ${usuario.nome})` : ''}${motivo ? `: ${motivo}` : '.'}`,
     processoId: processo.id,
     usuario,
-    destinatarios: destinatariosDoProcesso(processo.id),
   });
 }
 
@@ -348,7 +336,6 @@ function prazoDoProcesso(processo, diasRestantes) {
       `${atrasado ? `, atrasado há ${Math.abs(diasRestantes)} dia(s).` : '.'}`,
     processoId: processo.id,
     usuario: null,
-    destinatarios: destinatariosDoProcesso(processo.id),
   });
 }
 
@@ -371,22 +358,29 @@ function obter(avisoId) {
 }
 
 /**
- * Avisos que o usuário ainda não dispensou. `escopo` restringe o resultado —
- * a faixa no topo das telas usa só os de escopo 'todos' (conclusão e
- * impedimento), para não empilhar cartão em cima de cartão; os dirigidos ao
- * setor chegam como notificação no canto da tela e ficam no mural.
+ * Avisos que o usuário ainda não dispensou.
+ *
+ * `faixa: true` devolve só o que merece a faixa no topo das telas
+ * (TIPOS_DA_FAIXA); os demais chegam como cartão no canto e ficam no mural.
  */
-function naoLidos(usuarioId, limite = 5, { escopo = null } = {}) {
-  const filtroEscopo = escopo ? ' AND a.escopo = @escopo' : '';
+function naoLidos(usuarioId, limite = 5, { faixa = false } = {}) {
+  const args = { usuario: usuarioId, limite };
+  let filtroTipo = '';
+  if (faixa) {
+    filtroTipo = ` AND a.tipo IN (${TIPOS_DA_FAIXA.map((_, i) => `@tipo${i}`).join(',')})`;
+    TIPOS_DA_FAIXA.forEach((tipo, i) => {
+      args[`tipo${i}`] = tipo;
+    });
+  }
   return db
     .get()
     .prepare(
       `${SELECT}
-        WHERE ${CONDICAO_DESTINO} AND ${CONDICAO_NAO_LIDO}${filtroEscopo}
+        WHERE ${CONDICAO_DESTINO} AND ${CONDICAO_NAO_LIDO}${filtroTipo}
         ORDER BY a.id DESC
         LIMIT @limite`
     )
-    .all({ usuario: usuarioId, limite, ...(escopo ? { escopo } : {}) });
+    .all(args);
 }
 
 function contarNaoLidos(usuarioId) {
@@ -415,6 +409,98 @@ function listar(usuarioId, limite = 100) {
     .all({ usuario: usuarioId, limite });
 }
 
+/* --------------------------------------------------------- quem já viu */
+
+/**
+ * Público de um aviso: quem deveria vê-lo.
+ *
+ * Vale a mesma regra da entrega — 'todos' é o quadro de usuários ativos;
+ * 'setores' são os nomeados em `avisos_destinos`. Usuários inativados depois
+ * do aviso continuam contando se já tinham marcado como visto: apagá-los da
+ * conta apagaria uma leitura que aconteceu.
+ */
+const PUBLICO_DO_AVISO = `
+  SELECT u.id, u.nome, s.nome AS setor, l.lido_em
+    FROM avisos a
+    JOIN usuarios u ON (
+           (a.escopo = 'todos' AND u.status = 'Ativo')
+        OR EXISTS (SELECT 1 FROM avisos_destinos d WHERE d.aviso_id = a.id AND d.usuario_id = u.id))
+    LEFT JOIN setores s ON s.id = u.setor_id
+    LEFT JOIN avisos_lidos l ON l.aviso_id = a.id AND l.usuario_id = u.id
+   WHERE a.id = @aviso`;
+
+/**
+ * Quem viu e quem ainda não viu um aviso.
+ *
+ * É o que o administrador precisa para saber se a informação circulou: não
+ * basta o aviso ter sido publicado, alguém precisa tê-lo aberto.
+ */
+function leitores(avisoId) {
+  const linhas = db
+    .get()
+    .prepare(`${PUBLICO_DO_AVISO} ORDER BY l.lido_em IS NULL, l.lido_em, u.nome`)
+    .all({ aviso: avisoId });
+
+  const viram = linhas.filter((l) => l.lido_em);
+  return {
+    viram,
+    naoViram: linhas.filter((l) => !l.lido_em),
+    total: linhas.length,
+    vistos: viram.length,
+  };
+}
+
+/**
+ * Contagem de leitura de vários avisos de uma vez — duas consultas no total,
+ * não duas por linha. É o que permite a coluna "visto por" no mural sem
+ * transformar a tela numa enxurrada de consultas.
+ */
+function leituraDeVarios(avisoIds) {
+  const ids = [...new Set((avisoIds || []).map(Number).filter(Boolean))];
+  const mapa = new Map();
+  if (!ids.length) return mapa;
+
+  const marcas = ids.map(() => '?').join(',');
+  const publico = db
+    .get()
+    .prepare(
+      `SELECT a.id AS aviso_id, u.nome, s.nome AS setor, l.lido_em
+         FROM avisos a
+         JOIN usuarios u ON (
+                (a.escopo = 'todos' AND u.status = 'Ativo')
+             OR EXISTS (SELECT 1 FROM avisos_destinos d WHERE d.aviso_id = a.id AND d.usuario_id = u.id))
+         LEFT JOIN setores s ON s.id = u.setor_id
+         LEFT JOIN avisos_lidos l ON l.aviso_id = a.id AND l.usuario_id = u.id
+        WHERE a.id IN (${marcas})
+        ORDER BY l.lido_em IS NULL, l.lido_em, u.nome`
+    )
+    .all(...ids);
+
+  for (const id of ids) mapa.set(id, { viram: [], naoViram: [], total: 0, vistos: 0 });
+  for (const linha of publico) {
+    const entrada = mapa.get(linha.aviso_id);
+    if (!entrada) continue;
+    entrada.total += 1;
+    if (linha.lido_em) {
+      entrada.vistos += 1;
+      entrada.viram.push(linha);
+    } else {
+      entrada.naoViram.push(linha);
+    }
+  }
+  return mapa;
+}
+
+/** Avisos de um processo, do mais novo para o mais antigo. */
+function doProcesso(processoId, limite = 50) {
+  return db
+    .get()
+    .prepare(
+      `${SELECT} WHERE a.processo_id = @processo ORDER BY a.id DESC LIMIT @limite`
+    )
+    .all({ processo: processoId, limite });
+}
+
 function marcarLido(avisoId, usuarioId) {
   db.get()
     .prepare(
@@ -438,6 +524,7 @@ function marcarTodosLidos(usuarioId) {
 
 module.exports = {
   TIPOS,
+  TIPOS_DA_FAIXA,
   cargaDoAviso,
   pendentesDesde,
   ultimoIdVisivel,
@@ -446,8 +533,10 @@ module.exports = {
   rotulo,
   cor,
   publicar,
-  destinatariosDoProcesso,
   usuariosDoSetor,
+  leitores,
+  leituraDeVarios,
+  doProcesso,
   processoAberto,
   processoConcluido,
   processoImpedido,

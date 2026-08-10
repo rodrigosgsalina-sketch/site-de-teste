@@ -1,5 +1,13 @@
 <%- include('../partials/cabecalho', { titulo: titulo }) %>
 
+<% if (!participa) { %>
+  <div class="aviso aviso-info">
+    <strong>Somente leitura.</strong> Seu setor não participa do checklist deste processo — você
+    acompanha tudo por aqui, mas quem responde os itens, anexa documentos e mexe no status é quem
+    participa dele.
+  </div>
+<% } %>
+
 <div class="cartao">
   <div class="cartao-titulo">
     <div>
@@ -189,18 +197,28 @@
     <% } else { %>
       <div class="aviso aviso-sucesso">Todos os requisitos foram atendidos — o processo pode ser concluído.</div>
     <% } %>
-    <form method="post" action="/processos/<%= processo.id %>/concluir" data-confirmar="Confirmar a conclusão deste processo?">
-      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <div class="campo">
-        <label for="obs-conclusao">Observação da conclusão</label>
-        <input type="text" id="obs-conclusao" name="observacao" placeholder="Opcional">
-      </div>
-      <button class="botao" <%= podeConcluir ? '' : 'disabled' %>>Concluir processo</button>
-    </form>
+    <% if (participa) { %>
+      <form method="post" action="/processos/<%= processo.id %>/concluir" data-confirmar="Confirmar a conclusão deste processo?">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="campo">
+          <label for="obs-conclusao">Observação da conclusão</label>
+          <input type="text" id="obs-conclusao" name="observacao" placeholder="Opcional">
+        </div>
+        <button class="botao" <%= podeConcluir ? '' : 'disabled' %>>Concluir processo</button>
+      </form>
+    <% } else { %>
+      <p class="dica" style="margin:.6rem 0 0">Quem conclui é quem participa do processo.</p>
+    <% } %>
   </div>
 
   <div class="cartao">
     <h3>Situação do processo</h3>
+    <% if (!participa) { %>
+      <p class="dica">
+        Status atual: <strong><%= processo.status %></strong><% if (processo.etapa_atual) { %> · <%= processo.etapa_atual %><% } %>.
+        Alterar o status é de quem participa do processo.
+      </p>
+    <% } else { %>
     <form method="post" action="/processos/<%= processo.id %>/status">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="campo">
@@ -220,6 +238,7 @@
       </div>
       <button class="botao botao-secundario">Alterar status</button>
     </form>
+    <% } %>
 
     <% if (ehGestor) { %>
       <hr style="border:0;border-top:1px solid var(--borda);margin:1rem 0">
@@ -309,20 +328,22 @@
     </div>
   <% } %>
 
-  <form method="post" action="/processos/<%= processo.id %>/documentos" enctype="multipart/form-data" style="margin-top:1rem">
-    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-    <div class="linha-campos">
-      <div class="campo">
-        <label for="arquivo">Anexar documento</label>
-        <input type="file" id="arquivo" name="arquivo" required>
+  <% if (participa) { %>
+    <form method="post" action="/processos/<%= processo.id %>/documentos" enctype="multipart/form-data" style="margin-top:1rem">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <div class="linha-campos">
+        <div class="campo">
+          <label for="arquivo">Anexar documento</label>
+          <input type="file" id="arquivo" name="arquivo" required>
+        </div>
+        <div class="campo">
+          <label for="descricao-doc">Descrição</label>
+          <input type="text" id="descricao-doc" name="descricao" placeholder="Ex.: Contrato social assinado">
+        </div>
       </div>
-      <div class="campo">
-        <label for="descricao-doc">Descrição</label>
-        <input type="text" id="descricao-doc" name="descricao" placeholder="Ex.: Contrato social assinado">
-      </div>
-    </div>
-    <button class="botao botao-secundario">Enviar documento</button>
-  </form>
+      <button class="botao botao-secundario">Enviar documento</button>
+    </form>
+  <% } %>
 </div>
 
 <!-- ------------------------------------------------ histórico / notificações -->
@@ -339,6 +360,37 @@
       <% }) %>
     </ul>
   </div>
+
+  <% if (ehAdmin) { %>
+    <div class="cartao">
+      <h3>Avisos deste processo</h3>
+      <p class="dica" style="margin:0 0 .6rem">
+        Cada movimento do processo publica um aviso para todo o escritório. Aqui você vê quem já
+        abriu (marcou como visto) e quem ainda não.
+      </p>
+      <% if (!avisosDoProcesso.length) { %>
+        <p class="vazio">Nenhum aviso publicado para este processo.</p>
+      <% } else { %>
+        <div class="tabela-scroll">
+          <table class="tabela">
+            <thead><tr><th>Quando</th><th>Aviso</th><th>Quem já viu</th></tr></thead>
+            <tbody>
+              <% avisosDoProcesso.forEach(function (av) { %>
+                <tr>
+                  <td><%= fmtDataHora(av.criado_em) %></td>
+                  <td>
+                    <span class="etiqueta et-<%= corAviso(av.tipo) %>"><%= rotuloAviso(av.tipo) %></span>
+                    <div class="item-meta"><%= av.titulo %></div>
+                  </td>
+                  <td><%- include('../partials/leitores-aviso', { leitura: leituraPorAviso.get(av.id) }) %></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  <% } %>
 
   <div class="cartao">
     <h3>Notificações enviadas</h3>

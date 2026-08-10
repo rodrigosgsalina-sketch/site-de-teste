@@ -6,9 +6,10 @@
       <h2>Mural de avisos</h2>
       <p class="dica" style="margin:0">
         Cada movimento de processo gera um aviso: ele aparece na hora, como um cartão no canto
-        inferior direito, e fica registrado aqui. Conclusão e impedimento valem para todo o
-        escritório; abertura, cancelamento, reabertura, vez do setor e alerta de prazo vão para
-        quem participa do processo. Dispensar um aviso afeta apenas a sua tela.
+        inferior direito, e fica registrado aqui. Abertura, conclusão, impedimento, cancelamento,
+        reabertura e alerta de prazo vão para <strong>todos os usuários</strong>, participem eles do
+        processo ou não. A vez do setor é a exceção: é um chamado, e vai só para o setor que precisa
+        agir. Dispensar um aviso afeta apenas a sua tela.
       </p>
     </div>
     <div class="acoes">
@@ -50,7 +51,11 @@
     <div class="tabela-scroll">
       <table class="tabela">
         <thead>
-          <tr><th>Quando</th><th>Tipo</th><th>Aviso</th><th>Processo</th><th>Situação</th></tr>
+          <tr>
+            <th>Quando</th><th>Tipo</th><th>Aviso</th><th>Processo</th>
+            <% if (ehAdmin) { %><th>Quem já viu</th><% } %>
+            <th>Situação</th>
+          </tr>
         </thead>
         <tbody>
           <% lista.forEach(function (av) { %>
@@ -74,6 +79,9 @@
                   <a class="mono" href="/processos/<%= av.processo_id %>"><%= av.processo_codigo %></a>
                 <% } else { %>—<% } %>
               </td>
+              <% if (ehAdmin) { %>
+                <td><%- include('partials/leitores-aviso', { leitura: leituraPorAviso.get(av.id) }) %></td>
+              <% } %>
               <td>
                 <% if (av.lido_em) { %>
                   <span class="etiqueta et-neutro">lido</span>

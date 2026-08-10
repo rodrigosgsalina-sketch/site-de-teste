@@ -56,65 +56,61 @@ function novoProcesso() {
 
 /* ------------------------------------------------------------ destinatários */
 
-test('o aviso do processo vai para os usuários dos setores que participam dele', () => {
+test('todo movimento de processo avisa o escritório inteiro', () => {
   // Emissão de Certidões passa pelo Fiscal e pelo Paralegal — não pelo DP.
-  const processo = processosDom.criar(
-    { tipo_processo_id: tipoCertidoes.id, cliente_id: cliente.id },
-    admin
+  // Antes, quem era de fora do checklist não ficava sabendo de nada.
+  const setoresNoChecklist = checklist.setoresDoProcesso(
+    processosDom.criar({ tipo_processo_id: tipoCertidoes.id, cliente_id: cliente.id }, admin).id
   );
-  const setoresNoChecklist = checklist.setoresDoProcesso(processo.id);
-  const destinos = avisos.destinatariosDoProcesso(processo.id);
-
   assert.ok(setoresNoChecklist.includes('Fiscal'));
   assert.ok(!setoresNoChecklist.includes('Departamento Pessoal'));
 
-  assert.ok(destinos.includes(fiscal.id), 'quem é do Fiscal recebe');
-  assert.ok(destinos.includes(admin.id), 'quem abriu o processo recebe');
-  assert.ok(!destinos.includes(pessoal.id), 'setor fora do checklist não recebe o aviso do processo');
-
-  // Os itens da linha "Todos" põem o Financeiro em qualquer processo.
-  assert.ok(setoresNoChecklist.includes('Financeiro'));
-  assert.ok(destinos.includes(financeiro.id));
-});
-
-test('o Administrativo é avisado pelos setores auxiliares que ele responde', () => {
-  const processo = novoProcesso();
-  const setores = checklist.setoresDoProcesso(processo.id).map((s) => s.nome);
-  const auxiliares = conn.prepare('SELECT nome FROM setores WHERE auxiliar = 1').all().map((s) => s.nome);
-  const temAuxiliar = setores.some((s) => auxiliares.includes(s));
-
-  const administrativo = usuario('anna.clara');
-  const destinos = avisos.destinatariosDoProcesso(processo.id);
-  if (temAuxiliar) {
-    assert.ok(
-      destinos.includes(administrativo.id),
-      'o Administrativo responde pelos setores auxiliares, então é avisado por eles'
-    );
-  }
-});
-
-test('abertura avisa só quem participa; conclusão avisa a plataforma inteira', () => {
   const antesFiscal = avisos.contarNaoLidos(fiscal.id);
   const antesPessoal = avisos.contarNaoLidos(pessoal.id);
 
-  // Emissão de Certidões não passa pelo Departamento Pessoal.
   const processo = processosDom.criar({ tipo_processo_id: tipoCertidoes.id, cliente_id: cliente.id }, admin);
   avisos.processoAberto(processo, checklist.setoresDoProcesso(processo.id), admin);
 
   assert.strictEqual(avisos.contarNaoLidos(fiscal.id), antesFiscal + 1);
   assert.strictEqual(
     avisos.contarNaoLidos(pessoal.id),
-    antesPessoal,
-    'setor de fora não é incomodado com a abertura'
+    antesPessoal + 1,
+    'quem não participa do checklist também precisa saber que o processo abriu'
   );
+  assert.strictEqual(avisos.naoLidos(pessoal.id, 1)[0].escopo, 'todos');
 
-  // Conclusão: todo mundo vê, participando ou não.
-  avisos.processoConcluido(processo, admin);
-  assert.strictEqual(avisos.contarNaoLidos(pessoal.id), antesPessoal + 1);
+  // O mesmo vale para o resto do ciclo de vida.
+  const cenarios = [
+    ['concluido', () => avisos.processoConcluido(processo, admin)],
+    ['cancelado', () => avisos.processoCancelado(processo, 'desistência', admin)],
+    ['reaberto', () => avisos.processoReaberto(processo, 'voltou atrás', admin)],
+    ['prazo', () => avisos.prazoDoProcesso(processo, -2)],
+  ];
+  for (const [tipo, publicar] of cenarios) {
+    const antes = avisos.contarNaoLidos(pessoal.id);
+    publicar();
+    assert.strictEqual(avisos.contarNaoLidos(pessoal.id), antes + 1, `${tipo} precisa chegar a todos`);
+    assert.strictEqual(avisos.naoLidos(pessoal.id, 1)[0].tipo, tipo);
+  }
+});
 
-  const ultimo = avisos.naoLidos(pessoal.id, 1)[0];
-  assert.strictEqual(ultimo.tipo, 'concluido');
-  assert.strictEqual(ultimo.escopo, 'todos');
+test('usuário inativo não entra na conta dos avisos', () => {
+  const antes = avisos.contarNaoLidos(pessoal.id);
+  conn.prepare("UPDATE usuarios SET status = 'Inativo' WHERE id = ?").run(pessoal.id);
+  try {
+    const processo = novoProcesso();
+    avisos.processoConcluido(processo, admin);
+    // O aviso é de escopo 'todos', então continua legível para ele se voltar;
+    // o que não pode é ele ser contado como público ativo do aviso.
+    const leitura = avisos.leitores(avisos.naoLidos(fiscal.id, 1)[0].id);
+    assert.ok(
+      ![...leitura.viram, ...leitura.naoViram].some((p) => p.nome === pessoal.nome),
+      'quem está inativo não é cobrado por não ter visto'
+    );
+  } finally {
+    conn.prepare("UPDATE usuarios SET status = 'Ativo' WHERE id = ?").run(pessoal.id);
+  }
+  assert.ok(avisos.contarNaoLidos(pessoal.id) >= antes);
 });
 
 test('a vez do setor avisa apenas aquele setor', () => {
@@ -318,13 +314,13 @@ test('o ciclo de vida do processo publica os avisos correspondentes', () => {
   assert.ok(tipos().includes('impedido'));
 });
 
-test('a faixa do topo mostra só os avisos que valem para todo o escritório', () => {
+test('a faixa do topo mostra só o que muda o rumo do processo', () => {
   const processo = novoProcesso();
   avisos.processoAberto(processo, checklist.setoresDoProcesso(processo.id), admin);
   avisos.processoConcluido(processo, admin);
 
-  const naFaixa = avisos.naoLidos(fiscal.id, 5, { escopo: 'todos' });
-  assert.ok(naFaixa.every((a) => a.escopo === 'todos'));
+  const naFaixa = avisos.naoLidos(fiscal.id, 5, { faixa: true });
+  assert.ok(naFaixa.every((a) => avisos.TIPOS_DA_FAIXA.includes(a.tipo)));
   assert.ok(naFaixa.some((a) => a.tipo === 'concluido'));
   assert.ok(!naFaixa.some((a) => a.tipo === 'aberto'), 'abertura não empilha faixa no topo');
 

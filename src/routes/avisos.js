@@ -13,9 +13,13 @@ function esperaJson(req) {
 
 /** Mural completo: os avisos que o usuário pode ver, com marcação de leitura. */
 router.get('/', (req, res) => {
+  const lista = avisosDom.listar(req.session.usuario.id, 200);
+  // Só o administrador vê quem já abriu cada aviso — para os demais a consulta
+  // nem chega a ser feita.
   res.render('avisos', {
     titulo: 'Avisos',
-    lista: avisosDom.listar(req.session.usuario.id, 200),
+    lista,
+    leituraPorAviso: res.locals.ehAdmin ? avisosDom.leituraDeVarios(lista.map((a) => a.id)) : new Map(),
   });
 });
 

@@ -155,7 +155,7 @@ src/
     processos.js         criação, numeração, motor de status, conclusão, prazos
     checklist.js         clonagem do modelo, respostas, impedimentos, fila
     parametros.js        leitura tipada de PARAMETROS + numeração automática
-    acesso.js            perfis, setores e visibilidade
+    acesso.js            perfis, setores e quem pode agir em cada processo
     historico.js         auditoria automática
     notificacoes.js      e-mails (transporte simulado ou SMTP) + outbox
     integracoes.js       adaptadores: Google Chat/Drive + stubs previstos
@@ -173,7 +173,7 @@ src/
   views/                 telas EJS
   public/                CSS, JS (notificacoes.js), sw.js (Service Worker), Chart.js e fontes
 scripts/                 seed, reset, assets, certificado TLS, chaves VAPID, doutor
-tests/                   regras de negócio, segurança, HTTPS, notificações e backup (node:test)
+tests/                   regras, acesso, ordem do checklist, segurança, notificações e backup (node:test)
 ```
 
 ---
@@ -294,10 +294,31 @@ que **outro** colaborador confirme o item.
 status, conclusão, cancelamento, reabertura, upload/remoção de documento, geração de PDF e
 alteração de parâmetros geram linha em `HISTORICO` automaticamente, com usuário e data/hora.
 
-**Controle de acesso** — perfil `Administrador` e setor `Diretoria` veem tudo. Perfil `Usuário`
-vê os processos em que o seu setor tem itens (mais os que abriu ou conduz) e só responde os
-itens do próprio setor. O dashboard gerencial é restrito a gestores; a área de Administração,
-a administradores.
+**Controle de acesso — ver é de todos, agir é de quem participa**
+
+*Ver:* qualquer usuário abre **qualquer processo** que exista (o excluído não existe mais para
+ninguém). A lista em **Processos** mostra o escritório inteiro, com o filtro **“Só do meu setor”**
+a um clique para quem quer a visão do próprio dia a dia. Esconder o andamento de quem não responde
+o checklist só fazia a informação circular por fora da plataforma.
+
+*Agir:* quem **não** tem setor no checklist — e não abriu nem conduz o processo — fica de leitura.
+A tela avisa isso no topo e some com o que ele não pode usar: nada de responder item, anexar
+documento ou alterar status. A recusa é feita também no servidor, não só escondendo botão.
+
+Quem participa continua fazendo o de sempre: responde os itens do próprio setor (o Administrativo
+responde também pelos auxiliares — Sócios, Cliente, TI, Qualidade), anexa documentos e registra
+esperas no status. Perfil `Administrador` e setor `Diretoria` seguem com visão e edição totais;
+cancelar e reabrir são de gestor, excluir é de administrador. O dashboard gerencial é restrito a
+gestores; a área de Administração, a administradores.
+
+| Ação | Quem faz |
+|---|---|
+| Abrir e ler qualquer processo | todos |
+| Responder item do checklist | o setor do item (ou gestor) |
+| Anexar documento, alterar status, concluir | quem participa do processo |
+| Editar cadastro do processo | quem abriu, quem conduz, ou gestor |
+| Cancelar / reabrir | gestor |
+| Excluir | administrador |
 
 ---
 
@@ -428,18 +449,39 @@ número do processo e um “×” para dispensar. Clicar no título abre o proce
 
 | Evento | Onde nasce | Quem recebe |
 |---|---|---|
-| Processo **aberto** | `POST /processos` | usuários dos setores no checklist + quem abriu + quem conduz |
+| Processo **aberto** | `POST /processos` | **todos os usuários** |
 | Item de checklist com **impedimento** | resposta do item | **todos os usuários** |
-| Chegou a **vez do setor** | recálculo de status após uma resposta | usuários daquele setor |
 | Processo **concluído** | botão Concluir | **todos os usuários** |
-| Processo **cancelado** | ação de gestor | setores do processo |
-| Processo **reaberto** | ação de gestor | setores do processo |
-| **Prazo** vencido ou a vencer | varredura automática de prazos | setores do processo |
+| Processo **cancelado** | ação de gestor | **todos os usuários** |
+| Processo **reaberto** | ação de gestor | **todos os usuários** |
+| **Prazo** vencido ou a vencer | varredura automática de prazos | **todos os usuários** |
+| Chegou a **vez do setor** | recálculo de status após uma resposta | usuários daquele setor |
 
-Conclusão e impedimento valem para o escritório inteiro — são os dois fatos que interessam a todo
-mundo. Os demais vão só para quem participa daquele processo, para ninguém receber aviso de
-trabalho que não é seu. O **Administrativo** também é avisado pelos setores auxiliares (Sócios,
-Cliente, TI, Qualidade), que é ele quem responde.
+**Movimento de processo é assunto do escritório inteiro**: o aviso chega a todos os usuários
+ativos, participem eles do checklist ou não — o mesmo princípio que abriu a visualização de todos
+os processos.
+
+A única exceção é a **vez do setor**. “Fiscal: sua vez no PR-2026-0007” é um chamado endereçado,
+não uma notícia: se fosse para todo mundo, cada passagem de bastão viraria aviso para o escritório
+inteiro. Ele continua indo só para o setor que precisa agir.
+
+A **faixa no topo das telas** mostra apenas o que muda o rumo do processo — concluído, impedido e
+cancelado. Os demais avisos chegam pelo cartão no canto e ficam no mural, para não empilhar faixa
+em cima de faixa.
+
+### Quem já viu o aviso (administradores)
+
+Publicar não é o mesmo que alguém ter lido. Para o **administrador**, cada aviso mostra
+**“visto por N de M”**, e abrindo a etiqueta aparecem os nomes de quem marcou como visto — com
+setor e data/hora — e a lista de quem ainda não viu. Está em dois lugares:
+
+- **Mural de avisos** (`/avisos`), na coluna *Quem já viu*, para varrer tudo de uma vez;
+- **tela do processo**, no cartão *Avisos deste processo*, quando a pergunta é sobre um processo
+  específico.
+
+O público de cada aviso segue a regra da entrega: nos avisos gerais são os usuários ativos; na vez
+do setor, só o setor chamado — ninguém é cobrado por não ter visto um chamado que não era dele.
+Usuário comum não recebe essa coluna: a consulta nem chega a ser feita para ele.
 
 ### Três caminhos de entrega
 
@@ -583,8 +625,8 @@ Limites que valem conhecer:
 Com `LOG_NOTIFICACOES` ligado (padrão fora de produção), servidor e tela registram cada etapa:
 
 ```
-[avisos] 2026-08-05T16:44:11.580Z publicado · aviso=8 tipo=aberto escopo=setores destinatarios=8 processo=PR-2026-0012
-[avisos] 2026-08-05T16:44:11.612Z entregue por SSE · aviso=8 canais=2 usuariosSemAbaAberta=6
+[avisos] 2026-08-05T16:44:11.580Z publicado · aviso=8 tipo=aberto escopo=todos destinatarios=15 processo=PR-2026-0012
+[avisos] 2026-08-05T16:44:11.612Z entregue por SSE · aviso=8 canais=2 usuariosSemAbaAberta=13
 [avisos] 2026-08-05T16:44:12.004Z push enviado · aviso=8 enviados=3 falhas=0 removidos=0
 ```
 

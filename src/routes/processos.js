@@ -10,6 +10,7 @@ const config = require('../config');
 const csrf = require('../lib/csrf');
 const db = require('../db');
 const acesso = require('../domain/acesso');
+const avisosDom = require('../domain/avisos');
 const checklist = require('../domain/checklist');
 const clientes = require('../domain/clientes');
 const subtipos = require('../domain/subtipos');
@@ -83,13 +84,16 @@ function dadosDoSeletor(clienteId) {
 /* ------------------------------------------------------------- Listagem */
 router.get('/', (req, res) => {
   const usuario = req.session.usuario;
-  const setorIds = acesso.setorIdsDoUsuario(usuario);
   const filtros = {
     status: req.query.status || '',
     tipoId: req.query.tipo || '',
     busca: (req.query.q || '').trim(),
     atrasados: req.query.atrasados === '1',
+    meuSetor: req.query.meu_setor === '1',
   };
+  // A lista mostra o escritório inteiro. "Só do meu setor" continua a um clique
+  // de distância, para quem quer a visão antiga do dia a dia.
+  const setorIds = filtros.meuSetor ? acesso.setorIdsDoUsuario(usuario) : null;
   const lista = processos.listar({
     ...filtros,
     setorIds,
@@ -99,6 +103,7 @@ router.get('/', (req, res) => {
     titulo: 'Processos',
     processos: lista,
     filtros,
+    setoresDoUsuario: acesso.setoresDoUsuario(usuario),
     ...listasAuxiliares(),
   });
 });
@@ -143,20 +148,31 @@ router.post('/', async (req, res, next) => {
 });
 
 /* ------------------------------------------------- Carregamento comum */
+
+/**
+ * Todo processo que existe é visível para qualquer usuário — o que separa as
+ * pessoas é o que elas podem *fazer*, não o que podem ler.
+ */
 function carregar(req, res, next) {
   const id = Number(req.params.id);
   const processo = processos.obter(id);
   if (!processo) {
     return res.status(404).render('erro', { titulo: 'Processo não encontrado', mensagem: 'Verifique o endereço.' });
   }
-  if (!acesso.podeVerProcesso(req.session.usuario, id)) {
-    return res.status(403).render('erro', {
-      titulo: 'Acesso negado',
-      mensagem: 'Seu setor não participa deste processo.',
-    });
-  }
   req.processo = processo;
+  req.participa = acesso.participaDoProcesso(req.session.usuario, id);
   next();
+}
+
+/** Barra quem está só de leitura: sem setor no checklist, sem abrir, sem conduzir. */
+function exigirParticipacao(req, res, next) {
+  if (req.participa) return next();
+  return res.status(403).render('erro', {
+    titulo: 'Somente leitura',
+    mensagem:
+      'Seu setor não participa do checklist deste processo, então ele fica disponível apenas para ' +
+      'consulta. Para agir nele, fale com quem conduz o processo ou com um gestor.',
+  });
 }
 
 /* ------------------------------------------------------------ Detalhe */
@@ -169,6 +185,12 @@ router.get('/:id', carregar, (req, res) => {
   }));
   const problemas = processos.validarConclusao(processo.id, usuario);
 
+  // Quem já abriu cada aviso deste processo: informação de administrador.
+  const avisosDoProcesso = res.locals.ehAdmin ? avisosDom.doProcesso(processo.id) : [];
+  const leituraPorAviso = res.locals.ehAdmin
+    ? avisosDom.leituraDeVarios(avisosDoProcesso.map((a) => a.id))
+    : new Map();
+
   res.render('processos/detalhe', {
     titulo: processo.codigo,
     processo,
@@ -177,8 +199,11 @@ router.get('/:id', carregar, (req, res) => {
     historico: historico.doProcesso(processo.id),
     documentos: documentosDom.doProcesso(processo.id),
     notificacoes: notificacoes.doProcesso(processo.id).slice(0, 15),
+    avisosDoProcesso,
+    leituraPorAviso,
     problemas,
     podeConcluir: problemas.length === 0,
+    participa: req.participa,
     podeGerenciar: acesso.podeGerenciarProcesso(usuario, processo),
     duplaConferencia: parametros.bool('EXIGIR_DUPLA_CONFERENCIA', false),
     permitirPularEtapas: parametros.bool('PERMITIR_PULAR_ETAPAS', false),
@@ -249,7 +274,7 @@ router.post('/:id/editar', carregar, (req, res, next) => {
 });
 
 /* -------------------------------------------------------- Ações fluxo */
-router.post('/:id/status', carregar, (req, res, next) => {
+router.post('/:id/status', carregar, exigirParticipacao, (req, res, next) => {
   try {
     processos.definirStatusManual(req.processo.id, req.body.status, req.session.usuario, req.body.observacao);
     flash(req, 'sucesso', `Status alterado para ${req.body.status}.`);
@@ -263,7 +288,7 @@ router.post('/:id/status', carregar, (req, res, next) => {
   }
 });
 
-router.post('/:id/concluir', carregar, async (req, res, next) => {
+router.post('/:id/concluir', carregar, exigirParticipacao, async (req, res, next) => {
   try {
     const processo = processos.concluir(req.processo.id, req.session.usuario, req.body.observacao);
     notificacoes.processoConcluido(processo, req.session.usuario).catch(() => {});
@@ -353,7 +378,7 @@ router.post('/:id/reabrir', carregar, (req, res, next) => {
 });
 
 /* ---------------------------------------------------------- Documentos */
-router.post('/:id/documentos', carregar, upload.single('arquivo'), csrf.verificar, async (req, res, next) => {
+router.post('/:id/documentos', carregar, exigirParticipacao, upload.single('arquivo'), csrf.verificar, async (req, res, next) => {
   try {
     if (!req.file) throw new ErroValidacao('Selecione um arquivo.');
     await documentosDom.registrar(req.processo, req.file, req.body.descricao, req.session.usuario);
