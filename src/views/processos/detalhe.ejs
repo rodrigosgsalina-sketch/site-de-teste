@@ -88,6 +88,66 @@
     <span><%= progresso.pendentes %> pendente(s) · <%= progresso.impedidos %> impedido(s)</span>
     <span><%= progresso.obrigatorios_pendentes %> obrigatório(s) em aberto</span>
   </div>
+
+  <%# O checklist é clonado na abertura: mexer no modelo não reescreve sozinho
+      o que já está em andamento. Quem conduz o processo pode pedir que
+      reescreva — depois de ver o que vai acontecer e confirmar. %>
+  <% if (previaChecklist) { %>
+    <details class="atualizar-checklist" <%= previaChecklist.semMudanca ? '' : 'open' %>>
+      <summary>
+        Atualizar checklist pelo modelo
+        <% if (previaChecklist.semMudanca) { %>
+          <span class="etiqueta et-verde">já está igual ao modelo</span>
+        <% } else { %>
+          <span class="etiqueta et-amarelo">
+            <%= previaChecklist.entram.length %> entra(m) ·
+            <%= previaChecklist.saem.length %> sai(em) ·
+            <%= previaChecklist.reordenam %> muda(m) de lugar
+          </span>
+        <% } %>
+      </summary>
+
+      <% if (previaChecklist.semMudanca) { %>
+        <p class="dica" style="margin:.6rem 0 0">
+          O checklist deste processo já corresponde ao modelo atual — na ordem e nos itens. Não há
+          o que atualizar.
+        </p>
+      <% } else { %>
+        <p class="dica" style="margin:.6rem 0">
+          O checklist foi copiado do modelo quando o processo abriu. Depois disso o modelo mudou.
+          Atualizando, este processo passa a seguir o modelo de hoje:
+        </p>
+        <ul class="previa-checklist">
+          <% if (previaChecklist.entram.length) { %>
+            <li>
+              <strong><%= previaChecklist.entram.length %> item(ns) entram:</strong>
+              <%= previaChecklist.entram.slice(0, 6).map(function (e) { return e.setor + ' — ' + e.item; }).join('; ') %><%= previaChecklist.entram.length > 6 ? ' …' : '' %>
+            </li>
+          <% } %>
+          <% if (previaChecklist.saem.length) { %>
+            <li>
+              <strong><%= previaChecklist.saem.length %> item(ns) saem</strong> (ainda sem nenhuma resposta):
+              <%= previaChecklist.saem.slice(0, 6).map(function (e) { return e.item; }).join('; ') %><%= previaChecklist.saem.length > 6 ? ' …' : '' %>
+            </li>
+          <% } %>
+          <% if (previaChecklist.reordenam) { %>
+            <li><strong><%= previaChecklist.reordenam %> item(ns) mudam de posição</strong>, seguindo a ordem do modelo.</li>
+          <% } %>
+          <% if (previaChecklist.ficam.length) { %>
+            <li>
+              <strong><%= previaChecklist.ficam.length %> item(ns) já respondidos ficam</strong>, mesmo tendo saído do
+              modelo — apagar destruiria trabalho registrado. Eles vão para o fim do setor deles.
+            </li>
+          <% } %>
+        </ul>
+        <form method="post" action="/processos/<%= processo.id %>/checklist/atualizar"
+              data-confirmar="Atualizar o checklist deste processo pelo modelo atual? <%= previaChecklist.entram.length %> item(ns) entram, <%= previaChecklist.saem.length %> saem e <%= previaChecklist.reordenam %> mudam de posição. Itens já respondidos não são apagados.">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <button class="botao botao-secundario botao-pequeno">Atualizar checklist</button>
+        </form>
+      <% } %>
+    </details>
+  <% } %>
 </div>
 
 <!-- ----------------------------------------------------------- checklist -->

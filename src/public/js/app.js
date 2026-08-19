@@ -317,18 +317,20 @@
     });
   }
 
-  /* Ordem de atendimento dos setores: arrastar para reordenar.
+  /* Listas reordenáveis por arrasto — setores e itens do checklist modelo.
 
-     O <ol> já vem do servidor na ordem certa. Arrastar (ou ↑/↓ com o setor em
+     A lista já vem do servidor na ordem certa. Arrastar (ou ↑/↓ com a linha em
      foco) reposiciona o <li>, renumera e grava sozinho — sem recarregar a
      página, porque quem arrastou precisa ver o resultado onde soltou.
 
-     Sem JavaScript nada disso existe e o formulário comum continua salvando
-     pelo botão, que só é escondido aqui. */
+     O formulário diz em `data-campo` qual input recebe os ids na nova ordem;
+     o resto (endereço, CSRF, tipo, setor) já está nos campos escondidos dele.
+     Sem JavaScript nada disso existe e o botão comum continua salvando — ele
+     só é escondido aqui. */
   function ligarOrdenacaoArrastavel(raiz) {
-    raiz.querySelectorAll('[data-ordem-setores]').forEach(function (form) {
-      var lista = form.querySelector('.ordem-setores');
-      var campo = form.querySelector('input[name="setor_ids"]');
+    raiz.querySelectorAll('[data-ordem-arrastavel]').forEach(function (form) {
+      var lista = form.querySelector('.ordem-lista');
+      var campo = form.querySelector('input[name="' + (form.dataset.campo || '') + '"]');
       var estado = form.querySelector('[data-ordem-estado]');
       var manual = form.querySelector('[data-ordem-manual]');
       if (!lista || !campo) return;
@@ -342,7 +344,7 @@
       var ultimaSalva = campo.value;
 
       function itens() {
-        return Array.prototype.slice.call(lista.querySelectorAll('li[data-setor]'));
+        return Array.prototype.slice.call(lista.querySelectorAll('li[data-id]'));
       }
 
       function renumerar() {
@@ -353,11 +355,11 @@
           var nome = li.querySelector('.ordem-nome strong');
           li.setAttribute(
             'aria-label',
-            (nome ? nome.textContent.trim() : 'setor') + ', posição ' + (i + 1) + ' de ' + todos.length
+            (nome ? nome.textContent.trim() : 'linha') + ', posição ' + (i + 1) + ' de ' + todos.length
           );
         });
         campo.value = todos
-          .map(function (li) { return li.dataset.setor; })
+          .map(function (li) { return li.dataset.id; })
           .join(',');
       }
 
@@ -378,10 +380,13 @@
         var enviada = campo.value;
         dizer('salvando…', false);
 
+        // Manda os campos escondidos do próprio formulário: assim o mesmo
+        // código serve para a ordem dos setores e para a dos itens, sem saber
+        // o nome de nenhum deles.
         var dados = new URLSearchParams();
-        dados.set('_csrf', (form.querySelector('input[name="_csrf"]') || {}).value || '');
-        dados.set('tipo_processo_id', form.dataset.tipo || '');
-        dados.set('setor_ids', campo.value);
+        form.querySelectorAll('input[type="hidden"]').forEach(function (campoOculto) {
+          if (campoOculto.name) dados.set(campoOculto.name, campoOculto.value);
+        });
 
         fetch(form.action, {
           method: 'POST',
@@ -452,7 +457,7 @@
 
       lista.addEventListener('pointerdown', function (evento) {
         if (evento.button !== undefined && evento.button !== 0) return;
-        var li = evento.target.closest('li[data-setor]');
+        var li = evento.target.closest('li[data-id]');
         if (!li) return;
 
         arrastando = li;
@@ -469,7 +474,7 @@
       /* Teclado: mesma reordenação sem mouse. */
       lista.addEventListener('keydown', function (evento) {
         if (evento.key !== 'ArrowUp' && evento.key !== 'ArrowDown') return;
-        var li = evento.target.closest('li[data-setor]');
+        var li = evento.target.closest('li[data-id]');
         if (!li) return;
         evento.preventDefault();
 

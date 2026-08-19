@@ -15,6 +15,7 @@ const historico = require('../domain/historico');
 const integracoes = require('../domain/integracoes');
 const notificacoes = require('../domain/notificacoes');
 const ordemSetores = require('../domain/ordem-setores');
+const ordemItens = require('../domain/ordem-itens');
 const parametros = require('../domain/parametros');
 const processos = require('../domain/processos');
 const usuarios = require('../domain/usuarios');
@@ -523,13 +524,19 @@ router.get('/checklist-modelo', (req, res) => {
   const { filtros, where, args } = filtrosDoModelo(req.query);
   const tipoSelecionado = filtros.tipo && filtros.tipo !== 'todos' ? Number(filtros.tipo) : null;
 
-  // Com um tipo escolhido, a listagem já segue a ordem de atendimento dele.
+  // Com um tipo escolhido, a listagem sai exatamente como o checklist do
+  // processo vai nascer: ordem de atendimento do setor e, dentro dele, a ordem
+  // dos itens. Sem tipo, ela mistura tipos diferentes — aí vale agrupar por
+  // tipo, que é o que ajuda a ler.
   const posicao = tipoSelecionado
     ? `COALESCE(ost.ordem, 1000 + s.ordem)`
     : `1000 + s.ordem`;
   const juncaoOrdem = tipoSelecionado
     ? `LEFT JOIN ordem_setores_tipo ost ON ost.tipo_processo_id = ${tipoSelecionado} AND ost.setor_id = m.setor_id`
     : '';
+  const sequencia = tipoSelecionado
+    ? 'posicao_setor, m.ordem, m.id'
+    : 'posicao_setor, (m.tipo_processo_id IS NULL), t.ordem, m.ordem, m.id';
 
   let itens = conn
     .prepare(
@@ -540,8 +547,7 @@ router.get('/checklist-modelo', (req, res) => {
          LEFT JOIN subtipos_processo sub ON sub.id = m.subtipo_processo_id
          ${juncaoOrdem}
          ${where}
-        ORDER BY posicao_setor, (m.tipo_processo_id IS NULL), t.ordem,
-                 (m.subtipo_processo_id IS NOT NULL), m.ordem, m.id`
+        ORDER BY ${sequencia}`
     )
     .all(...args);
 
@@ -564,6 +570,7 @@ router.get('/checklist-modelo', (req, res) => {
     filtros,
     tipoSelecionado,
     ordemSetores: tipoSelecionado ? ordemSetores.doTipo(tipoSelecionado) : [],
+    ordemItens: tipoSelecionado ? ordemItens.doTipo(tipoSelecionado) : [],
     tipos: conn.prepare('SELECT id, nome FROM tipos_processo ORDER BY nome').all(),
     tiposComOrdem: ordemSetores.tiposComOrdemPropria(),
     // Inclui os inativos: um item de modelo pode apontar para um subtipo que
@@ -624,6 +631,55 @@ router.post('/checklist-modelo/ordem', (req, res, next) => {
 
     if (querJson) return res.json({ ok: true, ordem: lista.map((s) => ({ id: s.id, nome: s.nome })) });
     return voltarParaOrdem(req, res, tipoId, 'Ordem de atendimento atualizada.');
+  } catch (err) {
+    if (err instanceof ErroValidacao) {
+      if (querJson) return res.status(400).json({ ok: false, erro: err.message });
+      flash(req, 'erro', err.message);
+      return res.redirect('/admin/checklist-modelo');
+    }
+    next(err);
+  }
+});
+
+/**
+ * Ordem dos ITENS dentro de um setor, no mesmo formato: a lista inteira de uma
+ * vez, JSON para quem arrasta e redirecionamento para quem não tem JavaScript.
+ */
+router.post('/checklist-modelo/ordem-itens', (req, res, next) => {
+  const querJson = String(req.headers.accept || '').includes('application/json');
+  try {
+    const tipoId = Number(req.body.tipo_processo_id);
+    const setorId = Number(req.body.setor_id);
+    if (!tipoId || !setorId) throw new ErroValidacao('Informe o tipo de processo e o setor.');
+
+    const ids = []
+      .concat(req.body.item_ids || [])
+      .join(',')
+      .split(',')
+      .map(Number)
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (!ids.length) throw new ErroValidacao('Informe a ordem dos itens.');
+
+    // Mesma regra da ordem dos setores: só a lista completa. Uma lista pela
+    // metade deixaria os itens de fora com números velhos, no meio dos novos.
+    const atuais = ordemItens.idsDoSetor(tipoId, setorId);
+    if (atuais.length !== ids.length || atuais.some((id) => !ids.includes(id))) {
+      throw new ErroValidacao('A lista de itens não confere com a deste setor. Recarregue a página.');
+    }
+
+    ordemItens.definir(tipoId, setorId, ids);
+    const conn = db.get();
+    const tipo = conn.prepare('SELECT nome FROM tipos_processo WHERE id = ?').get(tipoId);
+    const setor = conn.prepare('SELECT nome FROM setores WHERE id = ?').get(setorId);
+    historico.registrar({
+      processoId: null,
+      acao: 'Ordem de Itens Alterada',
+      usuario: req.session.usuario,
+      observacao: `${tipo ? tipo.nome : tipoId} · ${setor ? setor.nome : setorId}: ${ids.length} item(ns) reordenados.`,
+    });
+
+    if (querJson) return res.json({ ok: true, ordem: ids });
+    return voltarParaOrdem(req, res, tipoId, `Ordem dos itens do setor ${setor ? setor.nome : ''} atualizada.`);
   } catch (err) {
     if (err instanceof ErroValidacao) {
       if (querJson) return res.status(400).json({ ok: false, erro: err.message });

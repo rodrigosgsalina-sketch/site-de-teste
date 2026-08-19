@@ -166,6 +166,7 @@ src/
     subtipos.js          subtipos de processo (detalhamento do tipo)
     push.js              inscrições de push por navegador/aparelho
     ordem-setores.js     ordem de atendimento dos setores por tipo de processo
+    ordem-itens.js       ordem dos itens do modelo dentro de cada setor
     clientes.js          cadastro das empresas atendidas
     importacao-clientes.js  leitura do relatório de empresas do Domínio Sistemas
     backup.js            backup completo em JSON e restauração transacional
@@ -240,6 +241,32 @@ vez do setor — e, por ser lida no momento do uso, também se aplica aos proces
 Tipos sem ordem própria seguem a ordem geral da tabela `setores`; setores sem posição definida vão
 para o fim.
 
+**Ordem dos itens dentro do setor** — logo abaixo, o cartão *Ordem dos itens* traz um bloco por
+setor com os itens daquele tipo, também **arrastáveis** (e com `↑`/`↓` no teclado). As duas ordens
+juntas — setores e itens — são exatamente a sequência com que o checklist do processo nasce.
+
+Um detalhe que a tela avisa com a etiqueta **“todo processo”**: o item aplicado a *todos os
+processos* existe uma vez só no modelo e aparece em todos os tipos, então movê-lo aqui move em
+todos. É o preço de não duplicar o item — e a alternativa, uma cópia por tipo, faria a mesma
+pergunta ser editada em quinze lugares.
+
+**Atualizar o checklist de um processo já aberto** — o checklist é clonado na abertura, de
+propósito: mexer no modelo não pode reescrever sozinho o trabalho em andamento. Quando a
+administração corrige o modelo e você quer aplicar em um processo que já está tramitando, a tela
+dele traz *Atualizar checklist pelo modelo*, logo abaixo da barra de progresso. Antes de fazer,
+ela mostra o que vai acontecer — quantos itens entram, quantos saem e quantos mudam de posição —
+e o botão **pergunta se quer prosseguir**. Ao confirmar:
+
+- **entram** os itens que passaram a valer;
+- **saem** os que deixaram de valer, *desde que ninguém tenha mexido neles*;
+- **ficam** os que já têm resposta, observação, impedimento ou conferência, mesmo tendo saído do
+  modelo — apagar destruiria trabalho registrado; eles vão para o fim do setor deles;
+- a **ordem inteira** é reaplicada, setor a setor e item a item.
+
+Tudo vai para o histórico do processo, e o status é recalculado em seguida. A ação é de quem abriu
+o processo, de quem o conduz ou de um gestor — mexe no trabalho de todos os setores, não só no do
+próprio. Quando não há nada a fazer, o bloco diz *já está igual ao modelo* e não oferece botão.
+
 **Checklist na ordem (`EXIGIR_ORDEM_SETORES`)** — com o parâmetro ligado (padrão), **um setor só
 abre depois que o setor acima dele responder**: se o Fiscal vem antes do Paralegal, o Paralegal só
 responde quando o Fiscal terminar. Na tela do processo o setor preso aparece esmaecido, marcado
@@ -308,8 +335,9 @@ documento ou alterar status. A recusa é feita também no servidor, não só esc
 Quem participa continua fazendo o de sempre: responde os itens do próprio setor (o Administrativo
 responde também pelos auxiliares — Sócios, Cliente, TI, Qualidade), anexa documentos e registra
 esperas no status. Perfil `Administrador` e setor `Diretoria` seguem com visão e edição totais;
-cancelar e reabrir são de gestor, excluir é de administrador. O dashboard gerencial é restrito a
-gestores; a área de Administração, a administradores.
+cancelar e reabrir são de gestor, excluir é de administrador. O **dashboard é de todos** — ele
+soma o que qualquer um já vê processo a processo. Só a área de **Administração** é restrita a
+administradores.
 
 | Ação | Quem faz |
 |---|---|
@@ -317,6 +345,8 @@ gestores; a área de Administração, a administradores.
 | Responder item do checklist | o setor do item (ou gestor) |
 | Anexar documento, alterar status, concluir | quem participa do processo |
 | Editar cadastro do processo | quem abriu, quem conduz, ou gestor |
+| Ver o dashboard | todos |
+| Atualizar o checklist pelo modelo | quem abriu, quem conduz, ou gestor |
 | Cancelar / reabrir | gestor |
 | Excluir | administrador |
 
@@ -671,6 +701,10 @@ As integrações ficam em `src/domain/integracoes.js`, cada uma com seu adaptado
 ---
 
 ## Dashboard gerencial
+
+É a **primeira aba do menu** e está aberto a **todos os usuários**: ele soma exatamente o que
+qualquer um já enxerga processo a processo na lista, e guardar a soma para a Diretoria só escondia
+o total de quem faz as parcelas.
 
 Processos por status e por tipo (gráficos), impedidos com motivo, concluídos no período,
 tempo médio de conclusão por tipo, produtividade por setor, ranking de colaboradores e meta

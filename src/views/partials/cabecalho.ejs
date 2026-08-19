@@ -20,6 +20,7 @@
       <span class="marca-texto"><strong>JS Grilo</strong><small>Contabilidade &amp; Gestão</small></span>
     </div>
     <nav>
+      <a href="/dashboard" class="<%= caminhoAtual.startsWith('/dashboard') ? 'ativo' : '' %>">Dashboard</a>
       <a href="/" class="<%= caminhoAtual === '/' ? 'ativo' : '' %>">Minha fila</a>
       <a href="/processos" class="<%= caminhoAtual.startsWith('/processos') ? 'ativo' : '' %>">Processos</a>
       <a href="/clientes" class="<%= caminhoAtual.startsWith('/clientes') ? 'ativo' : '' %>">Clientes</a>
@@ -29,9 +30,6 @@
         Avisos
         <span class="contador" data-contador-avisos <%= avisosTotal ? '' : 'hidden' %>><%= avisosTotal %></span>
       </a>
-      <% if (ehGestor) { %>
-        <a href="/dashboard" class="<%= caminhoAtual.startsWith('/dashboard') ? 'ativo' : '' %>">Dashboard</a>
-      <% } %>
       <% if (ehAdmin) { %>
         <span class="nav-grupo">Administração</span>
         <a href="/admin/parametros" class="<%= caminhoAtual === '/admin/parametros' ? 'ativo' : '' %>">Parâmetros</a>

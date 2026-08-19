@@ -247,7 +247,7 @@ function atualizar(id, dados, usuario) {
   const mudanca = subtipos.definirDoProcesso(id, subtipoIds);
   let ajuste = null;
   if (mudanca.mudou) {
-    ajuste = checklist.sincronizarComSubtipos(
+    ajuste = checklist.sincronizarComModelo(
       id,
       atual.tipo_processo_id,
       subtipoIds,
@@ -288,6 +288,47 @@ function atualizar(id, dados, usuario) {
   if (ajuste) recalcularStatus(id, usuario, { silencioso: true });
 
   return { ...obter(id), ajusteChecklist: ajuste, mudancaSubtipos: mudanca };
+}
+
+/**
+ * Traz o checklist de um processo já aberto para o modelo de hoje.
+ *
+ * O checklist nasce clonado do modelo, e é assim de propósito: mexer no modelo
+ * não pode reescrever sozinho o trabalho que já está em andamento. Mas quando
+ * a administração corrige o modelo — um item que faltava, uma ordem melhor —
+ * alguém precisa poder dizer "aplique aqui também". É esta função, e ela só
+ * roda quando alguém pede.
+ *
+ * Entra o que passou a valer, sai o que deixou de valer **desde que ninguém
+ * tenha mexido**, e a ordem inteira é reaplicada. Item já respondido nunca é
+ * apagado: ele vai para o fim do setor dele e aparece no resumo.
+ */
+function atualizarChecklist(processoId, usuario) {
+  const processo = obter(processoId);
+  if (!processo) throw new ErroValidacao('Processo não encontrado.');
+  if (processo.status === STATUS.CANCELADO) {
+    throw new ErroValidacao('Processo cancelado: reabra antes de atualizar o checklist.');
+  }
+
+  const ajuste = db.tx(() => checklist.atualizarPeloModelo(processoId));
+
+  const resumo =
+    `${ajuste.adicionados.length} item(ns) adicionado(s), ${ajuste.removidos.length} removido(s), ` +
+    `${ajuste.reordenados} reordenado(s)` +
+    (ajuste.mantidos.length ? `, ${ajuste.mantidos.length} mantido(s) por já terem resposta` : '') +
+    '.';
+
+  historico.registrar({
+    processoId,
+    acao: 'Checklist Atualizado',
+    usuario,
+    observacao: `Checklist trazido para o modelo atual: ${resumo}`,
+  });
+
+  // Itens que entram ou saem mudam quem está pendente — e, com isso, o status.
+  recalcularStatus(processoId, usuario, { silencioso: true });
+
+  return { ...ajuste, resumo };
 }
 
 /* ------------------------------------------------------------------ *
@@ -703,6 +744,7 @@ module.exports = {
   ErroValidacao,
   criar,
   atualizar,
+  atualizarChecklist,
   obter,
   obterPorCodigo,
   listar,

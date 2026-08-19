@@ -107,15 +107,15 @@
         <kbd>Tab</kbd> até o setor e use <kbd>↑</kbd> <kbd>↓</kbd>.
       </p>
 
-      <form method="post" action="/admin/checklist-modelo/ordem" data-ordem-setores
-            data-tipo="<%= tipoAtual.id %>">
+      <form method="post" action="/admin/checklist-modelo/ordem" data-ordem-arrastavel
+            data-campo="setor_ids">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <input type="hidden" name="tipo_processo_id" value="<%= tipoAtual.id %>">
         <input type="hidden" name="setor_ids" value="<%= ordemSetores.map(function (s) { return s.id; }).join(',') %>">
 
-        <ol class="ordem-setores">
+        <ol class="ordem-lista ordem-setores">
           <% ordemSetores.forEach(function (s, i) { %>
-            <li tabindex="0" data-setor="<%= s.id %>"
+            <li tabindex="0" data-id="<%= s.id %>"
                 aria-label="<%= s.nome %>, posição <%= i + 1 %> de <%= ordemSetores.length %>">
               <span class="ordem-pegador" aria-hidden="true" title="Arraste para reordenar">⠿</span>
               <span class="ordem-posicao"><%= i + 1 %></span>
@@ -138,12 +138,72 @@
       </form>
     <% } %>
   </div>
+
+  <!-- ----------------------------------------------------- ordem dos itens -->
+  <% if (ordemItens.length) { %>
+    <div class="cartao" id="ordem-itens">
+      <div class="cartao-titulo">
+        <div>
+          <h3>Ordem dos itens — <%= tipoAtual.nome %></h3>
+          <p class="dica" style="margin:0;max-width:74ch">
+            Dentro de cada setor, a sequência em que os itens aparecem no checklist.
+            <strong>Arraste</strong> para mudar (com o teclado, <kbd>Tab</kbd> e <kbd>↑</kbd> <kbd>↓</kbd>).
+            Vale para <strong>novos processos</strong>; nos que já estão abertos, use
+            <em>Atualizar checklist</em> na tela do processo.
+          </p>
+        </div>
+      </div>
+
+      <% ordemItens.forEach(function (grupo) { %>
+        <div class="grupo-itens">
+          <h4>
+            <%= grupo.setor %>
+            <% if (grupo.auxiliar) { %><span class="etiqueta et-opcional">auxiliar</span><% } %>
+            <small><%= grupo.itens.length %> item(ns)</small>
+          </h4>
+
+          <form method="post" action="/admin/checklist-modelo/ordem-itens" data-ordem-arrastavel
+                data-campo="item_ids">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="tipo_processo_id" value="<%= tipoAtual.id %>">
+            <input type="hidden" name="setor_id" value="<%= grupo.setor_id %>">
+            <input type="hidden" name="item_ids"
+                   value="<%= grupo.itens.map(function (i) { return i.id; }).join(',') %>">
+
+            <ol class="ordem-lista ordem-itens">
+              <% grupo.itens.forEach(function (m, i) { %>
+                <li tabindex="0" data-id="<%= m.id %>"
+                    aria-label="<%= m.item %>, posição <%= i + 1 %> de <%= grupo.itens.length %>">
+                  <span class="ordem-pegador" aria-hidden="true" title="Arraste para reordenar">⠿</span>
+                  <span class="ordem-posicao"><%= i + 1 %></span>
+                  <span class="ordem-nome">
+                    <strong><%= m.item %></strong>
+                    <% if (!m.tipo_processo_id) { %>
+                      <span class="etiqueta et-neutro" title="Este item vale para todo processo: mover aqui move em todos os tipos.">todo processo</span>
+                    <% } %>
+                    <% if (m.subtipo) { %><span class="etiqueta et-neutro"><%= m.subtipo %></span><% } %>
+                    <% if (!m.obrigatorio) { %><span class="etiqueta et-opcional">opcional</span><% } %>
+                    <% if (!m.ativo) { %><span class="etiqueta et-neutro">inativo</span><% } %>
+                  </span>
+                </li>
+              <% }) %>
+            </ol>
+
+            <div class="acoes" data-ordem-manual>
+              <button class="botao botao-secundario botao-pequeno">Salvar ordem dos itens</button>
+            </div>
+            <span class="dica" data-ordem-estado role="status" aria-live="polite"></span>
+          </form>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
 <% } else { %>
   <div class="cartao">
     <div class="aviso aviso-info" style="margin:0">
       Escolha um <strong>tipo de processo</strong> no filtro acima para definir a
-      <strong>ordem de atendimento dos setores</strong> — por exemplo, colocar o Departamento
-      Pessoal primeiro e o Paralegal por último.
+      <strong>ordem de atendimento dos setores</strong> e a <strong>ordem dos itens</strong> dentro
+      de cada um — por exemplo, colocar o Departamento Pessoal primeiro e o Paralegal por último.
     </div>
   </div>
 <% } %>
@@ -264,7 +324,9 @@
 
   <p class="dica" style="margin-top:1rem">
     Alterações no modelo valem para <strong>novos processos</strong>. Processos já abertos mantêm o
-    checklist clonado na abertura — só a ordem de atendimento é aplicada também a eles.
+    checklist clonado na abertura — a ordem de atendimento dos setores é aplicada também a eles, e
+    o resto entra pelo botão <strong>Atualizar checklist</strong> na tela do processo, que mostra o
+    que vai mudar antes de confirmar.
   </p>
 </div>
 

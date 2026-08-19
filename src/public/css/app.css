@@ -735,8 +735,8 @@ legend {
 .item-atrasado { color: var(--vermelho); font-weight: 600; }
 
 /* --------------------------------------------- ordem de atendimento */
-.ordem-setores { list-style: none; margin: .2rem 0 0; padding: 0; display: grid; gap: .4rem; counter-reset: setor; }
-.ordem-setores li {
+.ordem-lista { list-style: none; margin: .2rem 0 0; padding: 0; display: grid; gap: .4rem; }
+.ordem-lista li {
   display: flex; align-items: center; gap: .8rem;
   padding: .6rem .75rem; border: 1px solid var(--linha); border-radius: var(--raio-sm);
   background: var(--superficie-2);
@@ -745,10 +745,10 @@ legend {
   transition: border-color var(--rapido) ease, background var(--rapido) ease, transform var(--rapido) var(--suave);
   animation: surgir var(--medio) var(--suave) both;
 }
-.ordem-setores li:hover { background: var(--superficie); border-color: var(--linha-forte); transform: translateX(2px); }
-.ordem-setores li:focus-visible { outline: 2px solid var(--azul-500); outline-offset: 2px; }
+.ordem-lista li:hover { background: var(--superficie); border-color: var(--linha-forte); transform: translateX(2px); }
+.ordem-lista li:focus-visible { outline: 2px solid var(--azul-500); outline-offset: 2px; }
 /* Enquanto arrasta, o item some do lugar antigo em vez de duplicar a leitura. */
-.ordem-setores li.arrastando {
+.ordem-lista li.arrastando {
   opacity: .45; border-style: dashed; border-color: var(--azul-500);
   transform: none; animation: none;
 }
@@ -756,7 +756,7 @@ legend {
   flex: none; cursor: grab; color: var(--tinta-4); font-size: 1rem; line-height: 1;
   padding: .1rem .15rem; user-select: none;
 }
-.ordem-setores li:active .ordem-pegador { cursor: grabbing; }
+.ordem-lista li:active .ordem-pegador { cursor: grabbing; }
 .ordem-erro { color: var(--vermelho); font-weight: 600; }
 [data-ordem-ajuda] kbd {
   display: inline-block; padding: 0 .3rem; border: 1px solid var(--linha-forte);
@@ -772,11 +772,33 @@ legend {
 .ordem-nome { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
 .ordem-nome strong { font-family: var(--display); font-size: .93rem; color: var(--tinta); font-weight: 600; }
 .ordem-nome small { color: var(--tinta-4); font-size: .78rem; }
-.ordem-setores .acoes { gap: .3rem; }
-.ordem-setores li:nth-child(1) { animation-delay: 20ms; }
-.ordem-setores li:nth-child(2) { animation-delay: 45ms; }
-.ordem-setores li:nth-child(3) { animation-delay: 70ms; }
-.ordem-setores li:nth-child(n+4) { animation-delay: 90ms; }
+.ordem-lista .acoes { gap: .3rem; }
+.ordem-lista li:nth-child(1) { animation-delay: 20ms; }
+.ordem-lista li:nth-child(2) { animation-delay: 45ms; }
+.ordem-lista li:nth-child(3) { animation-delay: 70ms; }
+.ordem-lista li:nth-child(n+4) { animation-delay: 90ms; }
+
+/* Trazer o checklist de um processo aberto para o modelo de hoje. */
+.atualizar-checklist {
+  margin-top: .9rem; padding-top: .8rem; border-top: 1px solid var(--linha);
+}
+.atualizar-checklist > summary {
+  cursor: pointer; font-family: var(--display); font-size: .88rem; font-weight: 600;
+  color: var(--tinta); display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+}
+.previa-checklist { margin: .2rem 0 .8rem; padding-left: 1.1rem; color: var(--tinta-2); font-size: .86rem; }
+.previa-checklist li { margin-bottom: .25rem; }
+
+/* Ordem dos ITENS: um bloco por setor, com a lista dentro. */
+.grupo-itens { margin-top: 1rem; }
+/* A linha separa um bloco do outro, então só os seguintes a recebem. */
+.grupo-itens + .grupo-itens { padding-top: .8rem; border-top: 1px solid var(--linha); }
+.grupo-itens h4 {
+  margin: 0 0 .3rem; font-family: var(--display); font-size: .92rem; color: var(--tinta);
+  display: flex; align-items: center; gap: .45rem; flex-wrap: wrap;
+}
+.grupo-itens h4 small { color: var(--tinta-4); font-weight: 400; font-size: .78rem; }
+.ordem-itens .ordem-nome strong { font-family: var(--corpo); font-weight: 500; }
 
 /* ----------------------------------------------------------- linha tempo */
 .linha-tempo { list-style: none; margin: 0; padding: 0; }

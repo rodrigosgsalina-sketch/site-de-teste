@@ -59,8 +59,10 @@ function chaveDoItem(setorId, item) {
  * Itens do modelo que valem para um processo: os de "Todos" (sem tipo), os do
  * tipo escolhido e os dos subtipos escolhidos — já sem repetição.
  *
- * Quando o mesmo item chega por caminhos diferentes, vence o mais exigente:
- * se um deles é obrigatório, o item entra como obrigatório. A posição é a da
+ * A sequência é a do modelo: primeiro a ordem de atendimento do setor, depois
+ * a ordem dos itens dentro dele, que a administração monta arrastando. Quando
+ * o mesmo item chega por caminhos diferentes, vence o mais exigente — se um
+ * deles é obrigatório, o item entra como obrigatório — e a posição é a da
  * primeira aparição, para o checklist não mudar de ordem conforme os subtipos.
  */
 function modeloDoProcesso(tipoProcessoId, subtipoIds = []) {
@@ -80,7 +82,7 @@ function modeloDoProcesso(tipoProcessoId, subtipoIds = []) {
         WHERE m.ativo = 1
           AND (m.tipo_processo_id = ? OR m.tipo_processo_id IS NULL)
           AND (m.subtipo_processo_id IS NULL${ids.length ? ` OR m.subtipo_processo_id IN (${marcas})` : ''})
-        ORDER BY setor_ordem, (m.subtipo_processo_id IS NOT NULL), m.ordem, m.id`
+        ORDER BY setor_ordem, m.ordem, m.id`
     )
     .all(tipoProcessoId, tipoProcessoId, ...ids);
 
@@ -155,14 +157,13 @@ function intocado(item) {
 }
 
 /**
- * Acerta o checklist depois de mudarem os subtipos do processo.
+ * O que aconteceria ao acertar o checklist de um processo pelo modelo atual —
+ * sem tocar em nada.
  *
- * Entra o que passou a valer; sai o que deixou de valer — **desde que ninguém
- * tenha mexido**. Item já respondido fica onde está: apagar destruiria
- * trabalho registrado, e quem respondeu não tem como saber que sumiu. Eles
- * ficam listados no retorno para a tela avisar.
+ * Serve para a tela perguntar antes de fazer: "2 itens entram, 1 sai, 3 já
+ * respondidos ficam". Quem confirma sabe o que está confirmando.
  */
-function sincronizarComSubtipos(processoId, tipoProcessoId, subtipoIds, aberturaISO = agoraISO()) {
+function diferencaComModelo(processoId, tipoProcessoId, subtipoIds) {
   const conn = db.get();
   const esperado = modeloDoProcesso(tipoProcessoId, subtipoIds);
   const atuais = conn.prepare('SELECT * FROM checklist WHERE processo_id = ?').all(processoId);
@@ -171,32 +172,114 @@ function sincronizarComSubtipos(processoId, tipoProcessoId, subtipoIds, abertura
   for (const item of atuais) chavesAtuais.set(chaveDoItem(item.setor_id, item.item), item);
   const chavesEsperadas = new Set(esperado.map((m) => m.chave));
 
+  const entram = esperado.filter((m) => !chavesAtuais.has(m.chave));
+  const saem = [];
+  const ficam = [];
+  let reordenam = 0;
+
+  esperado.forEach((modelo, indice) => {
+    const atual = chavesAtuais.get(modelo.chave);
+    if (atual && atual.ordem !== indice + 1) reordenam += 1;
+  });
+
+  for (const [chave, item] of chavesAtuais) {
+    if (chavesEsperadas.has(chave)) continue;
+    const resumo = { id: item.id, codigo: item.codigo, item: item.item, status: item.status_item };
+    if (intocado(item)) saem.push(resumo);
+    else ficam.push(resumo);
+  }
+
+  return {
+    esperado,
+    chavesAtuais,
+    entram: entram.map((m) => ({ setor: m.setor, item: m.item })),
+    saem,
+    ficam,
+    reordenam,
+    // Nada a fazer é uma resposta legítima, e a tela precisa saber disso para
+    // não oferecer um botão que não muda coisa alguma.
+    semMudanca: !entram.length && !saem.length && !reordenam,
+  };
+}
+
+/**
+ * Acerta o checklist de um processo pelo modelo atual.
+ *
+ * Entra o que passou a valer; sai o que deixou de valer — **desde que ninguém
+ * tenha mexido**. Item já respondido fica onde está: apagar destruiria
+ * trabalho registrado, e quem respondeu não tem como saber que sumiu. Eles
+ * ficam listados no retorno para a tela avisar.
+ *
+ * A **ordem também é reaplicada**: o checklist do processo passa a seguir a
+ * sequência do modelo, item por item. Os que ficaram sem lugar no modelo (os
+ * respondidos que saíram dele) vão para o fim do setor deles, preservando a
+ * ordem relativa que tinham.
+ */
+function sincronizarComModelo(processoId, tipoProcessoId, subtipoIds, aberturaISO = agoraISO()) {
+  const conn = db.get();
+  const plano = diferencaComModelo(processoId, tipoProcessoId, subtipoIds);
+  const { esperado, chavesAtuais } = plano;
+
   const adicionados = [];
   const removidos = [];
   const mantidos = [];
 
   let seq = proximoCodigoItem(conn);
-  const maiorOrdem = atuais.reduce((maior, i) => Math.max(maior, i.ordem || 0), 0);
-  let ordem = maiorOrdem;
+  const reordenar = conn.prepare('UPDATE checklist SET ordem = ? WHERE id = ?');
 
-  for (const modelo of esperado) {
-    if (chavesAtuais.has(modelo.chave)) continue;
-    ordem += 1;
-    adicionados.push(inserirItem(conn, processoId, modelo, aberturaISO, seq++, ordem));
-  }
+  esperado.forEach((modelo, indice) => {
+    const atual = chavesAtuais.get(modelo.chave);
+    if (atual) {
+      if (atual.ordem !== indice + 1) reordenar.run(indice + 1, atual.id);
+      return;
+    }
+    adicionados.push(inserirItem(conn, processoId, modelo, aberturaISO, seq++, indice + 1));
+  });
 
   const apagar = conn.prepare('DELETE FROM checklist WHERE id = ?');
-  for (const [chave, item] of chavesAtuais) {
-    if (chavesEsperadas.has(chave)) continue;
-    if (intocado(item)) {
-      apagar.run(item.id);
-      removidos.push({ codigo: item.codigo, item: item.item });
-    } else {
-      mantidos.push({ codigo: item.codigo, item: item.item, status: item.status_item });
-    }
+  let sobra = esperado.length;
+  for (const item of plano.saem) {
+    apagar.run(item.id);
+    removidos.push({ codigo: item.codigo, item: item.item });
+  }
+  for (const item of plano.ficam) {
+    sobra += 1;
+    reordenar.run(sobra, item.id);
+    mantidos.push({ codigo: item.codigo, item: item.item, status: item.status });
   }
 
-  return { adicionados, removidos, mantidos };
+  return { adicionados, removidos, mantidos, reordenados: plano.reordenam };
+}
+
+/** Mesma sincronização, lendo o tipo e os subtipos do próprio processo. */
+function dadosDoProcessoParaModelo(processoId) {
+  const conn = db.get();
+  const processo = conn.prepare('SELECT id, tipo_processo_id, data_abertura FROM processos WHERE id = ?').get(processoId);
+  if (!processo) return null;
+  const subtipoIds = conn
+    .prepare('SELECT subtipo_id FROM processos_subtipos WHERE processo_id = ?')
+    .all(processoId)
+    .map((l) => l.subtipo_id);
+  return { processo, subtipoIds };
+}
+
+function previaDoModelo(processoId) {
+  const dados = dadosDoProcessoParaModelo(processoId);
+  if (!dados) return null;
+  const plano = diferencaComModelo(processoId, dados.processo.tipo_processo_id, dados.subtipoIds);
+  // O chamador só precisa do resumo; o resto é matéria-prima da aplicação.
+  return { entram: plano.entram, saem: plano.saem, ficam: plano.ficam, reordenam: plano.reordenam, semMudanca: plano.semMudanca };
+}
+
+function atualizarPeloModelo(processoId) {
+  const dados = dadosDoProcessoParaModelo(processoId);
+  if (!dados) throw new ErroValidacao('Processo não encontrado.');
+  return sincronizarComModelo(
+    processoId,
+    dados.processo.tipo_processo_id,
+    dados.subtipoIds,
+    dados.processo.data_abertura || agoraISO()
+  );
 }
 
 const SELECT_ITEM = `
@@ -551,7 +634,10 @@ module.exports = {
   modeloDoProcesso,
   liberacaoPorSetor,
   setorLiberado,
-  sincronizarComSubtipos,
+  sincronizarComModelo,
+  diferencaComModelo,
+  previaDoModelo,
+  atualizarPeloModelo,
   chaveDoItem,
   obterItem,
   doProcesso,

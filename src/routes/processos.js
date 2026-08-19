@@ -185,6 +185,11 @@ router.get('/:id', carregar, (req, res) => {
   }));
   const problemas = processos.validarConclusao(processo.id, usuario);
 
+  // O que mudaria se o checklist fosse trazido para o modelo de hoje. Só faz
+  // sentido para quem pode fazê-lo, então a conta nem é feita para os demais.
+  const podeGerenciar = acesso.podeGerenciarProcesso(usuario, processo);
+  const previaChecklist = podeGerenciar && !processo.status_final ? checklist.previaDoModelo(processo.id) : null;
+
   // Quem já abriu cada aviso deste processo: informação de administrador.
   const avisosDoProcesso = res.locals.ehAdmin ? avisosDom.doProcesso(processo.id) : [];
   const leituraPorAviso = res.locals.ehAdmin
@@ -204,7 +209,8 @@ router.get('/:id', carregar, (req, res) => {
     problemas,
     podeConcluir: problemas.length === 0,
     participa: req.participa,
-    podeGerenciar: acesso.podeGerenciarProcesso(usuario, processo),
+    podeGerenciar,
+    previaChecklist,
     duplaConferencia: parametros.bool('EXIGIR_DUPLA_CONFERENCIA', false),
     permitirPularEtapas: parametros.bool('PERMITIR_PULAR_ETAPAS', false),
     exigirUpload: parametros.bool('EXIGIR_UPLOAD_DOCUMENTOS', false),
@@ -268,6 +274,37 @@ router.post('/:id/editar', carregar, (req, res, next) => {
         ...dadosDoSeletor(req.body.cliente_id || req.processo.cliente_id),
         ...listasAuxiliares(),
       });
+    }
+    next(err);
+  }
+});
+
+/**
+ * Traz o checklist do processo para o modelo de hoje.
+ *
+ * É de quem conduz o processo (ou de um gestor), como a edição do cadastro:
+ * mexe no trabalho de todos os setores, não só no do próprio.
+ */
+router.post('/:id/checklist/atualizar', carregar, (req, res, next) => {
+  try {
+    if (!acesso.podeGerenciarProcesso(req.session.usuario, req.processo)) {
+      return res.status(403).render('erro', {
+        titulo: 'Acesso negado',
+        mensagem: 'Somente o responsável pelo processo ou um gestor pode atualizar o checklist.',
+      });
+    }
+    const ajuste = processos.atualizarChecklist(req.processo.id, req.session.usuario);
+    const nada = !ajuste.adicionados.length && !ajuste.removidos.length && !ajuste.reordenados;
+    flash(
+      req,
+      'sucesso',
+      nada ? 'O checklist já estava igual ao modelo — nada mudou.' : `Checklist atualizado: ${ajuste.resumo}`
+    );
+    res.redirect(`/processos/${req.processo.id}`);
+  } catch (err) {
+    if (err instanceof ErroValidacao) {
+      flash(req, 'erro', err.message);
+      return res.redirect(`/processos/${req.processo.id}`);
     }
     next(err);
   }
