@@ -2,8 +2,17 @@
 
 <%
   var tipoAtual = tipoSelecionado ? tipos.find(function (t) { return t.id === tipoSelecionado; }) : null;
+  var subtipoAtual = subtipoSelecionado
+    ? subtiposDoTipo.find(function (s) { return s.id === subtipoSelecionado; })
+    : null;
+  /* Um item entra no checklist deste subtipo quando não é de subtipo nenhum
+     (vale para o tipo inteiro ou para todo processo) ou é justamente dele. */
+  var noSubtipo = function (m) {
+    if (!subtipoAtual) return true;
+    return !m.subtipo_processo_id || m.subtipo_processo_id === subtipoAtual.id;
+  };
   var qs = function () {
-    var base = { tipo: filtros.tipo, setor: filtros.setor, q: filtros.q,
+    var base = { tipo: filtros.tipo, subtipo: filtros.subtipo, setor: filtros.setor, q: filtros.q,
                  obrigatorio: filtros.obrigatorio, ativo: filtros.ativo };
     return Object.keys(base)
       .filter(function (k) { return base[k] !== '' && base[k] !== undefined && base[k] !== null; })
@@ -34,6 +43,21 @@
             </option>
           <% }) %>
         </select>
+      </div>
+      <div class="campo">
+        <label for="subtipo">Subtipo</label>
+        <%# Depende do tipo: o servidor já manda as opções do tipo escolhido, e
+            o JavaScript refaz a lista quando o tipo muda. %>
+        <select id="subtipo" name="subtipo" data-subtipos-select-de="tipo"
+                <%= tipoAtual && subtiposDoTipo.length ? '' : 'disabled' %>>
+          <option value="">Todo o tipo</option>
+          <% subtiposDoTipo.forEach(function (sub) { %>
+            <option value="<%= sub.id %>" <%= subtipoSelecionado === sub.id ? 'selected' : '' %>>
+              <%= sub.nome %><%= sub.ativo ? '' : ' (inativo)' %>
+            </option>
+          <% }) %>
+        </select>
+        <div class="dica">Mostra o checklist como ele fica num processo desse subtipo.</div>
       </div>
       <div class="campo">
         <label for="setor">Setor</label>
@@ -69,7 +93,8 @@
       <a class="botao botao-secundario botao-pequeno" href="/admin/checklist-modelo">Limpar</a>
       <span class="dica" style="margin-left:auto">
         <strong><%= itens.length %></strong> de <%= total %> item(ns) do modelo<% if (tipoAtual) { %>
-          · tipo <strong><%= tipoAtual.nome %></strong>, com os itens de todo processo<% } %>
+          · tipo <strong><%= tipoAtual.nome %></strong><% if (subtipoAtual) { %>,
+          subtipo <strong><%= subtipoAtual.nome %></strong><% } %>, com os itens de todo processo<% } %>
       </span>
     </div>
   </form>
@@ -124,6 +149,15 @@
                 <% if (s.auxiliar) { %><span class="etiqueta et-opcional">auxiliar</span><% } %>
                 <small><%= s.itens %> item(ns)</small>
               </span>
+              <%# O setor participa do tipo porque tem itens nele. Tirá-lo é
+                  tirar esses itens — e os de "todo processo" ficam, porque
+                  valem para todos os tipos. %>
+              <% if (itensDoTipoPorSetor[s.id]) { %>
+                <button type="submit" class="ordem-excluir" title="Remover <%= s.nome %> deste tipo"
+                        form="remover-setor-<%= s.id %>">×</button>
+              <% } else { %>
+                <span class="ordem-nota" title="Só há itens de todo processo neste setor: eles valem para todos os tipos e saem pela listagem abaixo.">só todo processo</span>
+              <% } %>
             </li>
           <% }) %>
         </ol>
@@ -136,6 +170,66 @@
         </div>
         <span class="dica" data-ordem-estado role="status" aria-live="polite"></span>
       </form>
+
+      <%# Um formulário por setor, fora da lista: formulário dentro de <ol>
+          arrastável atrapalha o arrasto, e o botão só precisa apontar para ele. %>
+      <% ordemSetores.forEach(function (s) { %>
+        <% if (itensDoTipoPorSetor[s.id]) { %>
+          <form id="remover-setor-<%= s.id %>" method="post" action="/admin/checklist-modelo/setor/remover" hidden
+                data-confirmar="Remover o setor <%= s.nome %> deste tipo? Saem <%= itensDoTipoPorSetor[s.id] %> item(ns) do modelo. Processos já abertos não são afetados.">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="tipo_processo_id" value="<%= tipoAtual.id %>">
+            <input type="hidden" name="setor_id" value="<%= s.id %>">
+            <input type="hidden" name="retorno" value="<%= qs() %>">
+            <input type="hidden" name="ancora" value="ordem">
+          </form>
+        <% } %>
+      <% }) %>
+    <% } %>
+
+    <%# Adicionar um setor é criar o primeiro item dele: sem item, o setor não
+        teria o que fazer no checklist. %>
+    <% if (setoresDeFora.length) { %>
+      <details class="adicionar-bloco">
+        <summary>Adicionar setor a este tipo</summary>
+        <form method="post" action="/admin/checklist-modelo">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+          <input type="hidden" name="tipo_processo_id" value="<%= tipoAtual.id %>">
+          <input type="hidden" name="retorno" value="<%= qs() %>">
+          <input type="hidden" name="ancora" value="ordem">
+          <div class="linha-campos">
+            <div class="campo">
+              <label for="novo-setor">Setor <span class="obrig">*</span></label>
+              <select id="novo-setor" name="setor_id" required>
+                <% setoresDeFora.forEach(function (s) { %>
+                  <option value="<%= s.id %>"><%= s.nome %><%= s.auxiliar ? ' (auxiliar)' : '' %></option>
+                <% }) %>
+              </select>
+            </div>
+            <div class="campo largo">
+              <label for="novo-setor-item">Primeiro item deste setor <span class="obrig">*</span></label>
+              <input type="text" id="novo-setor-item" name="item" required
+                     placeholder="Ex.: Conferência final do processo?">
+            </div>
+            <div class="campo">
+              <label for="novo-setor-subtipo">Subtipo</label>
+              <select id="novo-setor-subtipo" name="subtipo_processo_id">
+                <option value="">Todo o tipo</option>
+                <% subtiposDoTipo.forEach(function (sub) { %>
+                  <option value="<%= sub.id %>" <%= subtipoSelecionado === sub.id ? 'selected' : '' %>>
+                    <%= sub.nome %>
+                  </option>
+                <% }) %>
+              </select>
+            </div>
+            <div class="campo checkbox" style="align-self:center">
+              <input type="checkbox" id="novo-setor-obrig" name="obrigatorio" value="1" checked>
+              <label for="novo-setor-obrig">Obrigatório</label>
+            </div>
+          </div>
+          <button class="botao botao-secundario botao-pequeno">Adicionar setor</button>
+        </form>
+      </details>
     <% } %>
   </div>
 
@@ -144,10 +238,18 @@
     <div class="cartao" id="ordem-itens">
       <div class="cartao-titulo">
         <div>
-          <h3>Ordem dos itens — <%= tipoAtual.nome %></h3>
+          <h3>
+            Ordem dos itens — <%= tipoAtual.nome %><% if (subtipoAtual) { %> ·
+            <%= subtipoAtual.nome %><% } %>
+          </h3>
           <p class="dica" style="margin:0;max-width:74ch">
             Dentro de cada setor, a sequência em que os itens aparecem no checklist.
-            <strong>Arraste</strong> para mudar (com o teclado, <kbd>Tab</kbd> e <kbd>↑</kbd> <kbd>↓</kbd>).
+            <strong>Arraste</strong> para mudar (com o teclado, <kbd>Tab</kbd> e <kbd>↑</kbd> <kbd>↓</kbd>),
+            <strong>×</strong> para excluir e o campo no fim do setor para adicionar.
+            <% if (subtipoAtual) { %>
+              Os itens apagados são de outro subtipo: eles não entram no checklist de
+              <strong><%= subtipoAtual.nome %></strong>, mas dividem a mesma ordem do setor.
+            <% } %>
             Vale para <strong>novos processos</strong>; nos que já estão abertos, use
             <em>Atualizar checklist</em> na tela do processo.
           </p>
@@ -155,11 +257,15 @@
       </div>
 
       <% ordemItens.forEach(function (grupo) { %>
+        <% var noChecklist = grupo.itens.filter(noSubtipo).length; %>
         <div class="grupo-itens">
           <h4>
             <%= grupo.setor %>
             <% if (grupo.auxiliar) { %><span class="etiqueta et-opcional">auxiliar</span><% } %>
-            <small><%= grupo.itens.length %> item(ns)</small>
+            <small>
+              <%= grupo.itens.length %> item(ns)<% if (subtipoAtual) { %>
+              · <%= noChecklist %> no checklist deste subtipo<% } %>
+            </small>
           </h4>
 
           <form method="post" action="/admin/checklist-modelo/ordem-itens" data-ordem-arrastavel
@@ -172,7 +278,10 @@
 
             <ol class="ordem-lista ordem-itens">
               <% grupo.itens.forEach(function (m, i) { %>
-                <li tabindex="0" data-id="<%= m.id %>"
+                <%# Com um subtipo escolhido, o que é de OUTRO subtipo continua na
+                    lista — a ordem é uma só para o setor inteiro —, mas aparece
+                    apagado, para a leitura ser a do checklist daquele subtipo. %>
+                <li tabindex="0" data-id="<%= m.id %>" class="<%= noSubtipo(m) ? '' : 'fora-do-subtipo' %>"
                     aria-label="<%= m.item %>, posição <%= i + 1 %> de <%= grupo.itens.length %>">
                   <span class="ordem-pegador" aria-hidden="true" title="Arraste para reordenar">⠿</span>
                   <span class="ordem-posicao"><%= i + 1 %></span>
@@ -185,6 +294,8 @@
                     <% if (!m.obrigatorio) { %><span class="etiqueta et-opcional">opcional</span><% } %>
                     <% if (!m.ativo) { %><span class="etiqueta et-neutro">inativo</span><% } %>
                   </span>
+                  <button type="submit" class="ordem-excluir" title="Excluir este item do modelo"
+                          form="excluir-item-<%= m.id %>">×</button>
                 </li>
               <% }) %>
             </ol>
@@ -193,6 +304,42 @@
               <button class="botao botao-secundario botao-pequeno">Salvar ordem dos itens</button>
             </div>
             <span class="dica" data-ordem-estado role="status" aria-live="polite"></span>
+          </form>
+
+          <% grupo.itens.forEach(function (m) { %>
+            <form id="excluir-item-<%= m.id %>" method="post" hidden
+                  action="/admin/checklist-modelo/<%= m.id %>/excluir"
+                  data-confirmar="Excluir do modelo o item &quot;<%= m.item %>&quot;<%= m.tipo_processo_id ? '' : ' (ele vale para TODOS os tipos)' %>? Processos já abertos não são afetados.">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+              <input type="hidden" name="retorno" value="<%= qs() %>">
+              <input type="hidden" name="ancora" value="ordem-itens">
+            </form>
+          <% }) %>
+
+          <form method="post" action="/admin/checklist-modelo" class="adicionar-item">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+            <input type="hidden" name="tipo_processo_id" value="<%= tipoAtual.id %>">
+            <input type="hidden" name="setor_id" value="<%= grupo.setor_id %>">
+            <input type="hidden" name="retorno" value="<%= qs() %>">
+            <input type="hidden" name="ancora" value="ordem-itens">
+            <input type="text" name="item" required
+                   placeholder="Novo item para o <%= grupo.setor %>…"
+                   aria-label="Novo item para o <%= grupo.setor %>">
+            <% if (subtiposDoTipo.length) { %>
+              <select name="subtipo_processo_id" aria-label="Subtipo do novo item">
+                <option value="">Todo o tipo</option>
+                <% subtiposDoTipo.forEach(function (sub) { %>
+                  <option value="<%= sub.id %>" <%= subtipoSelecionado === sub.id ? 'selected' : '' %>>
+                    <%= sub.nome %>
+                  </option>
+                <% }) %>
+              </select>
+            <% } %>
+            <label class="campo checkbox">
+              <input type="checkbox" name="obrigatorio" value="1" checked>
+              <span>obrigatório</span>
+            </label>
+            <button class="botao botao-secundario botao-pequeno">Adicionar item</button>
           </form>
         </div>
       <% }) %>
@@ -213,6 +360,7 @@
   <h3>Novo item</h3>
   <form method="post" action="/admin/checklist-modelo">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <input type="hidden" name="retorno" value="<%= qs() %>">
     <div class="linha-campos">
       <div class="campo">
         <label for="tipo_processo_id">Tipo de processo</label>
@@ -225,9 +373,16 @@
       </div>
       <div class="campo">
         <label for="subtipo_processo_id">Subtipo</label>
+        <%# Já vem preenchido com o subtipo filtrado: quem está montando o
+            checklist de um subtipo quer criar o item nele. %>
         <select id="subtipo_processo_id" name="subtipo_processo_id"
                 data-subtipos-select-de="tipo_processo_id">
           <option value="">Todo o tipo</option>
+          <% subtiposDoTipo.forEach(function (sub) { %>
+            <option value="<%= sub.id %>" <%= subtipoSelecionado === sub.id ? 'selected' : '' %>>
+              <%= sub.nome %><%= sub.ativo ? '' : ' (inativo)' %>
+            </option>
+          <% }) %>
         </select>
         <div class="dica">Deixe em “Todo o tipo” para o item valer em qualquer processo do tipo.</div>
       </div>

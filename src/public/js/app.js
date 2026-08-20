@@ -459,6 +459,9 @@
         if (evento.button !== undefined && evento.button !== 0) return;
         var li = evento.target.closest('li[data-id]');
         if (!li) return;
+        // A linha tem botões (o × que exclui). Apertar um deles é clicar nele,
+        // não pegar a linha para arrastar.
+        if (evento.target.closest('button, a, input, select, textarea, label')) return;
 
         arrastando = li;
         li.classList.add('arrastando');

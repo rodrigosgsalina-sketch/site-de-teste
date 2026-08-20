@@ -800,6 +800,35 @@ legend {
 .grupo-itens h4 small { color: var(--tinta-4); font-weight: 400; font-size: .78rem; }
 .ordem-itens .ordem-nome strong { font-family: var(--corpo); font-weight: 500; }
 
+/* Item de outro subtipo: continua na fila (a ordem é do setor), mas apagado. */
+.ordem-lista li.fora-do-subtipo { opacity: .5; }
+.ordem-lista li.fora-do-subtipo .ordem-posicao { background: var(--tinta-4); }
+
+/* O × que tira o setor ou o item. Fica no fim da linha, discreto até o hover. */
+.ordem-excluir {
+  flex: none; margin-left: auto; border: 1px solid transparent; background: none;
+  color: var(--tinta-4); cursor: pointer; font-size: 1rem; line-height: 1;
+  padding: .1rem .4rem; border-radius: var(--raio-xs);
+  transition: color var(--rapido) ease, background var(--rapido) ease, border-color var(--rapido) ease;
+}
+.ordem-excluir:hover { color: var(--vermelho); background: var(--vermelho-claro); border-color: var(--vermelho-borda); }
+.ordem-excluir:focus-visible { outline: 2px solid var(--vermelho); outline-offset: 1px; }
+.ordem-nota { flex: none; margin-left: auto; color: var(--tinta-4); font-size: .72rem; }
+
+/* Adicionar item, no fim de cada setor: uma linha só, sem sair da tela. */
+.adicionar-item {
+  display: flex; align-items: center; gap: .45rem; flex-wrap: wrap;
+  margin: .45rem 0 0; padding-left: calc(26px + 1.2rem);
+}
+.adicionar-item input[type="text"] { flex: 1 1 260px; min-width: 0; }
+.adicionar-item select { flex: 0 1 200px; }
+.adicionar-item .campo.checkbox { margin: 0; white-space: nowrap; }
+.adicionar-bloco { margin-top: 1rem; }
+.adicionar-bloco > summary {
+  cursor: pointer; font-family: var(--display); font-size: .86rem; font-weight: 600; color: var(--azul-600);
+}
+.adicionar-bloco[open] > summary { margin-bottom: .3rem; }
+
 /* ----------------------------------------------------------- linha tempo */
 .linha-tempo { list-style: none; margin: 0; padding: 0; }
 .linha-tempo li {

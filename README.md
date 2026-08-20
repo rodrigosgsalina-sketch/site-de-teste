@@ -250,6 +250,34 @@ processos* existe uma vez só no modelo e aparece em todos os tipos, então mov�
 todos. É o preço de não duplicar o item — e a alternativa, uma cópia por tipo, faria a mesma
 pergunta ser editada em quinze lugares.
 
+**Montar o checklist nos próprios cartões** — os dois cartões de ordem não servem só para
+ordenar; é neles que o checklist de um tipo se monta:
+
+| Onde | O que dá para fazer |
+|---|---|
+| Cartão *Ordem de atendimento* | arrastar setores, **×** para tirar um setor do tipo, *Adicionar setor a este tipo* |
+| Cartão *Ordem dos itens* | arrastar itens, **×** para excluir um item, campo *Novo item para o &lt;setor&gt;* no fim de cada bloco |
+
+Duas escolhas que a tela explica em voz alta:
+
+- **Adicionar um setor é criar o primeiro item dele.** “Setor do tipo” não é um cadastro à parte:
+  o setor participa porque tem itens ali. Por isso o formulário pede o setor **e** a primeira
+  pergunta — um setor sem item não teria o que fazer no checklist.
+- **Remover um setor tira os itens dele daquele tipo.** Os de *todo processo* ficam: eles valem
+  para todos os tipos e não dá para tirá-los de um só (para isso, o **×** do item). Quando um
+  setor só tem itens desse tipo de origem, ele aparece marcado como *só todo processo* e sem o
+  botão de remover. A confirmação diz quantos itens saem, e processos já abertos não são afetados.
+
+**Buscar por subtipo** — o filtro do topo ganhou o campo **Subtipo**, que acompanha o tipo
+escolhido. Com um subtipo selecionado, a tela passa a mostrar o **checklist como ele vai ficar num
+processo daquele subtipo**: os itens do subtipo, mais os do tipo inteiro, mais os de todo processo.
+É a forma de conferir o resultado antes de abrir o primeiro processo.
+
+Nos cartões de ordem, os itens de *outros* subtipos continuam na lista, porém **apagados**: a
+ordem é uma só para o setor inteiro, e escondê-los faria a numeração mentir. E os formulários de
+adicionar já vêm com o subtipo filtrado preenchido — quem está montando o checklist de um subtipo
+quer criar o item nele.
+
 **Atualizar o checklist de um processo já aberto** — o checklist é clonado na abertura, de
 propósito: mexer no modelo não pode reescrever sozinho o trabalho em andamento. Quando a
 administração corrige o modelo e você quer aplicar em um processo que já está tramitando, a tela

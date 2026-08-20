@@ -27,6 +27,7 @@ const checklist = require('../src/domain/checklist');
 const clientesDom = require('../src/domain/clientes');
 const ordemItens = require('../src/domain/ordem-itens');
 const processosDom = require('../src/domain/processos');
+const subtipos = require('../src/domain/subtipos');
 
 const conn = carregarSeed(db);
 const app = require('../src/app');
@@ -317,4 +318,225 @@ test('o menu abre pelo Dashboard, com Minha fila logo depois', async () => {
   const nav = html.slice(html.indexOf('<nav>'), html.indexOf('</nav>'));
   const ordem = [...nav.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(ordem.slice(0, 4), ['/dashboard', '/', '/processos', '/clientes']);
+});
+
+/* --------------------------- montar o checklist pelos cartões de ordem */
+
+/** Um administrador logado, para os testes de tela. */
+async function comoAdmin() {
+  const http = criarCliente(base);
+  await http.entrar('jacqueline', 'teste123');
+  return http;
+}
+
+test('o filtro por subtipo mostra o checklist que aquele subtipo terá', async () => {
+  const sub = subtipos.criar({ tipo_processo_id: tipo.id, nome: 'Com filtro' });
+  const outro = subtipos.criar({ tipo_processo_id: tipo.id, nome: 'Sem filtro' });
+  const setorId = setorComDoisItens().setor_id;
+
+  const doSub = conn
+    .prepare(
+      `INSERT INTO checklist_modelo (tipo_processo_id, subtipo_processo_id, setor_id, item, obrigatorio, ativo, ordem)
+       VALUES (?, ?, ?, 'Item só do subtipo filtrado?', 1, 1, 500)`
+    )
+    .run(tipo.id, sub.id, setorId);
+  const doOutro = conn
+    .prepare(
+      `INSERT INTO checklist_modelo (tipo_processo_id, subtipo_processo_id, setor_id, item, obrigatorio, ativo, ordem)
+       VALUES (?, ?, ?, 'Item do outro subtipo?', 1, 1, 501)`
+    )
+    .run(tipo.id, outro.id, setorId);
+
+  try {
+    const http = await comoAdmin();
+    const html = await (await http.get(`/admin/checklist-modelo?tipo=${tipo.id}&subtipo=${sub.id}`)).text();
+
+    assert.match(html, /Item só do subtipo filtrado\?/, 'o item do subtipo escolhido aparece');
+    assert.match(html, /ECD transmitida\?|Possui débitos/, 'o que vale para o tipo inteiro também');
+
+    // A listagem de baixo é o checklist composto: sem o item do outro subtipo.
+    const listagem = html.slice(html.indexOf('id="tabela-modelo"'));
+    assert.ok(!/Item do outro subtipo\?/.test(listagem), 'o item de outro subtipo fica fora do checklist');
+
+    // No cartão de ordem ele continua (a ordem é do setor inteiro), porém apagado.
+    const cartao = html.slice(html.indexOf('id="ordem-itens"'), html.indexOf('id="tabela-modelo"'));
+    assert.match(cartao, /fora-do-subtipo/, 'o que não entra no subtipo aparece marcado');
+  } finally {
+    conn.prepare('DELETE FROM checklist_modelo WHERE id IN (?, ?)').run(
+      Number(doSub.lastInsertRowid),
+      Number(doOutro.lastInsertRowid)
+    );
+    subtipos.remover(sub.id);
+    subtipos.remover(outro.id);
+  }
+});
+
+test('adicionar setor ao tipo é criar o primeiro item dele', async () => {
+  const foraDoTipo = conn
+    .prepare(
+      `SELECT s.id, s.nome FROM setores s
+        WHERE s.ativo = 1
+          AND NOT EXISTS (SELECT 1 FROM checklist_modelo m
+                           WHERE m.setor_id = s.id AND (m.tipo_processo_id = ? OR m.tipo_processo_id IS NULL))
+        LIMIT 1`
+    )
+    .get(tipo.id);
+  assert.ok(foraDoTipo, 'o teste precisa de um setor fora do tipo');
+
+  const http = await comoAdmin();
+  const token = await http.token(`/admin/checklist-modelo?tipo=${tipo.id}`);
+  const resposta = await http.post('/admin/checklist-modelo', {
+    _csrf: token,
+    tipo_processo_id: tipo.id,
+    setor_id: foraDoTipo.id,
+    item: 'Primeiro item deste setor?',
+    obrigatorio: '1',
+    retorno: `tipo=${tipo.id}`,
+    ancora: 'ordem',
+  });
+
+  assert.equal(resposta.status, 302);
+  assert.equal(
+    resposta.headers.get('location'),
+    `/admin/checklist-modelo?tipo=${tipo.id}#ordem`,
+    'volta para o cartão de onde saiu, com o filtro de pé'
+  );
+  assert.ok(
+    ordemItens.doTipo(tipo.id).some((g) => g.setor_id === foraDoTipo.id),
+    'o setor passa a fazer parte do tipo'
+  );
+
+  conn.prepare("DELETE FROM checklist_modelo WHERE item = 'Primeiro item deste setor?'").run();
+});
+
+test('o item novo nasce no fim do setor', async () => {
+  const grupo = setorComDoisItens();
+  const http = await comoAdmin();
+  const token = await http.token(`/admin/checklist-modelo?tipo=${tipo.id}`);
+
+  await http.post('/admin/checklist-modelo', {
+    _csrf: token,
+    tipo_processo_id: tipo.id,
+    setor_id: grupo.setor_id,
+    item: 'Item que deve ficar por último?',
+    obrigatorio: '1',
+    retorno: `tipo=${tipo.id}`,
+    ancora: 'ordem-itens',
+  });
+
+  const depois = ordemItens.doTipo(tipo.id).find((g) => g.setor_id === grupo.setor_id).itens;
+  assert.equal(depois[depois.length - 1].item, 'Item que deve ficar por último?');
+
+  conn.prepare("DELETE FROM checklist_modelo WHERE item = 'Item que deve ficar por último?'").run();
+});
+
+test('remover o setor tira os itens daquele tipo e deixa os de todo processo', async () => {
+  const setor = conn.prepare("SELECT id, nome FROM setores WHERE nome = 'Contábil'").get();
+  const doTipo = conn
+    .prepare('SELECT COUNT(*) AS t FROM checklist_modelo WHERE tipo_processo_id = ? AND setor_id = ?')
+    .get(tipo.id, setor.id).t;
+  assert.ok(doTipo > 0, 'o setor precisa ter itens próprios do tipo');
+
+  const geral = conn
+    .prepare(
+      `INSERT INTO checklist_modelo (tipo_processo_id, setor_id, item, obrigatorio, ativo, ordem)
+       VALUES (NULL, ?, 'Item de todo processo, do Contábil?', 1, 1, 900)`
+    )
+    .run(setor.id);
+  const guardados = conn
+    .prepare('SELECT * FROM checklist_modelo WHERE tipo_processo_id = ? AND setor_id = ?')
+    .all(tipo.id, setor.id);
+  ordemItens.definir(tipo.id, setor.id, ordemItens.idsDoSetor(tipo.id, setor.id)); // garante ordem gravada
+
+  try {
+    const http = await comoAdmin();
+    const token = await http.token(`/admin/checklist-modelo?tipo=${tipo.id}`);
+    const resposta = await http.post('/admin/checklist-modelo/setor/remover', {
+      _csrf: token,
+      tipo_processo_id: tipo.id,
+      setor_id: setor.id,
+      retorno: `tipo=${tipo.id}`,
+      ancora: 'ordem',
+    });
+    assert.equal(resposta.status, 302);
+
+    assert.equal(
+      conn
+        .prepare('SELECT COUNT(*) AS t FROM checklist_modelo WHERE tipo_processo_id = ? AND setor_id = ?')
+        .get(tipo.id, setor.id).t,
+      0,
+      'os itens do tipo saem'
+    );
+    assert.equal(
+      conn
+        .prepare('SELECT COUNT(*) AS t FROM checklist_modelo WHERE tipo_processo_id IS NULL AND setor_id = ?')
+        .get(setor.id).t,
+      1,
+      'o item de todo processo fica — ele vale para todos os tipos'
+    );
+    assert.equal(
+      conn
+        .prepare('SELECT COUNT(*) AS t FROM ordem_setores_tipo WHERE tipo_processo_id = ? AND setor_id = ?')
+        .get(tipo.id, setor.id).t,
+      0,
+      'a posição guardada sai junto'
+    );
+
+    // Agora só resta o item de todo processo: a rota recusa e explica.
+    const denovo = await http.post('/admin/checklist-modelo/setor/remover', {
+      _csrf: token,
+      tipo_processo_id: tipo.id,
+      setor_id: setor.id,
+      retorno: `tipo=${tipo.id}`,
+    });
+    assert.equal(denovo.status, 302);
+    const tela = await (await http.get(`/admin/checklist-modelo?tipo=${tipo.id}`)).text();
+    assert.match(tela, /não tem itens próprios deste tipo/i);
+  } finally {
+    conn.prepare('DELETE FROM checklist_modelo WHERE id = ?').run(Number(geral.lastInsertRowid));
+    const repor = conn.prepare(
+      `INSERT INTO checklist_modelo (id, tipo_processo_id, subtipo_processo_id, setor_id, item, obrigatorio, ativo, ordem)
+       VALUES (@id, @tipo_processo_id, @subtipo_processo_id, @setor_id, @item, @obrigatorio, @ativo, @ordem)`
+    );
+    guardados.forEach((linha) => repor.run(linha));
+  }
+});
+
+test('usuário comum não remove setor do modelo', async () => {
+  const setor = conn.prepare("SELECT id FROM setores WHERE nome = 'Contábil'").get();
+  const antes = conn
+    .prepare('SELECT COUNT(*) AS t FROM checklist_modelo WHERE tipo_processo_id = ? AND setor_id = ?')
+    .get(tipo.id, setor.id).t;
+
+  const http = criarCliente(base);
+  await http.entrar('daiane', 'teste123');
+  const token = await http.token('/processos');
+  const resposta = await http.post('/admin/checklist-modelo/setor/remover', {
+    _csrf: token,
+    tipo_processo_id: tipo.id,
+    setor_id: setor.id,
+  });
+
+  assert.ok(resposta.status === 302 || resposta.status === 403);
+  assert.equal(
+    conn
+      .prepare('SELECT COUNT(*) AS t FROM checklist_modelo WHERE tipo_processo_id = ? AND setor_id = ?')
+      .get(tipo.id, setor.id).t,
+    antes,
+    'nada pode ter saído'
+  );
+});
+
+test('a tela traz os botões de excluir e os campos de adicionar', async () => {
+  const http = await comoAdmin();
+  const html = await (await http.get(`/admin/checklist-modelo?tipo=${tipo.id}`)).text();
+
+  assert.match(html, /class="ordem-excluir"/, 'o × de excluir');
+  assert.match(html, /action="\/admin\/checklist-modelo\/setor\/remover"/, 'a remoção do setor');
+  assert.match(html, /class="adicionar-item"/, 'o campo de novo item por setor');
+  assert.match(html, /Adicionar setor a este tipo/);
+  assert.match(html, /data-confirmar="[^"]*Remover o setor/, 'remover setor pergunta antes');
+  assert.match(html, /data-confirmar="[^"]*Excluir do modelo o item/, 'excluir item pergunta antes');
+  // O botão precisa ser submit: com type="button" ele não envia o formulário.
+  assert.match(html, /<button type="submit" class="ordem-excluir"/);
 });

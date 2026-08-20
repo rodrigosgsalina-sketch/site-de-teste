@@ -481,6 +481,7 @@ function paraBusca(texto) {
 function filtrosDoModelo(query) {
   const filtros = {
     tipo: query.tipo === undefined ? '' : String(query.tipo),
+    subtipo: query.subtipo ? String(query.subtipo) : '',
     setor: query.setor ? String(query.setor) : '',
     q: (query.q || '').trim(),
     obrigatorio: query.obrigatorio === '1' || query.obrigatorio === '0' ? query.obrigatorio : '',
@@ -492,10 +493,22 @@ function filtrosDoModelo(query) {
 
   if (filtros.tipo === 'todos') {
     condicoes.push('m.tipo_processo_id IS NULL');
+    filtros.subtipo = ''; // subtipo mora dentro de um tipo
   } else if (filtros.tipo) {
     // Um tipo específico inclui os itens aplicados a todos os processos.
     condicoes.push('(m.tipo_processo_id = ? OR m.tipo_processo_id IS NULL)');
     args.push(Number(filtros.tipo));
+  } else {
+    filtros.subtipo = '';
+  }
+
+  // Filtrar por subtipo mostra o checklist COMO ELE VAI FICAR num processo
+  // daquele subtipo: os itens do subtipo, mais os que valem para o tipo
+  // inteiro e para todo processo. Ver só as linhas do subtipo esconderia
+  // justamente o que ele herda — e é o conjunto que interessa conferir.
+  if (filtros.subtipo) {
+    condicoes.push('(m.subtipo_processo_id IS NULL OR m.subtipo_processo_id = ?)');
+    args.push(Number(filtros.subtipo));
   }
   if (filtros.setor) {
     condicoes.push('m.setor_id = ?');
@@ -513,10 +526,14 @@ function filtrosDoModelo(query) {
   return { filtros, where: condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '', args };
 }
 
-/** Mantém os filtros aplicados ao voltar para a listagem. */
+/**
+ * Mantém os filtros aplicados ao voltar para a listagem — e a âncora, para
+ * quem mexeu nos cartões de ordem voltar a enxergá-los, e não o topo da tela.
+ */
 function retornoDoModelo(req) {
   const filtros = String(req.body.retorno || '').replace(/[^a-zA-Z0-9=&%._-]/g, '');
-  return `/admin/checklist-modelo${filtros ? `?${filtros}` : ''}`;
+  const ancora = String(req.body.ancora || '').replace(/[^a-zA-Z0-9-]/g, '');
+  return `/admin/checklist-modelo${filtros ? `?${filtros}` : ''}${ancora ? `#${ancora}` : ''}`;
 }
 
 router.get('/checklist-modelo', (req, res) => {
@@ -562,6 +579,11 @@ router.get('/checklist-modelo', (req, res) => {
   }
 
   const total = conn.prepare('SELECT COUNT(*) AS t FROM checklist_modelo').get().t;
+  const subtipoSelecionado = filtros.subtipo ? Number(filtros.subtipo) : null;
+  const setoresAtivos = conn.prepare('SELECT id, nome, auxiliar FROM setores WHERE ativo = 1 ORDER BY ordem').all();
+
+  const listaSetores = tipoSelecionado ? ordemSetores.doTipo(tipoSelecionado) : [];
+  const idsNoTipo = new Set(listaSetores.map((s) => s.id));
 
   res.render('admin/checklist-modelo', {
     titulo: 'Checklist modelo',
@@ -569,8 +591,24 @@ router.get('/checklist-modelo', (req, res) => {
     total,
     filtros,
     tipoSelecionado,
-    ordemSetores: tipoSelecionado ? ordemSetores.doTipo(tipoSelecionado) : [],
+    subtipoSelecionado,
+    ordemSetores: listaSetores,
     ordemItens: tipoSelecionado ? ordemItens.doTipo(tipoSelecionado) : [],
+    // Só faz sentido "adicionar" um setor que ainda não participa do tipo.
+    setoresDeFora: tipoSelecionado ? setoresAtivos.filter((s) => !idsNoTipo.has(s.id)) : [],
+    // Quantos itens deste tipo cada setor tem — é o que sai ao removê-lo daqui.
+    // Os de "todo processo" ficam de fora: eles valem para todos os tipos e não
+    // podem ser removidos de um só.
+    itensDoTipoPorSetor: tipoSelecionado
+      ? conn
+          .prepare(
+            `SELECT setor_id, COUNT(*) AS total FROM checklist_modelo
+              WHERE tipo_processo_id = ? GROUP BY setor_id`
+          )
+          .all(tipoSelecionado)
+          .reduce((mapa, l) => Object.assign(mapa, { [l.setor_id]: l.total }), {})
+      : {},
+    subtiposDoTipo: tipoSelecionado ? subtiposDom.doTipo(tipoSelecionado) : [],
     tipos: conn.prepare('SELECT id, nome FROM tipos_processo ORDER BY nome').all(),
     tiposComOrdem: ordemSetores.tiposComOrdemPropria(),
     // Inclui os inativos: um item de modelo pode apontar para um subtipo que
@@ -581,7 +619,7 @@ router.get('/checklist-modelo', (req, res) => {
       mapa[chave].push({ id: sub.id, nome: sub.nome + (sub.ativo ? '' : ' (inativo)') });
       return mapa;
     }, {}),
-    setores: conn.prepare('SELECT id, nome, auxiliar FROM setores WHERE ativo = 1 ORDER BY ordem').all(),
+    setores: setoresAtivos,
   });
 });
 
@@ -744,10 +782,13 @@ router.post('/checklist-modelo', (req, res, next) => {
           Number(req.body.id)
         );
     } else {
+      // Nasce no fim do setor. O "fim" é medido pelo que aparece junto na tela
+      // do tipo — os itens dele e os de todo processo —, senão o item novo
+      // receberia um número já usado e cairia no meio da lista.
       const ordem = conn
         .prepare(
           `SELECT COALESCE(MAX(ordem), 0) + 1 AS o FROM checklist_modelo
-            WHERE setor_id = ? AND ((tipo_processo_id IS NULL AND ? IS NULL) OR tipo_processo_id = ?)`
+            WHERE setor_id = ? AND (tipo_processo_id IS NULL OR ? IS NULL OR tipo_processo_id = ?)`
         )
         .get(setorId, tipoId, tipoId).o;
       conn
@@ -769,22 +810,92 @@ router.post('/checklist-modelo', (req, res, next) => {
   } catch (err) {
     if (err instanceof ErroValidacao) {
       flash(req, 'erro', err.message);
-      return res.redirect('/admin/checklist-modelo');
+      // Volta para a mesma tela filtrada: quem estava montando o checklist de
+      // um subtipo não pode perder o lugar por causa de um campo em branco.
+      return res.redirect(retornoDoModelo(req));
     }
     next(err);
   }
 });
 
 router.post('/checklist-modelo/:id/excluir', (req, res) => {
-  db.get().prepare('DELETE FROM checklist_modelo WHERE id = ?').run(Number(req.params.id));
+  const conn = db.get();
+  const item = conn
+    .prepare(
+      `SELECT m.item, s.nome AS setor, t.nome AS tipo
+         FROM checklist_modelo m
+         JOIN setores s ON s.id = m.setor_id
+         LEFT JOIN tipos_processo t ON t.id = m.tipo_processo_id
+        WHERE m.id = ?`
+    )
+    .get(Number(req.params.id));
+
+  conn.prepare('DELETE FROM checklist_modelo WHERE id = ?').run(Number(req.params.id));
   historico.registrar({
     processoId: null,
     acao: 'Checklist Modelo Alterado',
     usuario: req.session.usuario,
-    observacao: `Item ${req.params.id} removido.`,
+    observacao: item
+      ? `Item removido de ${item.tipo || 'todos os processos'} · ${item.setor}: "${item.item}".`
+      : `Item ${req.params.id} removido.`,
   });
   flash(req, 'sucesso', 'Item removido do modelo (processos já abertos não são afetados).');
   res.redirect(retornoDoModelo(req));
+});
+
+/**
+ * Tira um setor inteiro de um tipo de processo.
+ *
+ * "Setor do tipo" não é um cadastro: o setor participa porque tem itens ali.
+ * Remover o setor é, portanto, remover os itens dele **daquele tipo** — os
+ * itens de "todo processo" ficam, porque valem para todos os tipos e não dá
+ * para tirá-los de um só. A tela diz isso antes de confirmar.
+ */
+router.post('/checklist-modelo/setor/remover', (req, res, next) => {
+  try {
+    const conn = db.get();
+    const tipoId = Number(req.body.tipo_processo_id);
+    const setorId = Number(req.body.setor_id);
+    if (!tipoId || !setorId) throw new ErroValidacao('Informe o tipo de processo e o setor.');
+
+    const alvo = conn
+      .prepare('SELECT COUNT(*) AS total FROM checklist_modelo WHERE tipo_processo_id = ? AND setor_id = ?')
+      .get(tipoId, setorId).total;
+    if (!alvo) {
+      throw new ErroValidacao(
+        'Este setor não tem itens próprios deste tipo. Os itens de "todo processo" precisam ser ' +
+          'removidos na listagem, porque valem para todos os tipos.'
+      );
+    }
+
+    conn.prepare('DELETE FROM checklist_modelo WHERE tipo_processo_id = ? AND setor_id = ?').run(tipoId, setorId);
+    // A posição guardada do setor sai junto: mantê-la deixaria um lugar
+    // reservado para quem não está mais na fila.
+    conn
+      .prepare('DELETE FROM ordem_setores_tipo WHERE tipo_processo_id = ? AND setor_id = ?')
+      .run(tipoId, setorId);
+
+    const tipo = conn.prepare('SELECT nome FROM tipos_processo WHERE id = ?').get(tipoId);
+    const setor = conn.prepare('SELECT nome FROM setores WHERE id = ?').get(setorId);
+    historico.registrar({
+      processoId: null,
+      acao: 'Checklist Modelo Alterado',
+      usuario: req.session.usuario,
+      observacao: `Setor ${setor ? setor.nome : setorId} removido de ${tipo ? tipo.nome : tipoId}: ${alvo} item(ns).`,
+    });
+    flash(
+      req,
+      'sucesso',
+      `Setor ${setor ? setor.nome : ''} removido deste tipo (${alvo} item(ns)). Processos já abertos não são afetados.`
+    );
+    res.redirect(retornoDoModelo(req));
+  } catch (err) {
+    if (err instanceof ErroValidacao) {
+      flash(req, 'erro', err.message);
+      return res.redirect(retornoDoModelo(req));
+    }
+    next(err);
+  }
 });
 
 /* ------------------------------------------------ Notificações e auditoria */
