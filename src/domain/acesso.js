@@ -13,13 +13,40 @@
  *  - **Uma pessoa pode atuar em vários setores.** No escritório é comum
  *    acumular, e quem acumula responde os itens de todos os seus setores.
  *  - Perfil "Administrador" e setor "Diretoria": visão e edição totais.
- *  - Setores auxiliares (Sócios, Cliente, TI, Qualidade) não têm equipe
- *    própria: quem responde por eles é o Administrativo (além dos gestores).
+ *  - Setores **auxiliares sem equipe própria** (nenhum usuário ativo lotado
+ *    neles) são respondidos pelo Administrativo, além dos gestores.
  */
 
 const db = require('../db');
 
-const SETORES_AUXILIARES_DO_ADMINISTRATIVO = ['Sócios', 'Cliente', 'TI', 'Qualidade'];
+/**
+ * Setores auxiliares que não têm equipe própria — quem responde por eles é o
+ * Administrativo.
+ *
+ * A lista sai do banco, e não de nomes escritos aqui dentro: um setor marcado
+ * como auxiliar e sem nenhum usuário ativo é, por definição, um setor sem
+ * equipe. Antes eram quatro nomes fixos ("Sócios", "Cliente", "TI",
+ * "Qualidade") e bastava o escritório renomear um deles — "TI" virou
+ * "TI/Administrativo" numa instalação real — para o Administrativo perder
+ * calado o direito de responder por ele. Auxiliar COM equipe (o Financeiro,
+ * que tem gente lotada) continua de fora, como sempre esteve.
+ */
+function setoresSemEquipe() {
+  return db
+    .get()
+    .prepare(
+      `SELECT s.nome FROM setores s
+        WHERE s.auxiliar = 1
+          AND NOT EXISTS (
+            SELECT 1 FROM usuarios u
+             WHERE u.status = 'Ativo'
+               AND (u.setor_id = s.id
+                    OR s.id IN (SELECT setor_id FROM usuarios_setores WHERE usuario_id = u.id)))
+        ORDER BY s.ordem, s.nome`
+    )
+    .all()
+    .map((s) => s.nome);
+}
 
 /**
  * Setores em que a pessoa atua — ela pode acumular mais de um.
@@ -62,7 +89,7 @@ function setoresDoUsuario(usuario) {
   // O Administrativo responde pelos setores sem equipe própria — e continua
   // respondendo mesmo quando o Administrativo é o segundo setor da pessoa.
   if (nomes.includes('Administrativo')) {
-    for (const auxiliar of SETORES_AUXILIARES_DO_ADMINISTRATIVO) {
+    for (const auxiliar of setoresSemEquipe()) {
       if (!nomes.includes(auxiliar)) nomes.push(auxiliar);
     }
   }
@@ -137,5 +164,5 @@ module.exports = {
   participaDoProcesso,
   podeGerenciarProcesso,
   exigirAdministrador,
-  SETORES_AUXILIARES_DO_ADMINISTRATIVO,
+  setoresSemEquipe,
 };

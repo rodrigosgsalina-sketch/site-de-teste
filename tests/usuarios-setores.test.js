@@ -145,7 +145,13 @@ test('o Administrativo continua respondendo pelos auxiliares mesmo como segundo 
   const setores = acesso.setoresDoUsuario(comDois);
 
   assert.ok(setores.includes('Administrativo'));
-  for (const auxiliar of acesso.SETORES_AUXILIARES_DO_ADMINISTRATIVO) {
+  const semEquipe = acesso.setoresSemEquipe();
+  assert.deepEqual(
+    semEquipe,
+    ['Sócios', 'Cliente', 'TI', 'Qualidade'],
+    'auxiliar sem ninguém lotado; o Financeiro tem equipe e fica de fora'
+  );
+  for (const auxiliar of semEquipe) {
     assert.ok(setores.includes(auxiliar), `o Administrativo responde pelo ${auxiliar}`);
   }
 });
@@ -232,4 +238,39 @@ test('o backup leva a ligação usuário–setor', () => {
   const dados = backup.gerar({ usuario: admin, incluirArquivos: false });
   assert.ok(Array.isArray(dados.tabelas.usuarios_setores), 'a tabela precisa estar no acervo');
   assert.ok(dados.tabelas.usuarios_setores.length > 0);
+});
+
+test('renomear um setor auxiliar não tira o Administrativo dele', () => {
+  // Numa instalação real o setor "TI" virou "TI/Administrativo". Com a lista
+  // de nomes fixa no código, o Administrativo perdia calado o direito de
+  // responder por ele — o setor continuava auxiliar e sem equipe.
+  const ti = conn.prepare("SELECT id, nome FROM setores WHERE nome = 'TI'").get();
+  conn.prepare('UPDATE setores SET nome = ? WHERE id = ?').run('TI/Administrativo', ti.id);
+  try {
+    const administrativo = usuariosDom.porLogin('anna.clara');
+    const setores = acesso.setoresDoUsuario(administrativo);
+    assert.ok(setores.includes('TI/Administrativo'), 'o setor renomeado continua sendo do Administrativo');
+    assert.ok(!setores.includes('TI'), 'e o nome antigo não sobra em lugar nenhum');
+    assert.equal(acesso.podeEditarItem(administrativo, { setor: 'TI/Administrativo' }), true);
+  } finally {
+    conn.prepare('UPDATE setores SET nome = ? WHERE id = ?').run(ti.nome, ti.id);
+  }
+});
+
+test('auxiliar que ganha equipe própria sai da conta do Administrativo', () => {
+  const qualidade = conn.prepare("SELECT id FROM setores WHERE nome = 'Qualidade'").get();
+  assert.ok(acesso.setoresSemEquipe().includes('Qualidade'));
+
+  const dono = usuariosDom.criar({
+    nome: 'Dono da Qualidade',
+    senha: 'teste1234',
+    setor_ids: [qualidade.id],
+  });
+  try {
+    assert.ok(!acesso.setoresSemEquipe().includes('Qualidade'), 'com gente lotada, o setor deixa de ser órfão');
+    const administrativo = usuariosDom.porLogin('anna.clara');
+    assert.ok(!acesso.setoresDoUsuario(administrativo).includes('Qualidade'));
+  } finally {
+    conn.prepare('DELETE FROM usuarios WHERE id = ?').run(dono.id);
+  }
 });

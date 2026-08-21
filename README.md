@@ -212,10 +212,15 @@ receber notificação), `ordem_setores_tipo` (ordem de atendimento por tipo), `d
 `notificacoes` (outbox de e-mail) e `sessoes`.
 
 **Setores auxiliares.** O `CHECKLIST_MODELO` referencia cinco “setores” que não estão na aba
-`SETORES`: Sócios, Financeiro, Cliente, TI e Qualidade. Eles foram criados como setores
-marcados como *auxiliares*: aparecem no checklist normalmente, e quem responde por eles é o
-**Administrativo** (além de administradores e Diretoria) — exceto Financeiro, que tem equipe
-própria na aba de usuários. A classificação é editável em Administração → Tipos e setores.
+`SETORES`: Sócios, Financeiro, Cliente, TI e Qualidade. Eles foram criados como setores marcados
+como *auxiliares*: aparecem no checklist normalmente, e quem responde por eles é o
+**Administrativo** (além de administradores e Diretoria).
+
+A regra é lida do banco, não de uma lista de nomes no código: **auxiliar sem nenhum usuário ativo
+lotado nele** é um setor sem equipe, e é por esse que o Administrativo responde. Auxiliar que tem
+gente própria — o Financeiro — fica de fora, como sempre. Assim, renomear um setor (“TI” virar
+“TI/Administrativo”, por exemplo) ou dar equipe a um deles muda a regra junto, sem ninguém precisar
+mexer no código. A classificação *auxiliar* é editável em Administração → Tipos e setores.
 
 ---
 
