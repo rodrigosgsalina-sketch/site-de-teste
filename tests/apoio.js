@@ -40,9 +40,14 @@ function carregarSeed(db, { senha = 'teste123' } = {}) {
       'INSERT INTO usuarios (nome, login, email, senha_hash, setor_id, perfil, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
     const hash = bcrypt.hashSync(senha, 4);
-    seed.USUARIOS.forEach((u) =>
-      usuario.run(u.nome, u.login, u.email, hash, idSetor.get(u.setor).id, u.perfil, u.status)
+    const ligarSetor = conn.prepare(
+      'INSERT INTO usuarios_setores (usuario_id, setor_id) VALUES (?, ?) ON CONFLICT DO NOTHING'
     );
+    seed.USUARIOS.forEach((u) => {
+      const setorId = idSetor.get(u.setor).id;
+      const info = usuario.run(u.nome, u.login, u.email, hash, setorId, u.perfil, u.status);
+      ligarSetor.run(Number(info.lastInsertRowid), setorId);
+    });
   });
   return conn;
 }

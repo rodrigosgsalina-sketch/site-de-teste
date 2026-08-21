@@ -66,6 +66,18 @@ CREATE TABLE IF NOT EXISTS usuarios (
   ultimo_login TEXT
 );
 
+-- --------------------------------------------------- USUARIOS_SETORES
+-- Uma pessoa pode atuar em MAIS DE UM setor — no escritório é comum acumular
+-- (quem é do Fiscal também responde pelo Paralegal, por exemplo). O
+-- `usuarios.setor_id` continua sendo o setor PRINCIPAL, o que aparece no
+-- crachá e nas listagens; esta tabela guarda o conjunto completo.
+CREATE TABLE IF NOT EXISTS usuarios_setores (
+  usuario_id INTEGER NOT NULL REFERENCES usuarios (id) ON DELETE CASCADE,
+  setor_id   INTEGER NOT NULL REFERENCES setores (id)  ON DELETE CASCADE,
+  PRIMARY KEY (usuario_id, setor_id)
+);
+CREATE INDEX IF NOT EXISTS idx_usuarios_setores_setor ON usuarios_setores (setor_id, usuario_id);
+
 -- ------------------------------------------------------ CHECKLIST_MODELO
 -- tipo_processo_id NULL == linha "Todos" da planilha (aplica-se a todo processo)
 CREATE TABLE IF NOT EXISTS checklist_modelo (

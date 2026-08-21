@@ -93,11 +93,17 @@ function upsertUsuarios(conn) {
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   );
   const hash = bcrypt.hashSync(config.senhaPadrao, config.bcryptRounds);
+  // O usuário pode atuar em vários setores; a carga inicial dá um a cada um e
+  // já registra a ligação, para o banco novo nascer coerente.
+  const ligar = conn.prepare(
+    'INSERT INTO usuarios_setores (usuario_id, setor_id) VALUES (?, ?) ON CONFLICT DO NOTHING'
+  );
   dados.USUARIOS.forEach((u) => {
     if (existe.get(u.login, u.email)) return;
     const setor = idSetor.get(u.setor);
     if (!setor) throw new Error(`Setor inexistente para o usuário ${u.nome}: ${u.setor}`);
-    inserir.run(u.nome, u.login, u.email, hash, setor.id, u.perfil, u.status);
+    const info = inserir.run(u.nome, u.login, u.email, hash, setor.id, u.perfil, u.status);
+    ligar.run(Number(info.lastInsertRowid), setor.id);
   });
 }
 

@@ -100,6 +100,18 @@ aba `USUÁRIOS` com o ID derivado do nome e a senha definida em `SENHA_PADRAO`
 | Andreia | `andreia` | Financeiro | Usuário |
 | Anna Clara | `anna.clara` | Administrativo | Usuário |
 
+**Uma pessoa pode atuar em mais de um setor.** No escritório é comum acumular — quem é do Fiscal
+também responder pelo Paralegal, por exemplo. Em **Administração → Usuários**, o campo *Setores* é
+uma lista de caixas: marque todas em que a pessoa atua. Quem acumula passa a **responder os itens
+de todos os seus setores**, vê todos eles na *Fila do setor* e é chamado pelo aviso de *vez do
+setor* de cada um. Na tabela de usuários a lista fica dobrada — o resumo mostra o setor principal e
+um `+N` — e abre ao clicar.
+
+O **setor principal** (o que aparece no crachá ao lado do nome e nas listagens) é o primeiro na
+ordem geral dos setores, escolhido sozinho para não virar mais um campo a preencher. Um usuário
+sem nenhum setor é recusado: formulário sem caixa marcada é engano, não intenção. E a mudança vale
+na hora — a pessoa não precisa sair e entrar de novo.
+
 O ID é normalizado ao digitar: maiúsculas, acentos e espaços não impedem o acesso — "Ana Paula",
 "ANA.PAULA" e `ana.paula` levam ao mesmo usuário. Quem já tem e-mail cadastrado também consegue
 entrar digitando o e-mail, mas o identificador oficial é o ID.
@@ -194,9 +206,10 @@ tests/                   regras, acesso, ordem do checklist, segurança, notific
 | `PARAMETROS` | tabela `parametros` · **Administração → Parâmetros** |
 
 Além das abas da planilha, a plataforma mantém as tabelas `clientes` (empresas atendidas),
-`avisos`, `avisos_destinos` e `avisos_lidos` (avisos em tempo real e mural), `push_inscricoes`
-(navegadores inscritos para receber notificação), `ordem_setores_tipo` (ordem de atendimento por
-tipo), `documentos`, `notificacoes` (outbox de e-mail) e `sessoes`.
+`usuarios_setores` (uma pessoa pode atuar em mais de um setor), `avisos`, `avisos_destinos` e
+`avisos_lidos` (avisos em tempo real e mural), `push_inscricoes` (navegadores inscritos para
+receber notificação), `ordem_setores_tipo` (ordem de atendimento por tipo), `documentos`,
+`notificacoes` (outbox de e-mail) e `sessoes`.
 
 **Setores auxiliares.** O `CHECKLIST_MODELO` referencia cinco “setores” que não estão na aba
 `SETORES`: Sócios, Financeiro, Cliente, TI e Qualidade. Eles foram criados como setores
@@ -360,7 +373,7 @@ o checklist só fazia a informação circular por fora da plataforma.
 A tela avisa isso no topo e some com o que ele não pode usar: nada de responder item, anexar
 documento ou alterar status. A recusa é feita também no servidor, não só escondendo botão.
 
-Quem participa continua fazendo o de sempre: responde os itens do próprio setor (o Administrativo
+Quem participa continua fazendo o de sempre: responde os itens dos seus setores (o Administrativo
 responde também pelos auxiliares — Sócios, Cliente, TI, Qualidade), anexa documentos e registra
 esperas no status. Perfil `Administrador` e setor `Diretoria` seguem com visão e edição totais;
 cancelar e reabrir são de gestor, excluir é de administrador. O **dashboard é de todos** — ele
@@ -370,7 +383,7 @@ administradores.
 | Ação | Quem faz |
 |---|---|
 | Abrir e ler qualquer processo | todos |
-| Responder item do checklist | o setor do item (ou gestor) |
+| Responder item do checklist | quem tem o setor do item entre os seus (ou gestor) |
 | Anexar documento, alterar status, concluir | quem participa do processo |
 | Editar cadastro do processo | quem abriu, quem conduz, ou gestor |
 | Ver o dashboard | todos |
@@ -1059,8 +1072,9 @@ Em **Administração → Parâmetros** há o cartão **Backup da plataforma**, c
 operação — e os dois são exclusivos do administrador.
 
 **Salvar backup** baixa um único arquivo `.json` com *tudo* o que está na plataforma naquele
-momento: processos, checklists, clientes, usuários, parâmetros, checklist modelo, ordem de
-atendimento, histórico/auditoria, avisos e notificações. Uma caixa opcional inclui também os
+momento: processos, checklists, clientes, usuários (com os setores de cada um), parâmetros,
+checklist modelo, ordem de atendimento, histórico/auditoria, avisos (com seus destinatários) e
+notificações. Uma caixa opcional inclui também os
 documentos anexados aos processos, e aí o arquivo passa a bastar sozinho. O nome sai no formato
 `backup-jsgrilo-2026-08-03-18-29.json`.
 

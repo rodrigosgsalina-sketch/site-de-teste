@@ -127,6 +127,9 @@ app.use((req, res, next) => {
   res.locals.jsonSeguro = jsonSeguro;
   const usuario = req.session ? req.session.usuario : null;
   res.locals.usuario = usuario;
+  // Os setores vêm do banco a cada tela: mudar os setores de alguém passa a
+  // valer na hora, sem a pessoa precisar sair e entrar de novo.
+  res.locals.setoresDoUsuario = usuario ? acesso.setoresProprios(usuario) : [];
   res.locals.ehGestor = usuario ? acesso.ehGestor(usuario) : false;
   res.locals.ehAdmin = usuario ? usuario.perfil === 'Administrador' : false;
   res.locals.caminhoAtual = req.path;

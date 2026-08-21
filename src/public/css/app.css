@@ -1011,6 +1011,24 @@ a.mono { font-weight: 500; white-space: nowrap; }
 }
 .subtipo-opcao input { margin: 0; }
 
+/* Setores por usuário: a mesma lista de caixas, e a versão dobrada que cabe
+   dentro da célula da tabela. */
+.setores-lista {
+  display: flex; flex-wrap: wrap; gap: .35rem .85rem;
+  padding: .45rem .6rem;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-sm);
+  background: var(--superficie-2);
+}
+.setor-opcao {
+  display: inline-flex; align-items: center; gap: .35rem;
+  cursor: pointer; font-size: .86rem; margin: 0; white-space: nowrap;
+}
+.setor-opcao input { margin: 0; }
+.setores-celula > summary { cursor: pointer; white-space: nowrap; }
+.setores-celula[open] > summary { margin-bottom: .35rem; }
+.setores-celula .setores-lista { min-width: 230px; flex-direction: column; flex-wrap: nowrap; gap: .25rem; }
+
 /* Setor que ainda não abriu: fica visível, mas discreto — dá para ver o que
    vem pela frente sem parecer que está disponível para responder. */
 .setor-bloco.setor-bloqueado > summary { color: var(--tinta-3); }

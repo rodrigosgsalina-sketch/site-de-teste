@@ -10,6 +10,8 @@
  *  - **Agir, só quem participa.** Quem não tem setor no checklist — nem abriu,
  *    nem conduz o processo — está ali de leitura: não responde item, não anexa
  *    documento, não mexe no status.
+ *  - **Uma pessoa pode atuar em vários setores.** No escritório é comum
+ *    acumular, e quem acumula responde os itens de todos os seus setores.
  *  - Perfil "Administrador" e setor "Diretoria": visão e edição totais.
  *  - Setores auxiliares (Sócios, Cliente, TI, Qualidade) não têm equipe
  *    própria: quem responde por eles é o Administrativo (além dos gestores).
@@ -19,9 +21,35 @@ const db = require('../db');
 
 const SETORES_AUXILIARES_DO_ADMINISTRATIVO = ['Sócios', 'Cliente', 'TI', 'Qualidade'];
 
+/**
+ * Setores em que a pessoa atua — ela pode acumular mais de um.
+ *
+ * A fonte é o banco, não a sessão: mudar os setores de alguém na tela de
+ * Usuários passa a valer na hora, sem esperar o próximo login. Quando não há
+ * id (objeto montado à mão, teste), cai no setor que vier no próprio objeto.
+ */
+function setoresProprios(usuario) {
+  if (!usuario) return [];
+  if (usuario.id) {
+    const nomes = db
+      .get()
+      .prepare(
+        `SELECT s.nome FROM setores s
+          WHERE s.id = (SELECT setor_id FROM usuarios WHERE id = @usuario)
+             OR s.id IN (SELECT setor_id FROM usuarios_setores WHERE usuario_id = @usuario)
+          ORDER BY s.ordem, s.nome`
+      )
+      .all({ usuario: usuario.id })
+      .map((s) => s.nome);
+    if (nomes.length) return nomes;
+  }
+  return usuario.setor ? [usuario.setor] : [];
+}
+
 function ehGestor(usuario) {
   if (!usuario) return false;
-  return usuario.perfil === 'Administrador' || usuario.setor === 'Diretoria';
+  if (usuario.perfil === 'Administrador') return true;
+  return setoresProprios(usuario).includes('Diretoria');
 }
 
 /** Nomes de setores que o usuário pode responder. */
@@ -30,8 +58,14 @@ function setoresDoUsuario(usuario) {
   if (ehGestor(usuario)) {
     return db.get().prepare('SELECT nome FROM setores ORDER BY ordem').all().map((s) => s.nome);
   }
-  const nomes = [usuario.setor];
-  if (usuario.setor === 'Administrativo') nomes.push(...SETORES_AUXILIARES_DO_ADMINISTRATIVO);
+  const nomes = setoresProprios(usuario);
+  // O Administrativo responde pelos setores sem equipe própria — e continua
+  // respondendo mesmo quando o Administrativo é o segundo setor da pessoa.
+  if (nomes.includes('Administrativo')) {
+    for (const auxiliar of SETORES_AUXILIARES_DO_ADMINISTRATIVO) {
+      if (!nomes.includes(auxiliar)) nomes.push(auxiliar);
+    }
+  }
   return nomes;
 }
 
@@ -96,6 +130,7 @@ function exigirAdministrador(req, res, next) {
 
 module.exports = {
   ehGestor,
+  setoresProprios,
   setoresDoUsuario,
   setorIdsDoUsuario,
   podeEditarItem,

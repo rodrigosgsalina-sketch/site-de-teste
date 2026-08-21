@@ -39,6 +39,7 @@ const TABELAS = [
   'subtipos_processo',
   'status_processo',
   'usuarios',
+  'usuarios_setores',
   'parametros',
   'checklist_modelo',
   'ordem_setores_tipo',
@@ -50,6 +51,7 @@ const TABELAS = [
   'documentos',
   'notificacoes',
   'avisos',
+  'avisos_destinos',
   'avisos_lidos',
 ];
 
@@ -59,6 +61,7 @@ const ROTULOS = {
   tipos_processo: 'Tipos de processo',
   status_processo: 'Status',
   usuarios: 'Usuários',
+  usuarios_setores: 'Setores por usuário',
   parametros: 'Parâmetros',
   checklist_modelo: 'Checklist modelo',
   ordem_setores_tipo: 'Ordem de atendimento',
@@ -69,6 +72,7 @@ const ROTULOS = {
   documentos: 'Documentos anexados',
   notificacoes: 'Notificações',
   avisos: 'Avisos internos',
+  avisos_destinos: 'Destinatários dos avisos',
   avisos_lidos: 'Avisos lidos',
 };
 

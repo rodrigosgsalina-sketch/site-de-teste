@@ -278,10 +278,26 @@ router.post('/backup/cancelar', (req, res) => {
 
 /* --------------------------------------------------------------- Usuários */
 router.get('/usuarios', (req, res) => {
+  const conn = db.get();
+  // Os setores de cada usuário numa consulta só, em vez de uma por linha.
+  const porUsuario = new Map();
+  for (const linha of conn
+    .prepare(
+      `SELECT u.id AS usuario_id, s.id AS setor_id
+         FROM usuarios u
+         JOIN setores s ON s.id = u.setor_id OR s.id IN (
+                SELECT setor_id FROM usuarios_setores WHERE usuario_id = u.id)
+        ORDER BY u.id, s.ordem`
+    )
+    .all()) {
+    if (!porUsuario.has(linha.usuario_id)) porUsuario.set(linha.usuario_id, []);
+    porUsuario.get(linha.usuario_id).push(linha.setor_id);
+  }
+
   res.render('admin/usuarios', {
     titulo: 'Usuários',
-    lista: usuarios.listar(),
-    setores: db.get().prepare('SELECT id, nome, auxiliar FROM setores ORDER BY ordem').all(),
+    lista: usuarios.listar().map((u) => ({ ...u, setoresIds: porUsuario.get(u.id) || [u.setor_id] })),
+    setores: conn.prepare('SELECT id, nome, auxiliar FROM setores ORDER BY ordem').all(),
     erro: null,
   });
 });
@@ -293,7 +309,7 @@ router.post('/usuarios', (req, res, next) => {
       processoId: null,
       acao: 'Usuário Criado',
       usuario: req.session.usuario,
-      observacao: `${criado.nome} (${criado.login}) — ${criado.setor}/${criado.perfil}`,
+      observacao: `${criado.nome} (${criado.login}) — ${criado.setores}/${criado.perfil}`,
     });
     flash(req, 'sucesso', `Usuário ${criado.nome} criado.`);
     res.redirect('/admin/usuarios');
@@ -313,7 +329,9 @@ router.post('/usuarios/:id', (req, res, next) => {
       processoId: null,
       acao: 'Usuário Atualizado',
       usuario: req.session.usuario,
-      observacao: `${atualizado.nome} (${atualizado.login}) — ${atualizado.setor}/${atualizado.perfil}/${atualizado.status}`,
+      observacao:
+        `${atualizado.nome} (${atualizado.login}) — ${atualizado.setores}/` +
+        `${atualizado.perfil}/${atualizado.status}`,
     });
     flash(req, 'sucesso', `Usuário ${atualizado.nome} atualizado.`);
     res.redirect('/admin/usuarios');

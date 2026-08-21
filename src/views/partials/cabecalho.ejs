@@ -43,7 +43,7 @@
     <div class="lateral-rodape">
       <a href="/perfil" class="usuario-chip">
         <strong><%= usuario.nome %></strong>
-        <small><%= usuario.setor %> · <%= usuario.perfil %></small>
+        <small><%= setoresDoUsuario.join(' · ') || usuario.setor %> · <%= usuario.perfil %></small>
       </a>
       <form method="post" action="/logout">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn-link">Sair</button></form>

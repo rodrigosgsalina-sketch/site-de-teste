@@ -23,13 +23,20 @@
         <label for="senha">Senha <span class="obrig">*</span></label>
         <input type="password" id="senha" name="senha" required minlength="6">
       </div>
-      <div class="campo">
-        <label for="setor_id">Setor <span class="obrig">*</span></label>
-        <select id="setor_id" name="setor_id" required>
-          <% setores.forEach(function (s) { %>
-            <option value="<%= s.id %>"><%= s.nome %><%= s.auxiliar ? ' (auxiliar)' : '' %></option>
+      <div class="campo largo">
+        <label>Setores <span class="obrig">*</span></label>
+        <div class="setores-lista">
+          <% setores.forEach(function (s, i) { %>
+            <label class="setor-opcao">
+              <input type="checkbox" name="setor_ids" value="<%= s.id %>" <%= i === 0 ? 'checked' : '' %>>
+              <span><%= s.nome %><%= s.auxiliar ? ' (auxiliar)' : '' %></span>
+            </label>
           <% }) %>
-        </select>
+        </div>
+        <div class="dica">
+          Marque todos em que a pessoa atua — quem acumula responde os itens de todos eles.
+          O <strong>principal</strong> (o que aparece no crachá) é o primeiro na ordem dos setores.
+        </div>
       </div>
       <div class="campo">
         <label for="perfil">Perfil</label>
@@ -47,12 +54,14 @@
   <h3><%= lista.length %> usuário(s)</h3>
   <p class="dica">
     O acesso é feito pelo <strong>ID de usuário</strong> — o e-mail é apenas contato.
-    Perfil <strong>Administrador</strong> e setor <strong>Diretoria</strong> têm visão completa;
-    os demais só enxergam os processos e itens do próprio setor.
+    Perfil <strong>Administrador</strong> e setor <strong>Diretoria</strong> têm visão completa.
+    Todo mundo enxerga todos os processos; o que os setores decidem é <strong>onde a pessoa
+    responde</strong> — e quem atua em mais de um responde nos dois. Clique no setor para marcar
+    os demais.
   </p>
   <div class="tabela-scroll">
     <table class="tabela">
-      <thead><tr><th>Nome</th><th>ID de usuário</th><th>E-mail</th><th>Setor</th><th>Perfil</th><th>Situação</th><th>Nova senha</th><th></th></tr></thead>
+      <thead><tr><th>Nome</th><th>ID de usuário</th><th>E-mail</th><th>Setores</th><th>Perfil</th><th>Situação</th><th>Nova senha</th><th></th></tr></thead>
       <tbody>
         <% lista.forEach(function (u) { %>
           <tr>
@@ -61,11 +70,27 @@
                        autocapitalize="none" spellcheck="false" required></td>
             <td><input type="email" form="usuario-<%= u.id %>" name="email" value="<%= u.email || '' %>"></td>
             <td>
-              <select form="usuario-<%= u.id %>" name="setor_id">
-                <% setores.forEach(function (s) { %>
-                  <option value="<%= s.id %>" <%= s.id === u.setor_id ? 'selected' : '' %>><%= s.nome %></option>
-                <% }) %>
-              </select>
+              <%# A lista fica dobrada para a tabela não virar um paredão de
+                  caixas: o resumo já diz em quantos setores a pessoa atua. %>
+              <details class="setores-celula">
+                <summary>
+                  <%= u.setor %><% if (u.setoresIds.length > 1) { %>
+                    <span class="etiqueta et-neutro">+<%= u.setoresIds.length - 1 %></span>
+                  <% } %>
+                </summary>
+                <div class="setores-lista">
+                  <% setores.forEach(function (s) { %>
+                    <label class="setor-opcao">
+                      <input type="checkbox" form="usuario-<%= u.id %>" name="setor_ids" value="<%= s.id %>"
+                             <%= u.setoresIds.indexOf(s.id) !== -1 ? 'checked' : '' %>>
+                      <span><%= s.nome %></span>
+                    </label>
+                  <% }) %>
+                </div>
+              </details>
+              <% if (u.setoresIds.length > 1) { %>
+                <div class="item-meta"><%= u.setores %></div>
+              <% } %>
             </td>
             <td>
               <select form="usuario-<%= u.id %>" name="perfil">

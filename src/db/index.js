@@ -229,6 +229,27 @@ function semearParametrosNovos(conn) {
   console.log(`[migração] ${novos.length} parâmetro(s) novo(s): ${novos.map((p) => p.chave).join(', ')}.`);
 }
 
+/**
+ * O usuário passou a poder atuar em vários setores. O que já existia vira a
+ * primeira linha da tabela de ligação: ninguém perde acesso, e quem precisar
+ * de um segundo setor ganha na tela de Usuários.
+ */
+function migrarSetoresDoUsuario(conn) {
+  if (!tabelaExiste(conn, 'usuarios') || !tabelaExiste(conn, 'usuarios_setores')) return;
+
+  const info = conn
+    .prepare(
+      `INSERT INTO usuarios_setores (usuario_id, setor_id)
+       SELECT u.id, u.setor_id FROM usuarios u
+        WHERE NOT EXISTS (SELECT 1 FROM usuarios_setores us WHERE us.usuario_id = u.id AND us.setor_id = u.setor_id)`
+    )
+    .run();
+  const criadas = Number(info.changes || 0);
+  if (!criadas) return;
+  // eslint-disable-next-line no-console
+  console.log(`[migração] setor de ${criadas} usuário(s) levado para a tabela de setores por usuário.`);
+}
+
 function migrate(conn) {
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   migrarLoginDeUsuarios(conn);
@@ -238,8 +259,9 @@ function migrate(conn) {
   // modelo, e o índice não existe sem a coluna.
   migrarSubtipoNoChecklistModelo(conn);
   conn.exec(schema);
-  // Depois do schema: esta depende da tabela de ligação que ele acabou de criar.
+  // Depois do schema: estas dependem das tabelas de ligação que ele acabou de criar.
   migrarSubtiposDoProcesso(conn);
+  migrarSetoresDoUsuario(conn);
   semearParametrosNovos(conn);
 }
 

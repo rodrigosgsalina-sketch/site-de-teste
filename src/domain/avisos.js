@@ -85,15 +85,23 @@ function cor(tipo) {
  */
 const TIPOS_DA_FAIXA = [TIPOS.CONCLUIDO, TIPOS.IMPEDIDO, TIPOS.CANCELADO];
 
-/** Usuários ativos de um setor, pelo nome. */
+/**
+ * Usuários ativos de um setor, pelo nome — inclusive quem o tem como segundo
+ * setor. Quem acumula precisa ser chamado pelos dois.
+ */
 function usuariosDoSetor(nomeSetor) {
   return db
     .get()
     .prepare(
-      `SELECT u.id FROM usuarios u JOIN setores s ON s.id = u.setor_id
-        WHERE u.status = 'Ativo' AND s.nome = ?`
+      `SELECT u.id FROM usuarios u
+        WHERE u.status = 'Ativo'
+          AND EXISTS (
+            SELECT 1 FROM setores s
+             WHERE s.nome = @setor
+               AND (s.id = u.setor_id
+                    OR s.id IN (SELECT setor_id FROM usuarios_setores WHERE usuario_id = u.id)))`
     )
-    .all(nomeSetor)
+    .all({ setor: nomeSetor })
     .map((linha) => linha.id);
 }
 

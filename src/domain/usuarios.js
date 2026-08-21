@@ -6,10 +6,81 @@ const db = require('../db');
 const { agoraISO } = require('../lib/datas');
 const { ErroValidacao } = require('./checklist');
 
+/**
+ * Setores de um usuário: os da tabela de ligação **mais** o principal.
+ *
+ * A união é de propósito. O principal (`usuarios.setor_id`) é obrigatório e
+ * está sempre valendo; somá-lo aqui faz a leitura funcionar mesmo para linhas
+ * criadas fora do domínio — a carga inicial, um restore antigo — sem depender
+ * de ninguém ter sincronizado as duas pontas.
+ */
+const SETORES_DO_USUARIO = `
+  SELECT s.id, s.nome, s.auxiliar
+    FROM setores s
+   WHERE s.id = (SELECT setor_id FROM usuarios WHERE id = @usuario)
+      OR s.id IN (SELECT setor_id FROM usuarios_setores WHERE usuario_id = @usuario)
+   ORDER BY s.ordem, s.nome`;
+
 const SELECT = `
   SELECT u.id, u.nome, u.login, u.email, u.perfil, u.status, u.setor_id, u.criado_em, u.ultimo_login,
-         s.nome AS setor, s.auxiliar AS setor_auxiliar
+         s.nome AS setor, s.auxiliar AS setor_auxiliar,
+         (SELECT GROUP_CONCAT(x.nome, ' · ') FROM (
+             SELECT s2.nome AS nome FROM setores s2
+              WHERE s2.id = u.setor_id
+                 OR s2.id IN (SELECT setor_id FROM usuarios_setores WHERE usuario_id = u.id)
+              ORDER BY s2.ordem, s2.nome) x) AS setores
     FROM usuarios u JOIN setores s ON s.id = u.setor_id`;
+
+/** Lista de setores (id/nome) em que o usuário atua. */
+function setoresDe(usuarioId) {
+  return db.get().prepare(SETORES_DO_USUARIO).all({ usuario: Number(usuarioId) });
+}
+
+/**
+ * Grava o conjunto de setores do usuário.
+ *
+ * O **principal** é o primeiro na ordem geral de setores: é ele que aparece no
+ * crachá e nas listagens, e escolher automaticamente evita mais um campo para
+ * preencher. Um usuário sem nenhum setor não existe — a validação recusa.
+ */
+function definirSetores(usuarioId, setorIds) {
+  const conn = db.get();
+  const pedidos = []
+    .concat(setorIds || [])
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0);
+
+  const validos = pedidos.length
+    ? conn
+        .prepare(
+          `SELECT id FROM setores WHERE id IN (${pedidos.map(() => '?').join(',')}) ORDER BY ordem, nome`
+        )
+        .all(...pedidos)
+        .map((s) => s.id)
+    : [];
+  if (!validos.length) throw new ErroValidacao('Escolha ao menos um setor para o usuário.');
+
+  db.tx(() => {
+    conn.prepare('UPDATE usuarios SET setor_id = ? WHERE id = ?').run(validos[0], usuarioId);
+    conn.prepare('DELETE FROM usuarios_setores WHERE usuario_id = ?').run(usuarioId);
+    const inserir = conn.prepare(
+      'INSERT INTO usuarios_setores (usuario_id, setor_id) VALUES (?, ?) ON CONFLICT DO NOTHING'
+    );
+    validos.forEach((id) => inserir.run(usuarioId, id));
+  });
+  return validos;
+}
+
+/** Setores vindos do formulário: aceita lista, valor único ou "1,2,3". */
+function setoresDoFormulario(dados) {
+  const bruto = dados.setor_ids !== undefined ? dados.setor_ids : dados.setor_id;
+  return []
+    .concat(bruto || [])
+    .join(',')
+    .split(',')
+    .map((n) => Number(String(n).trim()))
+    .filter((n) => Number.isFinite(n) && n > 0);
+}
 
 /**
  * Normaliza o ID de usuário: minúsculas, sem acento, sem espaço.
@@ -122,50 +193,65 @@ function validarEmail(email, idAtual = null) {
   return valor;
 }
 
-function criar({ nome, login, email, senha, setor_id, perfil, status }) {
+function criar(dados) {
+  const { nome, login, email, senha, perfil, status } = dados;
   if (!nome || !nome.trim()) throw new ErroValidacao('Informe o nome.');
   // Sem ID informado, deriva do nome: "Ana Paula" vira "ana.paula".
   const loginFinal = validarLogin(login && login.trim() ? login : loginDisponivel(nome));
   const emailFinal = validarEmail(email);
   validarSenha(senha);
 
-  const info = db
-    .get()
-    .prepare(
-      `INSERT INTO usuarios (nome, login, email, senha_hash, setor_id, perfil, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      nome.trim(),
-      loginFinal,
-      emailFinal,
-      bcrypt.hashSync(senha, config.bcryptRounds),
-      Number(setor_id),
-      perfil === 'Administrador' ? 'Administrador' : 'Usuário',
-      status === 'Inativo' ? 'Inativo' : 'Ativo'
-    );
-  return obter(Number(info.lastInsertRowid));
+  const setores = setoresDoFormulario(dados);
+  if (!setores.length) throw new ErroValidacao('Escolha ao menos um setor para o usuário.');
+
+  const id = db.tx(() => {
+    const info = db
+      .get()
+      .prepare(
+        `INSERT INTO usuarios (nome, login, email, senha_hash, setor_id, perfil, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        nome.trim(),
+        loginFinal,
+        emailFinal,
+        bcrypt.hashSync(senha, config.bcryptRounds),
+        setores[0],
+        perfil === 'Administrador' ? 'Administrador' : 'Usuário',
+        status === 'Inativo' ? 'Inativo' : 'Ativo'
+      );
+    const novoId = Number(info.lastInsertRowid);
+    definirSetores(novoId, setores);
+    return novoId;
+  });
+  return obter(id);
 }
 
-function atualizar(id, { nome, login, email, setor_id, perfil, status, senha }) {
+function atualizar(id, dados) {
+  const { nome, login, email, perfil, status, senha } = dados;
   const atual = obter(id);
   if (!atual) throw new ErroValidacao('Usuário não encontrado.');
   const loginFinal = validarLogin(login && String(login).trim() ? login : atual.login, id);
   const emailFinal = validarEmail(email, id);
 
+  // Formulário sem nenhum setor marcado é engano, não intenção de deixar o
+  // usuário sem setor nenhum: a validação recusa e nada é gravado.
+  const setores = setoresDoFormulario(dados);
+  if (!setores.length) throw new ErroValidacao('Escolha ao menos um setor para o usuário.');
+
   db.get()
     .prepare(
-      `UPDATE usuarios SET nome = ?, login = ?, email = ?, setor_id = ?, perfil = ?, status = ? WHERE id = ?`
+      `UPDATE usuarios SET nome = ?, login = ?, email = ?, perfil = ?, status = ? WHERE id = ?`
     )
     .run(
       String(nome).trim(),
       loginFinal,
       emailFinal,
-      Number(setor_id),
       perfil === 'Administrador' ? 'Administrador' : 'Usuário',
       status === 'Inativo' ? 'Inativo' : 'Ativo',
       id
     );
+  definirSetores(id, setores);
 
   if (senha && senha.trim()) {
     validarSenha(senha);
@@ -186,6 +272,8 @@ function alterarSenha(id, senhaAtual, novaSenha) {
 
 module.exports = {
   listar,
+  setoresDe,
+  definirSetores,
   validarSenha,
   obter,
   porLogin,
