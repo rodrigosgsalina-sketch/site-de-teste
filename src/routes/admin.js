@@ -226,6 +226,19 @@ router.post('/backup/confirmar', (req, res, next) => {
       restaurarArquivos: !(req.body.ignorar_arquivos === 'on' || req.body.ignorar_arquivos === '1'),
     });
 
+    // O que o arquivo não tinha e foi recomposto entra no relato: a auditoria
+    // precisa mostrar que a plataforma acrescentou algo por conta própria.
+    const recomposto = [];
+    if (resultado.completado.setoresDeUsuario) {
+      recomposto.push(`${resultado.completado.setoresDeUsuario} ligação(ões) usuário–setor`);
+    }
+    if (resultado.completado.parametros.length) {
+      recomposto.push(`${resultado.completado.parametros.length} parâmetro(s) novo(s)`);
+    }
+    if (resultado.completado.avisosSemDestino) {
+      recomposto.push(`${resultado.completado.avisosSemDestino} aviso(s) sem destinatário passaram a valer para todos`);
+    }
+
     historico.registrar({
       processoId: null,
       acao: 'Backup Restaurado',
@@ -233,6 +246,7 @@ router.post('/backup/confirmar', (req, res, next) => {
       observacao:
         `${pendente.resumo.nomeEnviado} (gerado em ${pendente.resumo.geradoEm}) — ` +
         `${resultado.total} registro(s), ${resultado.arquivosRepostos} anexo(s). ` +
+        (recomposto.length ? `Recomposto: ${recomposto.join('; ')}. ` : '') +
         `Cópia do estado anterior: ${path.basename(resultado.copiaDeSeguranca)}.`,
     });
 
@@ -258,6 +272,7 @@ router.post('/backup/confirmar', (req, res, next) => {
       'sucesso',
       `Backup restaurado: ${resultado.total} registro(s) repostos` +
         (resultado.arquivosRepostos ? ` e ${resultado.arquivosRepostos} anexo(s)` : '') +
+        (recomposto.length ? `. Recomposto o que o arquivo não trazia: ${recomposto.join('; ')}` : '') +
         `. O estado anterior foi guardado em ${path.basename(resultado.copiaDeSeguranca)}.`
     );
     res.redirect('/admin/parametros#backup');

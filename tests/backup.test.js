@@ -211,3 +211,93 @@ test.after(() => {
   db.close();
   fs.rmSync(tmp, { recursive: true, force: true });
 });
+
+/* -------------------------------- backup de uma versão anterior da plataforma */
+
+/**
+ * Monta um arquivo como o de uma versão que ainda não conhecia as tabelas
+ * novas: elas simplesmente não estão lá, e a assinatura foi calculada sobre as
+ * tabelas que existiam. É o caso do arquivo que o escritório tinha em mãos.
+ */
+function backupDeVersaoAnterior(semEstas = ['usuarios_setores', 'avisos_destinos']) {
+  const crypto = require('crypto');
+  const arquivo = backup.gerar({ usuario: admin, incluirArquivos: false });
+  for (const tabela of semEstas) delete arquivo.tabelas[tabela];
+
+  // A assinatura da versão antiga: as tabelas que ELA tinha, na ordem dela.
+  const resumo = crypto.createHash('sha256');
+  for (const nome of Object.keys(arquivo.tabelas)) {
+    resumo.update(nome);
+    resumo.update(JSON.stringify(arquivo.tabelas[nome] || []));
+  }
+  arquivo.checksum = resumo.digest('hex');
+  return arquivo;
+}
+
+test('backup de versão anterior não é recusado como incompleto', () => {
+  const arquivo = backupDeVersaoAnterior();
+  assert.ok(!arquivo.tabelas.usuarios_setores, 'o arquivo antigo não tem a tabela nova');
+
+  // Antes da correção, a assinatura era conferida contra a lista de tabelas da
+  // versão ATUAL: as duas tabelas novas entravam vazias na conta, o número dava
+  // diferente e o arquivo era recusado como "alterado ou incompleto".
+  const analise = backup.analisar(Buffer.from(JSON.stringify(arquivo)));
+  assert.ok(analise.dados, 'o arquivo precisa ser aceito');
+  assert.ok(
+    analise.avisos.some((a) => /versão anterior/i.test(a) && /Setores por usuário/.test(a)),
+    'a conferência avisa o que o arquivo não traz'
+  );
+});
+
+test('a assinatura continua pegando arquivo mexido à mão', () => {
+  const arquivo = backupDeVersaoAnterior();
+  arquivo.tabelas.clientes.push({ id: 999999, codigo: 'X', nome: 'Entrou de fora' });
+  assert.throws(
+    () => backup.analisar(Buffer.from(JSON.stringify(arquivo))),
+    /não confere com a sua assinatura/i
+  );
+});
+
+test('restaurar backup antigo recompõe o que ele não tinha como trazer', () => {
+  // Um aviso dirigido a setores e um parâmetro que a versão antiga não conhecia.
+  const avisosDom = require('../src/domain/avisos');
+  const processo = processosDom.criar({ cliente_id: cliente('770', 'EMPRESA ANTIGA').id, tipo_processo_id: tipo.id }, admin);
+  avisosDom.vezDoSetor(processosDom.obter(processo.id), 'Fiscal');
+  conn.prepare("DELETE FROM parametros WHERE chave = 'EXIGIR_ORDEM_SETORES'").run();
+
+  const arquivo = backupDeVersaoAnterior();
+  const comEscopoSetores = arquivo.tabelas.avisos.filter((a) => a.escopo === 'setores').length;
+  assert.ok(comEscopoSetores > 0, 'o teste precisa de um aviso dirigido a setores');
+
+  const resultado = backup.restaurar(arquivo, { usuario: admin, restaurarArquivos: false });
+
+  assert.equal(resultado.violacoes, 0, 'nada pode ficar com chave estrangeira solta');
+  assert.equal(
+    resultado.completado.setoresDeUsuario,
+    conn.prepare('SELECT COUNT(*) AS t FROM usuarios').get().t,
+    'cada usuário volta com o seu setor na tabela nova'
+  );
+  assert.ok(
+    resultado.completado.parametros.includes('EXIGIR_ORDEM_SETORES'),
+    'parâmetro criado depois do backup volta para a tela de Parâmetros'
+  );
+  assert.equal(
+    resultado.completado.avisosSemDestino,
+    comEscopoSetores,
+    'aviso sem destinatário passa a valer para todos, em vez de sumir da vista'
+  );
+
+  // E a plataforma funciona depois: o acesso enxerga os setores de novo.
+  const acesso = require('../src/domain/acesso');
+  const usuariosDom = require('../src/domain/usuarios');
+  const alguem = usuariosDom.porLogin('ana.paula');
+  assert.deepEqual(acesso.setoresDoUsuario(alguem), ['Fiscal']);
+  assert.equal(conn.prepare('SELECT COUNT(*) AS t FROM avisos WHERE escopo = ?').get('setores').t, 0);
+});
+
+test('backup gerado hoje continua conferindo consigo mesmo', () => {
+  const arquivo = backup.gerar({ usuario: admin, incluirArquivos: false });
+  const analise = backup.analisar(Buffer.from(JSON.stringify(arquivo)));
+  assert.ok(!analise.avisos.some((a) => /versão anterior/i.test(a)));
+  assert.ok(Object.keys(arquivo.tabelas).includes('usuarios_setores'));
+});

@@ -1091,6 +1091,27 @@ mesclar dois momentos criaria um terceiro que nunca existiu. Ela roda dentro de 
 ou a plataforma inteira volta ao retrato do arquivo, ou nada muda. Ao final, a numeração
 automática (`PR-2026-0001`) continua de onde o backup parou.
 
+### Backup de uma versão anterior
+
+Um arquivo gerado por uma versão mais antiga da plataforma **restaura normalmente**. Ele não
+conhece as tabelas que vieram depois, então a conferência avisa quais são — e, na hora de
+restaurar, elas são **recompostas a partir do próprio conteúdo restaurado**:
+
+| O que falta no arquivo antigo | Como é recomposto |
+|---|---|
+| Setores por usuário | o setor que estava na linha do usuário vira a primeira ligação |
+| Parâmetros criados depois | os que faltarem são inseridos com o valor padrão, para voltarem à tela de Parâmetros |
+| Destinatários dos avisos | aviso dirigido a setores que ficou sem destinatário passa a valer para todos — melhor o escritório ver um aviso velho do que o registro sumir da vista |
+
+O que foi recomposto aparece na mensagem de sucesso e no histórico, para não haver acréscimo
+silencioso.
+
+> A **assinatura de integridade** é calculada sobre as tabelas que estão no próprio arquivo, e não
+> sobre a lista da versão que o lê. É o que impede uma tabela nova na plataforma de invalidar todos
+> os backups anteriores — que foi exatamente o que aconteceu quando `usuarios_setores` e
+> `avisos_destinos` entraram na lista, e todo arquivo antigo passou a ser recusado como
+> "alterado ou incompleto".
+
 Detalhes que valem saber:
 
 - o arquivo traz um `checksum` — backup editado à mão, truncado ou de outra origem é recusado

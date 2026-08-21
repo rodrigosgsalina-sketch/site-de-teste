@@ -59,6 +59,7 @@ const TABELAS = [
 const ROTULOS = {
   setores: 'Setores',
   tipos_processo: 'Tipos de processo',
+  subtipos_processo: 'Subtipos de processo',
   status_processo: 'Status',
   usuarios: 'Usuários',
   usuarios_setores: 'Setores por usuário',
@@ -67,6 +68,7 @@ const ROTULOS = {
   ordem_setores_tipo: 'Ordem de atendimento',
   clientes: 'Clientes (empresas)',
   processos: 'Processos',
+  processos_subtipos: 'Subtipos por processo',
   checklist: 'Itens de checklist',
   historico: 'Histórico / auditoria',
   documentos: 'Documentos anexados',
@@ -90,10 +92,23 @@ function tabelaExiste(nome) {
   );
 }
 
-/** Impressão digital do conteúdo — detecta arquivo truncado ou editado à mão. */
+/**
+ * Impressão digital do conteúdo — detecta arquivo truncado ou editado à mão.
+ *
+ * Percorre as tabelas **que estão no próprio arquivo**, na ordem em que estão,
+ * e não a lista da versão atual. É o que mantém a assinatura estável ao longo
+ * do tempo: acrescentar uma tabela nova à plataforma não pode invalidar os
+ * backups já gerados.
+ *
+ * Foi exatamente o que aconteceu quando `usuarios_setores` e `avisos_destinos`
+ * entraram na lista: a conferência passou a somar duas tabelas vazias que o
+ * arquivo antigo não tinha, o número deu diferente e todo backup anterior foi
+ * recusado como "alterado ou incompleto". A assinatura precisa falar do
+ * conteúdo do arquivo, não da versão de quem o lê.
+ */
 function impressao(tabelas, arquivos) {
   const resumo = crypto.createHash('sha256');
-  for (const nome of TABELAS) {
+  for (const nome of Object.keys(tabelas || {})) {
     resumo.update(nome);
     resumo.update(JSON.stringify(tabelas[nome] || []));
   }
@@ -237,6 +252,18 @@ function analisar(buffer) {
     avisos.push(`Tabelas não reconhecidas serão ignoradas: ${desconhecidas.join(', ')}.`);
   }
 
+  // Backup de uma versão anterior não conhece as tabelas que vieram depois.
+  // Isso não impede a restauração — o que falta é recomposto a partir do
+  // próprio conteúdo —, mas quem confirma merece saber disso antes.
+  const ausentes = TABELAS.filter((t) => !Object.prototype.hasOwnProperty.call(tabelas, t));
+  if (ausentes.length) {
+    avisos.push(
+      `Backup de uma versão anterior: ele não traz ${ausentes
+        .map((t) => ROTULOS[t] || t)
+        .join(', ')}. Essas tabelas serão recompostas a partir do conteúdo restaurado.`
+    );
+  }
+
   const conteudo = TABELAS.map((nome) => ({
     tabela: nome,
     rotulo: ROTULOS[nome] || nome,
@@ -288,6 +315,66 @@ function restaurarArquivos(arquivos) {
 }
 
 /**
+ * Recompõe o que um backup antigo não tinha como trazer.
+ *
+ * Um arquivo gerado por uma versão anterior não conhece as tabelas que vieram
+ * depois. Restaurar sem mais nada deixaria buracos silenciosos — e o silêncio
+ * é o problema: a plataforma parece inteira e falta coisa. Aqui cada buraco é
+ * fechado a partir do próprio conteúdo restaurado, e o que foi feito volta no
+ * resumo para a tela contar.
+ */
+function completarDepoisDeRestaurar(conn) {
+  const feito = { setoresDeUsuario: 0, parametros: [], avisosSemDestino: 0 };
+
+  // 1. Setores por usuário: antes o setor era um só, na própria linha do
+  //    usuário. Ele vira a primeira (e por ora única) ligação.
+  if (tabelaExiste('usuarios') && tabelaExiste('usuarios_setores')) {
+    const info = conn
+      .prepare(
+        `INSERT INTO usuarios_setores (usuario_id, setor_id)
+         SELECT u.id, u.setor_id FROM usuarios u
+          WHERE u.setor_id IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM usuarios_setores us
+                             WHERE us.usuario_id = u.id AND us.setor_id = u.setor_id)`
+      )
+      .run();
+    feito.setoresDeUsuario = Number(info.changes || 0);
+  }
+
+  // 2. Parâmetros criados depois do backup: sem isso eles sumiriam da tela de
+  //    Parâmetros e a regra passaria a valer só pelo padrão do código.
+  if (tabelaExiste('parametros')) {
+    const seed = require('../db/seed-data');
+    const existe = conn.prepare('SELECT 1 FROM parametros WHERE chave = ?');
+    const inserir = conn.prepare(
+      `INSERT INTO parametros (chave, valor, tipo, categoria, descricao)
+       VALUES (@chave, @valor, @tipo, @categoria, @descricao)`
+    );
+    for (const p of seed.PARAMETROS) {
+      if (existe.get(p.chave)) continue;
+      inserir.run(p);
+      feito.parametros.push(p.chave);
+    }
+  }
+
+  // 3. Aviso dirigido a setores sem nenhum destinatário: o backup antigo não
+  //    guardava a lista, e um aviso sem destinatário não aparece para ninguém.
+  //    Melhor o escritório inteiro ver um aviso velho do que o registro sumir.
+  if (tabelaExiste('avisos') && tabelaExiste('avisos_destinos')) {
+    const info = conn
+      .prepare(
+        `UPDATE avisos SET escopo = 'todos'
+          WHERE escopo = 'setores'
+            AND NOT EXISTS (SELECT 1 FROM avisos_destinos d WHERE d.aviso_id = avisos.id)`
+      )
+      .run();
+    feito.avisosSemDestino = Number(info.changes || 0);
+  }
+
+  return feito;
+}
+
+/**
  * Apaga o conteúdo atual e repõe o do backup, tudo em uma transação: ou a
  * plataforma inteira volta ao retrato do backup, ou nada muda.
  */
@@ -302,6 +389,7 @@ function restaurar(dados, { usuario = null, restaurarArquivos: reporArquivos = t
   );
 
   const inseridos = {};
+  const completado = { setoresDeUsuario: 0, parametros: [], avisosSemDestino: 0 };
 
   // As chaves estrangeiras ficam suspensas durante a troca (as tabelas são
   // repostas em ordem, mas o "apagar tudo" passa por estados inconsistentes).
@@ -343,6 +431,10 @@ function restaurar(dados, { usuario = null, restaurarArquivos: reporArquivos = t
         }
       }
 
+      // O que o arquivo não tinha como trazer é recomposto aqui dentro, ainda
+      // na mesma transação: ou a plataforma volta inteira, ou nada muda.
+      Object.assign(completado, completarDepoisDeRestaurar(conn));
+
       // Numeração automática volta a seguir os dados repostos.
       if (tabelaExiste('sqlite_sequence')) {
         for (const nome of TABELAS) {
@@ -366,6 +458,7 @@ function restaurar(dados, { usuario = null, restaurarArquivos: reporArquivos = t
     total: Object.values(inseridos).reduce((a, b) => a + b, 0),
     arquivosRepostos,
     copiaDeSeguranca,
+    completado,
     violacoes: violacoes.length,
   };
 }
@@ -378,6 +471,7 @@ module.exports = {
   gerar,
   analisar,
   restaurar,
+  completarDepoisDeRestaurar,
   nomeDoArquivo,
   gravarNoDisco,
 };
