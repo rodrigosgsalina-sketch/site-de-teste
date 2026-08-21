@@ -55,7 +55,8 @@ npm run reset && npm run seed
 
 | O que fazer | Comando |
 |---|---|
-| Conferir o ambiente | `npm run doutor` |
+| Conferir o ambiente (Node, dependências, .env, banco) | `npm run doutor` |
+| Reinstalar do zero, quando a instalação falhou | `rm -rf node_modules && npm install` |
 | Subir a plataforma | `npm start` |
 | Subir recarregando a cada alteração | `npm run dev` |
 | Rodar com outra porta, só nesta vez | `PORT=8080 npm start` |
@@ -79,6 +80,18 @@ Nada no projeto depende do terminal, mas quatro coisas mudam na hora de digitar:
 
 Se algum comando interativo travar sem mostrar nada (raro), rode com `winpty` na frente:
 `winpty npm run certificado`.
+
+**Quando o `npm install` para no meio.** O npm tenta desfazer o que baixou e, no Windows, o
+antivírus ou uma janela aberta seguram os arquivos — daí o `npm warn cleanup ... EPERM: operation
+not permitted, rmdir`. A pasta `node_modules` fica pela metade e todo comando seguinte reclama de
+módulo faltando. O caminho é apagar e instalar de novo, com a plataforma parada:
+
+```bash
+# feche o "npm start" (Ctrl+C) e o editor antes
+rm -rf node_modules
+npm install
+npm run doutor      # confere se ficou tudo no lugar
+```
 
 Configurações de ambiente ficam em `.env` (veja `.env.example`).
 
@@ -137,7 +150,20 @@ ID em Administração → Usuários; deixando o campo vazio, o sistema deriva do
 Não há etapa de compilação nem módulo nativo, e a aplicação não busca nada na internet para
 funcionar. A única dependência que não vem do npm é a `xlsx` (SheetJS), instalada a partir do CDN
 oficial do próprio projeto — é lá que saem as versões atuais, sem as vulnerabilidades da última
-publicada no npm. Isso vale só no `npm install`; a aplicação em si continua offline.
+publicada no npm (0.18.5, de 2022). Isso vale só no `npm install`; a aplicação em si continua
+offline.
+
+> **Por que existe um `.npmrc` na pasta.** A partir do **npm 12** (o que vem com o Node 24),
+> instalar dependência apontada por URL passou a ser bloqueado por padrão, e o `npm install`
+> parava com `npm error code EALLOWREMOTE`. O arquivo `.npmrc` do projeto traz a autorização
+> explícita que o próprio npm recomenda para esse caso (`allow-remote=all`). Ela vale só dentro
+> desta pasta — o npm do resto da máquina não muda. **Não apague esse arquivo**: sem ele a
+> instalação para no leitor de planilhas, e as dependências seguintes nem chegam a ser baixadas
+> (é daí que vinham os `Cannot find module 'bcryptjs'` e `Cannot find module 'express'`).
+
+Se a leitura de planilhas faltar por qualquer motivo, a plataforma **continua subindo**: só a
+importação de empresas avisa que a biblioteca não está instalada. E `npm run doutor` confere as
+dependências antes de você descobrir pelo erro.
 
 ---
 

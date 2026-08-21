@@ -54,6 +54,41 @@ function versaoDoNode() {
   );
 }
 
+/**
+ * As dependências instaladas. É a conferência que faltava: quando o
+ * `npm install` para no meio — e a partir do npm 12 ele para sozinho se a
+ * autorização de instalar por URL não estiver no lugar —, o erro só aparecia
+ * lá na frente, como "Cannot find module 'express'".
+ */
+function dependencias() {
+  const pacote = require('../package.json');
+  const nomes = Object.keys(pacote.dependencies || {});
+  const faltando = nomes.filter((nome) => {
+    try {
+      require.resolve(nome);
+      return false;
+    } catch (_) {
+      return true;
+    }
+  });
+
+  if (!faltando.length) {
+    linha('ok', `Dependências instaladas — ${nomes.length} pacote(s)`);
+    return;
+  }
+
+  const porUrl = faltando.filter((nome) => /^(https?:|git\+)/.test(String(pacote.dependencies[nome])));
+  linha(
+    'erro',
+    `Faltam ${faltando.length} dependência(s): ${faltando.join(', ')}`,
+    porUrl.length
+      ? 'Rode "npm install". Se ele parar com EALLOWREMOTE, confira se o arquivo .npmrc da pasta ' +
+        'ainda tem a linha allow-remote=all — ela autoriza a instalação do leitor de planilhas, ' +
+        'que vem do CDN oficial do SheetJS.'
+      : 'Rode "npm install" na pasta da plataforma.'
+  );
+}
+
 function opensslDisponivel() {
   try {
     const versao = execFileSync('openssl', ['version'], { encoding: 'utf8' }).trim();
@@ -167,6 +202,7 @@ function main() {
   console.log(`${CINZA}  ${terminal()} · ${os.platform()} ${os.release()}${FIM}\n`);
 
   versaoDoNode();
+  dependencias();
   opensslDisponivel();
   arquivoEnv();
   pastaDeDados();

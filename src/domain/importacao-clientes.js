@@ -14,7 +14,6 @@
  * alguns sistemas exportam como HTML).
  */
 
-const XLSX = require('xlsx');
 const clientes = require('./clientes');
 const db = require('../db');
 const { agoraISO } = require('../lib/datas');
@@ -106,7 +105,29 @@ const DE_PARA = {
 /** Rótulos do cabeçalho do relatório, que não pertencem à empresa. */
 const RODAPE_RELATORIO = new Set(['empresa', 'c n p j', 'pagina', 'emissao', 'hora']);
 
+/**
+ * A biblioteca de planilhas é carregada só na hora de ler uma.
+ *
+ * Ela é a única dependência que vem de fora do npm (o CDN do SheetJS), e é
+ * também a única que pode faltar numa instalação que deu errado pela metade.
+ * Carregando aqui, a falta dela derruba a importação de empresas com uma
+ * mensagem clara — e não a plataforma inteira no `npm start`, por causa de um
+ * `require` no topo de um arquivo que quase ninguém usa.
+ */
+function planilhas() {
+  try {
+    // eslint-disable-next-line global-require
+    return require('xlsx');
+  } catch (_) {
+    throw new ErroValidacao(
+      'A biblioteca de leitura de planilhas (xlsx) não está instalada. ' +
+        'Rode "npm install" na pasta da plataforma e tente de novo.'
+    );
+  }
+}
+
 function lerPlanilha(buffer) {
+  const XLSX = planilhas();
   const wb = XLSX.read(buffer, { type: 'buffer', cellDates: false, cellFormula: false, raw: false });
   const nomeAba = wb.SheetNames[0];
   if (!nomeAba) throw new ErroValidacao('A planilha está vazia.');
