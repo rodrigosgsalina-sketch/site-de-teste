@@ -1036,3 +1036,74 @@ a.mono { font-weight: 500; white-space: nowrap; }
    vem pela frente sem parecer que está disponível para responder. */
 .setor-bloco.setor-bloqueado > summary { color: var(--tinta-3); }
 .setor-bloco.setor-bloqueado .item-checklist { opacity: .72; }
+
+/* ------------------------------------------------------- tabela de preço */
+/* O visualizador é uma coisa só para três formatos: a barra manda a escala,
+   o palco rola e o conteúdo cresce dentro dele. */
+.tp-cartao { padding-top: .8rem; }
+
+.tp-barra {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .8rem; flex-wrap: wrap;
+  padding-bottom: .8rem; margin-bottom: .8rem;
+  border-bottom: 1px solid var(--linha);
+}
+.tp-zoom { display: flex; align-items: center; gap: .5rem; }
+.tp-zoom input[type="range"] { width: clamp(110px, 18vw, 220px); accent-color: var(--azul-600); }
+.tp-botao {
+  min-width: 2.2rem; padding: .3rem .6rem; font-size: 1.05rem; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.tp-escala {
+  min-width: 3.6rem; text-align: right;
+  font-family: var(--mono); font-size: .82rem; color: var(--tinta-3);
+}
+.tp-acoes { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; }
+.tp-acoes .botao { padding: .38rem .75rem; font-size: .82rem; }
+
+/* O palco tem altura própria e rolagem nos dois sentidos: ampliado, o
+   conteúdo passa da tela, e é assim que se lê um pedaço de cada vez. */
+.tp-palco {
+  overflow: auto;
+  max-height: min(78vh, 900px);
+  background:
+    linear-gradient(45deg, var(--fundo-2, #eef3f8) 25%, transparent 25%, transparent 75%, var(--fundo-2, #eef3f8) 75%),
+    linear-gradient(45deg, var(--fundo-2, #eef3f8) 25%, transparent 25%, transparent 75%, var(--fundo-2, #eef3f8) 75%);
+  background-size: 18px 18px;
+  background-position: 0 0, 9px 9px;
+  background-color: #f7fafc;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-sm);
+  padding: .6rem;
+  overscroll-behavior: contain;
+}
+.tp-imagem { display: block; max-width: none; background: #fff; box-shadow: var(--sombra-1); }
+.tp-paginas { display: flex; flex-direction: column; gap: .7rem; align-items: flex-start; }
+.tp-pagina { display: block; background: #fff; box-shadow: var(--sombra-1); }
+
+/* A grade da planilha é escalada por transform; o quadro em volta é quem
+   reserva o espaço, senão a rolagem não enxerga o tamanho ampliado. */
+.tp-planilha { position: relative; }
+.tp-planilha > table { transform-origin: top left; background: #fff; width: max-content; max-width: none; }
+table.tp-grade { font-size: .82rem; box-shadow: var(--sombra-1); }
+table.tp-grade th, table.tp-grade td { white-space: nowrap; padding: .35rem .6rem; }
+table.tp-grade tr:first-child th { position: sticky; top: 0; z-index: 1; }
+
+.tp-rodape { margin: .7rem 0 0; }
+
+.tp-versoes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
+.tp-versoes li {
+  display: flex; align-items: center; justify-content: space-between; gap: .7rem; flex-wrap: wrap;
+  padding: .55rem .7rem; border: 1px solid var(--linha); border-radius: var(--raio-sm);
+}
+.tp-versoes strong { font-size: .9rem; margin-right: .4rem; }
+.tp-versoes small { display: block; color: var(--tinta-4); font-size: .76rem; margin-top: .15rem; }
+.tp-versao-acoes { display: flex; gap: .4rem; }
+.tp-versao-acoes form { margin: 0; }
+
+@media (max-width: 700px) {
+  .tp-barra { gap: .5rem; }
+  .tp-zoom, .tp-acoes { width: 100%; }
+  .tp-zoom input[type="range"] { flex: 1; width: auto; }
+  .tp-palco { max-height: 70vh; }
+}

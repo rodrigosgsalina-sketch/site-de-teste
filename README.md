@@ -26,7 +26,7 @@ Prompt de Comando: é ele que traz o `openssl` usado pelos certificados e entend
 variáveis na frente do comando.
 
 ```bash
-npm install          # instala dependências e copia o Chart.js para public/vendor
+npm install          # instala dependências e copia Chart.js e pdf.js para public/vendor
 cp .env.example .env # configurações locais (edite depois, se precisar)
 npm run doutor       # confere Node, OpenSSL, .env, banco e certificado
 npm run seed         # carga inicial: setores, tipos, status, checklist modelo, usuários, parâmetros
@@ -208,9 +208,10 @@ src/
     clientes.js          cadastro das empresas atendidas
     importacao-clientes.js  leitura do relatório de empresas do Domínio Sistemas
     backup.js            backup completo em JSON e restauração transacional
+    tabela-preco.js      tabela de preço do escritório (envio, versões e leitura)
   routes/                camada HTTP
   views/                 telas EJS
-  public/                CSS, JS (notificacoes.js), sw.js (Service Worker), Chart.js e fontes
+  public/                CSS, JS, sw.js (Service Worker), logotipo, Chart.js, pdf.js e fontes
 scripts/                 seed, reset, assets, certificado TLS, chaves VAPID, doutor
 tests/                   regras, acesso, ordem do checklist, segurança, notificações e backup (node:test)
 ```
@@ -793,6 +794,63 @@ As integrações ficam em `src/domain/integracoes.js`, cada uma com seu adaptado
   impedimentos (`GERAR_PDF_CHECKLIST`).
 - **Relatório final** com cadastro, checklist, documentos e histórico completo
   (`GERAR_RELATORIO_FINAL`).
+
+---
+
+## Tabela de preço
+
+Uma aba no menu de **todos os usuários**. Ela mostra a tabela de preço do escritório em tamanho de
+leitura, direto na tela — sem baixar arquivo, sem abrir outro programa.
+
+**Quem altera** é o administrador e o setor definido em `SETOR_TABELA_PRECO` (**Financeiro**, de
+fábrica). Para todos os demais a aba abre em consulta: eles veem a tabela inteira, com o zoom, e
+não recebem o formulário de envio. A recusa não é só a tela escondendo o botão — o `POST` de quem
+não pode responde **403**.
+
+> O setor sai de um parâmetro, e não de um nome escrito no código, pelo mesmo motivo que já
+> derrubou o acesso do Administrativo uma vez: basta o escritório renomear o setor na tela de
+> Tipos e setores para a regra deixar de valer calada. Renomeou? Ajuste `SETOR_TABELA_PRECO` em
+> **Administração → Parâmetros**.
+
+### Os três formatos
+
+O arquivo é enviado como `.png`, `.pdf` ou `.xlsx` — e mais nada; a lista é fechada de propósito,
+como a dos anexos de processo. Cada um é exibido do jeito que se lê melhor:
+
+| Formato | Como aparece |
+|---|---|
+| `.png` | a própria imagem, ampliada até a largura da tela |
+| `.pdf` | desenhado página a página na própria página (pdf.js), **redesenhado a cada zoom** — continua nítido em qualquer tamanho |
+| `.xlsx` | lido no servidor e devolvido como grade de células, que a tela monta em tabela |
+
+O PDF é o formato que fica melhor para leitura na tela, porque é vetor: aumentar não borra. A
+planilha vem como **dados**, nunca como HTML pronto — planilha é arquivo de terceiro, e o que ela
+traz é texto. Em compensação, cores e formatação não sobrevivem: o conteúdo, sim.
+
+### Tamanho e zoom
+
+**Ao abrir, o conteúdo é ajustado à largura da tela.** É essa regra que resolve o arquivo pequeno:
+uma imagem de 600 px numa área de 1200 abre no dobro do tamanho; uma de 4000 px encolhe para caber
+inteira. A ampliação automática vai até 3×, para um recorte minúsculo não virar um borrão de tela
+cheia.
+
+A partir daí quem manda é quem está lendo: **−**, **+**, a barra deslizante, *Ajustar à largura*,
+*Tamanho real*, `Ctrl` + roda do mouse e as teclas `+`, `−` e `0`. A escala escolhida fica
+guardada **por arquivo** naquele navegador — a que servia para uma imagem pequena não serve para o
+PDF que entrou no lugar dela.
+
+Ampliar não cria detalhe, então o envio de uma imagem com menos de 1000 px de largura devolve um
+recado a quem enviou, sugerindo trocar por uma versão maior ou pelo PDF original. É um aviso, não
+um bloqueio.
+
+### Versões
+
+Cada envio guarda o anterior — uma tabela de preço tem histórico, e saber o que valia no mês
+passado é parte do trabalho. Quem pode alterar vê a lista das versões com data, autor e descrição,
+pode **fazer uma antiga voltar a ser a exibida** e pode apagar o que não serve mais. Apagando a que
+está em exibição, a mais recente das que sobraram assume: a tela nunca fica sem tabela tendo uma.
+
+Envio, troca e remoção entram no histórico do escritório (**Administração → Auditoria**).
 
 ---
 

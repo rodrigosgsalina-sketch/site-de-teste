@@ -195,6 +195,7 @@ app.use('/', require('./routes/auth'));
 app.use('/', exigirLogin, require('./routes/painel'));
 app.use('/processos', exigirLogin, require('./routes/processos'));
 app.use('/clientes', exigirLogin, require('./routes/clientes'));
+app.use('/tabela-preco', exigirLogin, require('./routes/tabela-preco'));
 app.use('/checklist', exigirLogin, require('./routes/checklist'));
 app.use('/avisos', exigirLogin, require('./routes/avisos'));
 app.use('/eventos', exigirLogin, require('./routes/eventos'));

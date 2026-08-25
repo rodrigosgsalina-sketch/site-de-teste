@@ -224,6 +224,7 @@ const PARAMETROS = [
   { chave: 'EXIGIR_UPLOAD_DOCUMENTOS', valor: 'Sim', tipo: 'booleano', categoria: 'Documentos', descricao: 'Exige ao menos um documento anexado para concluir o processo.' },
   { chave: 'SALVAR_DOCUMENTOS_DRIVE', valor: 'Sim', tipo: 'booleano', categoria: 'Documentos', descricao: 'Enviar cópia dos documentos ao Google Drive (requer credenciais).' },
   { chave: 'PASTA_DRIVE_PROCESSOS', valor: 'ID_DA_PASTA', tipo: 'texto', categoria: 'Documentos', descricao: 'ID da pasta do Google Drive onde os documentos são arquivados.' },
+  { chave: 'SETOR_TABELA_PRECO', valor: 'Financeiro', tipo: 'texto', categoria: 'Documentos', descricao: 'Setor que pode alterar a tabela de preço (além dos administradores).' },
 
   // ------------------------------------------------------------ Auditoria
   { chave: 'REGISTRAR_HISTORICO', valor: 'Sim', tipo: 'booleano', categoria: 'Auditoria', descricao: 'Registrar ações no histórico do processo.' },

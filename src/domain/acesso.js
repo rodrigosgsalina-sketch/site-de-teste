@@ -147,6 +147,36 @@ function podeGerenciarProcesso(usuario, processo) {
   return processo.criado_por_id === usuario.id || processo.responsavel_interno_id === usuario.id;
 }
 
+/**
+ * Quem altera a tabela de preço: o administrador e o setor responsável por
+ * ela (Financeiro, de fábrica — `SETOR_TABELA_PRECO` muda isso sem mexer no
+ * código, para o dia em que o setor for renomeado ou passar a ser outro).
+ *
+ * Ver, todo mundo vê. Aqui a conta é sobre os setores **próprios** da pessoa:
+ * `setoresDoUsuario` devolveria a lista inteira para um gestor, e preço é
+ * assunto de quem responde por preço.
+ */
+function podeEditarTabelaPreco(usuario) {
+  if (!usuario) return false;
+  if (usuario.perfil === 'Administrador') return true;
+  // require aqui dentro: tabela-preco depende de parametros, que depende do
+  // banco, e o topo deste arquivo é carregado antes de tudo isso existir.
+  // eslint-disable-next-line global-require
+  const setor = require('./tabela-preco').setorResponsavel();
+  return setoresProprios(usuario).includes(setor);
+}
+
+function exigirTabelaPreco(req, res, next) {
+  if (req.session && podeEditarTabelaPreco(req.session.usuario)) return next();
+  // eslint-disable-next-line global-require
+  const setor = require('./tabela-preco').setorResponsavel();
+  return res.status(403).render('erro', {
+    titulo: 'Somente leitura',
+    mensagem: `A tabela de preço é alterada pelo setor ${setor} e pelos administradores. ` +
+      'Para todos os demais ela fica disponível para consulta.',
+  });
+}
+
 function exigirAdministrador(req, res, next) {
   if (req.session && req.session.usuario && req.session.usuario.perfil === 'Administrador') return next();
   return res.status(403).render('erro', {
@@ -163,6 +193,8 @@ module.exports = {
   podeEditarItem,
   participaDoProcesso,
   podeGerenciarProcesso,
+  podeEditarTabelaPreco,
+  exigirTabelaPreco,
   exigirAdministrador,
   setoresSemEquipe,
 };

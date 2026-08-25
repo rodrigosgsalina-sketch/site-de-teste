@@ -1,0 +1,195 @@
+<%- include('partials/cabecalho') %>
+
+<%
+  // Medidas que a tela precisa saber para ampliar o arquivo até ficar legível.
+  const dadosVisualizador = item
+    ? {
+        id: item.id,
+        formato: item.formato,
+        url: `/tabela-preco/arquivo/${item.id}`,
+        largura: item.largura || null,
+        altura: item.altura || null,
+      }
+    : null;
+%>
+
+<div class="cartao">
+  <div class="cartao-titulo">
+    <h2 style="margin:0">Tabela de preço</h2>
+    <% if (item) { %>
+      <span class="etiqueta et-neutro">
+        <%= item.nome_original %> · enviada em <%= fmtDataHora(item.criado_em) %>
+        <% if (item.usuario_nome) { %> por <%= item.usuario_nome %><% } %>
+      </span>
+    <% } %>
+  </div>
+  <p class="dica" style="margin:.2rem 0 0">
+    A tabela vale para todo o escritório e fica aqui, sempre na versão mais recente.
+    <% if (podeEditar) { %>
+      Você pode alterá-la: envie o arquivo novo abaixo e ele passa a ser o exibido.
+    <% } else { %>
+      Quem altera é o setor <%= setorResponsavel %> e os administradores; para os demais ela fica
+      disponível para consulta.
+    <% } %>
+  </p>
+  <% if (item && item.descricao) { %>
+    <p style="margin:.7rem 0 0"><%= item.descricao %></p>
+  <% } %>
+</div>
+
+<% if (!item) { %>
+  <div class="cartao">
+    <p class="vazio">
+      Nenhuma tabela de preço publicada ainda.
+      <% if (!podeEditar) { %>
+        Assim que o setor <%= setorResponsavel %> enviar o arquivo, ele aparece aqui.
+      <% } %>
+    </p>
+  </div>
+<% } else if (erroPlanilha) { %>
+  <div class="aviso aviso-erro"><%= erroPlanilha %></div>
+<% } else { %>
+
+  <!-- ------------------------------------------------------ visualizador -->
+  <div class="cartao tp-cartao">
+    <div class="tp-barra" data-tp-barra hidden>
+      <div class="tp-zoom">
+        <button type="button" class="botao botao-secundario tp-botao" data-tp-menos aria-label="Diminuir">−</button>
+        <input type="range" data-tp-faixa min="25" max="400" step="5" value="100"
+               aria-label="Escala da tabela de preço">
+        <button type="button" class="botao botao-secundario tp-botao" data-tp-mais aria-label="Aumentar">+</button>
+        <output class="tp-escala" data-tp-valor>100%</output>
+      </div>
+      <div class="tp-acoes">
+        <button type="button" class="botao botao-secundario" data-tp-ajustar>Ajustar à largura</button>
+        <button type="button" class="botao botao-secundario" data-tp-natural>Tamanho real</button>
+        <a class="botao botao-secundario" href="/tabela-preco/arquivo/<%= item.id %>?baixar=1">Baixar arquivo</a>
+      </div>
+    </div>
+
+    <div class="tp-palco" data-tp-palco>
+      <% if (item.formato === 'imagem') { %>
+        <img class="tp-imagem" data-tp-imagem src="/tabela-preco/arquivo/<%= item.id %>"
+             alt="Tabela de preço — <%= item.nome_original %>"
+             <% if (item.largura) { %>width="<%= item.largura %>" height="<%= item.altura %>"<% } %>>
+
+      <% } else if (item.formato === 'pdf') { %>
+        <div class="tp-paginas" data-tp-paginas>
+          <p class="vazio" data-tp-carregando>Abrindo o PDF…</p>
+        </div>
+
+      <% } else { %>
+        <div class="tp-planilha" data-tp-planilha>
+          <table class="tabela tp-grade">
+            <% planilha.linhas.forEach(function (linha, i) { %>
+              <tr>
+                <% linha.forEach(function (celula) { %>
+                  <% if (i === 0) { %><th><%= celula %></th><% } else { %><td><%= celula %></td><% } %>
+                <% }) %>
+              </tr>
+            <% }) %>
+          </table>
+        </div>
+      <% } %>
+    </div>
+
+    <p class="dica tp-rodape">
+      <% if (item.formato === 'planilha') { %>
+        Planilha <%= planilha.aba ? `“${planilha.aba}”` : '' %> — <%= planilha.linhas.length %> linha(s).
+        <% if (planilha.truncada) { %>
+          Exibindo as primeiras <%= planilha.linhas.length %> de <%= planilha.totalLinhas %>;
+          baixe o arquivo para ver o restante.
+        <% } %>
+        <% if (planilha.abas && planilha.abas.length > 1) { %>
+          A planilha tem <%= planilha.abas.length %> abas e a tela mostra a primeira.
+        <% } %>
+        Cores e formatação da planilha não vêm no arquivo lido — o conteúdo, sim.
+      <% } else if (item.formato === 'pdf') { %>
+        PDF desenhado nesta página: aumentar a escala redesenha o arquivo, então ele continua nítido
+        em qualquer tamanho.
+      <% } else if (item.largura && item.largura < larguraConfortavel) { %>
+        A imagem enviada tem <%= item.largura %> px de largura e é ampliada para caber na tela.
+        Ampliar não cria detalhe: se houver uma versão maior, vale trocar.
+      <% } %>
+    </p>
+  </div>
+<% } %>
+
+<!-- ------------------------------------------------------------ alteração -->
+<% if (podeEditar) { %>
+  <div class="grade grade-2">
+    <div class="cartao">
+      <h3><%= item ? 'Enviar uma nova versão' : 'Publicar a tabela de preço' %></h3>
+      <p class="dica" style="margin:0 0 .8rem">
+        Aceita <strong>.png</strong>, <strong>.pdf</strong> e <strong>.xlsx</strong>, até
+        <%= tamanhoMaximoMb %> MB. Para leitura na tela, o PDF é o que fica mais nítido em qualquer
+        zoom; sendo imagem, envie com pelo menos <%= larguraConfortavel %> px de largura.
+      </p>
+      <form method="post" action="/tabela-preco" enctype="multipart/form-data">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="campo">
+          <label for="arquivo">Arquivo <span class="obrig">*</span></label>
+          <input type="file" id="arquivo" name="arquivo" accept=".png,.pdf,.xlsx" required>
+        </div>
+        <div class="campo">
+          <label for="descricao">Descrição</label>
+          <input type="text" id="descricao" name="descricao" maxlength="200"
+                 placeholder="ex.: vigência a partir de janeiro">
+        </div>
+        <button class="botao">Publicar tabela</button>
+      </form>
+    </div>
+
+    <div class="cartao">
+      <h3>Versões anteriores</h3>
+      <% if (versoes.length <= 1) { %>
+        <p class="vazio">Nenhuma versão anterior — esta é a primeira.</p>
+      <% } else { %>
+        <p class="dica" style="margin:0 0 .8rem">
+          Cada envio guarda o anterior. Uma versão antiga pode voltar a ser a exibida.
+        </p>
+        <ul class="tp-versoes">
+          <% versoes.forEach(function (v) { %>
+            <li>
+              <div>
+                <strong><%= v.nome_original %></strong>
+                <% if (v.atual) { %><span class="etiqueta et-verde">em exibição</span><% } %>
+                <small>
+                  <%= fmtDataHora(v.criado_em) %><% if (v.usuario_nome) { %> · <%= v.usuario_nome %><% } %>
+                  · <%= Math.max(1, Math.round((v.tamanho || 0) / 1024)) %> KB
+                  <% if (v.descricao) { %> · <%= v.descricao %><% } %>
+                </small>
+              </div>
+              <div class="tp-versao-acoes">
+                <% if (!v.atual) { %>
+                  <form method="post" action="/tabela-preco/<%= v.id %>/atual">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button class="botao botao-secundario botao-pequeno">Exibir esta</button>
+                  </form>
+                <% } %>
+                <form method="post" action="/tabela-preco/<%= v.id %>/remover"
+                      data-confirmar="Apagar esta versão da tabela de preço? O arquivo some do servidor.">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                  <button class="botao botao-perigo botao-pequeno">Apagar</button>
+                </form>
+              </div>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+    </div>
+  </div>
+<% } %>
+
+<% if (item) { %>
+  <script nonce="<%= nonce %>">
+    window.TABELA_PRECO = <%- jsonSeguro(dadosVisualizador) %>;
+    window.TABELA_PRECO_PDFJS = {
+      biblioteca: '<%= estatico('/vendor/pdf.min.mjs') %>',
+      worker: '<%= estatico('/vendor/pdf.worker.min.mjs') %>'
+    };
+  </script>
+  <script type="module" src="<%= estatico('/js/tabela-preco.js') %>" nonce="<%= nonce %>"></script>
+<% } %>
+
+<%- include('partials/rodape') %>
