@@ -1,5 +1,7 @@
 'use strict';
 
+const path = require('path');
+const fs = require('fs');
 const PDFDocument = require('pdfkit');
 const { formatarData, formatarDataHora } = require('./datas');
 
@@ -8,8 +10,43 @@ const CINZA = '#5b6b7a';
 const VERDE = '#1d7a4c';
 const VERMELHO = '#b3261e';
 
+/**
+ * O logotipo do escritório no alto do documento.
+ *
+ * O arquivo é lido uma vez e guardado em memória: o mesmo desenho serve todos
+ * os PDFs. Faltando o arquivo, o cabeçalho segue só com o nome em texto — um
+ * relatório sem logotipo ainda é um relatório, mas um erro aqui derrubaria a
+ * geração inteira.
+ */
+const CAMINHO_LOGO = path.join(__dirname, '..', 'public', 'img', 'logo-jsgrilo.png');
+let logoEmMemoria;
+function logotipo() {
+  if (logoEmMemoria === undefined) {
+    try {
+      logoEmMemoria = fs.readFileSync(CAMINHO_LOGO);
+    } catch (_) {
+      logoEmMemoria = null;
+    }
+  }
+  return logoEmMemoria;
+}
+
+const LARGURA_LOGO = 140;
+
 function cabecalho(doc, titulo, processo) {
-  doc.fillColor(AZUL).fontSize(16).font('Helvetica-Bold').text('JS Grilo Contabilidade & Gestão');
+  const logo = logotipo();
+  if (logo) {
+    // Desenhando numa posição escolhida, o PDFKit não avança sozinho o cursor
+    // do texto: quem desce a linha depois da imagem é este cálculo. Sem ele o
+    // título viria por cima do logotipo.
+    const arte = doc.openImage(logo);
+    const topo = doc.y;
+    doc.image(logo, doc.page.margins.left, topo, { width: LARGURA_LOGO });
+    doc.y = topo + (LARGURA_LOGO * arte.height) / arte.width;
+    doc.moveDown(0.4);
+  } else {
+    doc.fillColor(AZUL).fontSize(16).font('Helvetica-Bold').text('JS Grilo Contabilidade & Gestão');
+  }
   doc.fontSize(11).font('Helvetica').fillColor(CINZA).text(titulo);
   doc.moveDown(0.6);
   doc.fillColor(AZUL).fontSize(13).font('Helvetica-Bold').text(`${processo.codigo} — ${processo.razao_social}`);

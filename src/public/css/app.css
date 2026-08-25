@@ -184,30 +184,22 @@ h3 { font-size: .98rem; letter-spacing: -.008em; }
   animation: entrarLateral var(--lento) var(--suave) both;
 }
 
+/* O logotipo do escritório abre a lateral. Ele é uma imagem larga (o nome
+   por extenso), então o tamanho é dado pela largura disponível, e não em
+   pixels fixos: a altura acompanha sozinha pela proporção do arquivo. */
 .marca {
-  display: flex; align-items: center; gap: .65rem;
+  display: flex; align-items: center;
   padding: 1.15rem 1.1rem 1rem;
   border-bottom: 1px solid rgba(255, 255, 255, .1);
+  text-decoration: none;
+  transition: opacity var(--rapido) ease;
 }
-.marca-sigla {
-  position: relative;
-  background: linear-gradient(140deg, #ffffff, #dfeaf4);
-  color: var(--azul-800);
-  font-family: var(--display);
-  font-weight: 800;
-  letter-spacing: -.03em;
-  border-radius: 10px;
-  width: 36px; height: 36px;
-  display: grid; place-items: center;
-  font-size: .95rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .22);
-}
-.marca-texto { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
-.marca-texto strong {
-  color: #fff; font-family: var(--display); font-size: 1rem; font-weight: 700; letter-spacing: -.01em;
-}
-.marca-texto small {
-  color: #93b3cd; font-size: .68rem; text-transform: uppercase; letter-spacing: .09em; font-weight: 500;
+.marca:hover { opacity: .85; }
+.marca-logo {
+  display: block;
+  width: 100%;
+  max-width: 190px;
+  height: auto;
 }
 
 .lateral nav { display: flex; flex-direction: column; padding: .7rem .6rem; overflow-y: auto; flex: 1; gap: 1px; }
@@ -279,6 +271,11 @@ h3 { font-size: .98rem; letter-spacing: -.008em; }
   border-radius: var(--raio-sm); padding: .35rem .6rem; font-size: 1.1rem; cursor: pointer;
   color: var(--tinta-2); box-shadow: var(--sombra-1);
 }
+
+/* Símbolo da marca na barra de cima: só nas telas em que a lateral se
+   esconde (a regra que o mostra está lá embaixo, junto das demais de tela). */
+.topo-marca { display: none; flex: 0 0 auto; }
+.topo-marca img { display: block; width: auto; height: 30px; }
 
 .rodape-app {
   margin-top: auto; padding-top: 2.2rem; color: var(--tinta-4); font-size: .78rem;
@@ -881,6 +878,11 @@ legend {
   animation: entrarLogin var(--lento) var(--elastico) both;
 }
 .login-caixa h1 { font-size: 1.32rem; letter-spacing: -.02em; }
+/* O logotipo é o título da tela de entrada. A largura acompanha a caixa —
+   que já é `min(410px, 100%)` —, com um teto para não crescer demais nas
+   telas grandes, e a altura vem da proporção do arquivo. */
+.login-marca { margin: 0 0 .55rem; }
+.login-marca img { display: block; width: min(100%, 270px); height: auto; }
 .login-caixa .sub { color: var(--tinta-4); font-size: .87rem; margin: 0 0 1.4rem; }
 .creditos-login {
   margin: 1.3rem 0 0; padding-top: 1rem; border-top: 1px solid var(--linha);
@@ -955,6 +957,7 @@ a.mono { font-weight: 500; white-space: nowrap; }
   }
   .lateral.aberta { left: 0; box-shadow: 0 0 60px rgba(0, 0, 0, .4); }
   .menu-toggle { display: block; }
+  .topo-marca { display: block; }
   .conteudo { padding: 0 1rem 2rem; }
   .topo { margin: 0 -1rem 1rem; padding: .8rem 1rem; }
 }

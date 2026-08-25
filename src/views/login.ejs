@@ -7,12 +7,19 @@
   <link rel="preload" as="font" type="font/woff2" href="<%= estatico('/fonts/manrope-latin-wght-normal.woff2') %>" crossorigin>
   <link rel="preload" as="font" type="font/woff2" href="<%= estatico('/fonts/ibm-plex-sans-latin-wght-normal.woff2') %>" crossorigin>
   <link rel="stylesheet" href="<%= estatico('/css/app.css') %>">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2312395b'/><text x='16' y='22' font-size='16' font-family='sans-serif' fill='white' text-anchor='middle'>JS</text></svg>">
+  <link rel="icon" href="<%= estatico('/img/icone-jsgrilo.png') %>" type="image/png">
+  <link rel="apple-touch-icon" href="<%= estatico('/img/icone-jsgrilo.png') %>">
 </head>
 <body>
 <div class="login-tela">
   <div class="login-caixa">
-    <h1>JS Grilo Contabilidade &amp; Gestão</h1>
+    <%# Na entrada o logotipo faz as vezes do título: ele já diz o nome do
+        escritório, e repetir isso em texto logo abaixo só ocuparia espaço. O
+        nome continua no `alt`, para quem usa leitor de tela. %>
+    <h1 class="login-marca">
+      <img src="<%= estatico('/img/logo-jsgrilo.png') %>" alt="JS Grilo Contabilidade &amp; Gestão"
+           width="900" height="297" decoding="async">
+    </h1>
     <p class="sub">Plataforma de acompanhamento de processos internos</p>
 
     <% if (erro) { %><div class="aviso aviso-erro"><%= erro %></div><% } %>

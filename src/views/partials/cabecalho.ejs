@@ -9,16 +9,23 @@
   <link rel="preload" as="font" type="font/woff2" href="<%= estatico('/fonts/manrope-latin-wght-normal.woff2') %>" crossorigin>
   <link rel="preload" as="font" type="font/woff2" href="<%= estatico('/fonts/ibm-plex-sans-latin-wght-normal.woff2') %>" crossorigin>
   <link rel="stylesheet" href="<%= estatico('/css/app.css') %>">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2312395b'/><text x='16' y='22' font-size='16' font-family='sans-serif' fill='white' text-anchor='middle'>JS</text></svg>">
+  <%# Ícone da aba e da tela de início do celular: o monograma da marca sobre o
+      ladrilho azul. Quando há aviso por ler, o public/js/notificacoes.js troca
+      este ícone pelo número e depois devolve este mesmo endereço. %>
+  <link rel="icon" href="<%= estatico('/img/icone-jsgrilo.png') %>" type="image/png">
+  <link rel="apple-touch-icon" href="<%= estatico('/img/icone-jsgrilo.png') %>">
 </head>
 <body data-avisos-debug="<%= typeof debugAvisos !== 'undefined' && debugAvisos ? '1' : '' %>">
 <% if (typeof usuario !== 'undefined' && usuario) { %>
 <div class="app">
   <aside class="lateral" id="lateral">
-    <div class="marca">
-      <span class="marca-sigla">JS</span>
-      <span class="marca-texto"><strong>JS Grilo</strong><small>Contabilidade &amp; Gestão</small></span>
-    </div>
+    <%# A marca é o logotipo do escritório na versão para fundo escuro. Ela
+        também é o caminho de volta para o começo, como se espera de um
+        logotipo no topo. %>
+    <a class="marca" href="/dashboard">
+      <img class="marca-logo" src="<%= estatico('/img/logo-jsgrilo-claro.png') %>"
+           alt="JS Grilo Contabilidade &amp; Gestão" width="900" height="297" decoding="async">
+    </a>
     <nav>
       <a href="/dashboard" class="<%= caminhoAtual.startsWith('/dashboard') ? 'ativo' : '' %>">Dashboard</a>
       <a href="/" class="<%= caminhoAtual === '/' ? 'ativo' : '' %>">Minha fila</a>
@@ -52,7 +59,16 @@
 
   <main class="conteudo">
     <header class="topo">
-      <button class="menu-toggle" onclick="document.getElementById('lateral').classList.toggle('aberta')" aria-label="Menu">☰</button>
+      <%# O clique é ligado no public/js/app.js: a política de segurança da
+          página (CSP) não deixa rodar JavaScript escrito dentro do atributo. %>
+      <button type="button" class="menu-toggle" data-menu-lateral aria-controls="lateral"
+              aria-expanded="false" aria-label="Menu">☰</button>
+      <%# No celular a lateral fica escondida atrás do botão de menu, e com ela
+          o logotipo. Este símbolo mantém a marca à vista nessas telas; nas
+          maiores ele não aparece, porque a lateral já o mostra por inteiro. %>
+      <a class="topo-marca" href="/dashboard" aria-label="JS Grilo Contabilidade e Gestão — início">
+        <img src="<%= estatico('/img/simbolo-jsgrilo.png') %>" alt="" width="240" height="282" decoding="async">
+      </a>
       <h1><%= titulo %></h1>
     </header>
 

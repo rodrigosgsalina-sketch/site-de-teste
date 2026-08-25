@@ -576,14 +576,43 @@
     alvos.forEach(function (el) { observador.observe(el); });
   }
 
-  /* Fecha o menu lateral ao tocar fora dele, no celular. */
+  /* Abre e fecha o menu lateral no celular.
+   *
+   * O botão já foi um `onclick` escrito no HTML, e por isso não funcionava: a
+   * política de segurança da página não deixa rodar JavaScript de dentro de
+   * atributo, e o menu simplesmente não abria em tela pequena. Ligado aqui,
+   * ele volta a abrir — e continua fechando ao tocar fora ou ao escolher um
+   * destino do menu. */
   function ligarMenuMovel() {
     var lateral = document.getElementById('lateral');
     if (!lateral) return;
+    var botao = document.querySelector('[data-menu-lateral]');
+
+    function mostrar(aberta) {
+      lateral.classList.toggle('aberta', aberta);
+      if (botao) botao.setAttribute('aria-expanded', aberta ? 'true' : 'false');
+    }
+
+    if (botao) {
+      botao.addEventListener('click', function (evento) {
+        evento.stopPropagation();
+        mostrar(!lateral.classList.contains('aberta'));
+      });
+    }
+
+    // Escolhido o destino, o menu sai da frente antes da próxima página.
+    lateral.addEventListener('click', function (evento) {
+      if (evento.target.closest('a')) mostrar(false);
+    });
+
     document.addEventListener('click', function (evento) {
       if (!lateral.classList.contains('aberta')) return;
       if (lateral.contains(evento.target) || evento.target.closest('.menu-toggle')) return;
-      lateral.classList.remove('aberta');
+      mostrar(false);
+    });
+
+    document.addEventListener('keydown', function (evento) {
+      if (evento.key === 'Escape' && lateral.classList.contains('aberta')) mostrar(false);
     });
   }
 

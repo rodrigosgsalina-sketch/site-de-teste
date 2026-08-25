@@ -787,6 +787,25 @@ correspondente em `PARAMETROS` (`EXIBIR_GRAFICOS`, `EXIBIR_TEMPO_MEDIO`, …).
 
 ## Identidade visual e interface
 
+**Logotipo.** O logotipo do escritório está em `src/public/img/`, servido pelo próprio projeto —
+como as fontes, nada vem de fora. São quatro recortes da mesma arte, cada um para um fundo e um
+tamanho:
+
+| Arquivo | Onde aparece |
+|---|---|
+| `logo-jsgrilo.png` | tela de entrada e cabeçalho dos PDFs — fundo claro |
+| `logo-jsgrilo-claro.png` | topo do menu lateral — o azul-marinho vira branco, o dourado fica |
+| `simbolo-jsgrilo.png` | barra de cima no celular, onde a lateral fica escondida |
+| `icone-jsgrilo.png` | ícone da aba do navegador, da tela de início do celular e das notificações |
+
+`logo-jsgrilo-original.webp` é a arte como veio do escritório; os demais saíram dela. Trocando o
+logotipo um dia, é esse o arquivo a substituir — e os outros quatro precisam ser refeitos junto.
+
+Em nenhum lugar o tamanho é fixo em pixels: a imagem ocupa a largura disponível até um limite
+(190 px na lateral, 270 px na entrada) e a altura acompanha pela proporção do arquivo. Assim o
+logotipo não estica, não corta e não empurra o resto da tela em nenhum tamanho de janela. O nome
+do escritório vai no `alt` de cada imagem, para quem usa leitor de tela.
+
 **Tipografia.** Três famílias empacotadas no projeto (`src/public/fonts/`, ~160 KB, nenhuma
 requisição a CDN):
 

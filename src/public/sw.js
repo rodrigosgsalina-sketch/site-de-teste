@@ -12,7 +12,7 @@
 
    Nada aqui depende da rota em que o usuário está. */
 
-const ICONE = '/static/img/notificacao.svg';
+const ICONE = '/static/img/icone-jsgrilo.png';
 
 self.addEventListener('install', () => {
   // Assume o comando sem esperar a aba antiga fechar.
