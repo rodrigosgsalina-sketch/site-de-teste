@@ -179,15 +179,14 @@ test('processo com todos os obrigatórios concluídos fica Liberado', () => {
 
 test('conclusão é bloqueada com item obrigatório pendente e liberada quando tudo é respondido', () => {
   parametros.definir('EXIGIR_UPLOAD_DOCUMENTOS', 'Não');
-  parametros.definir('EXIGIR_APROVACAO_GESTOR', 'Não');
 
   const processo = novoProcesso(tipoCertidoes.id);
   const itens = checklist.doProcesso(processo.id);
-  assert.ok(processos.validarConclusao(processo.id, admin).length > 0);
+  assert.ok(processos.validarConclusao(processo.id).length > 0);
   assert.throws(() => processos.concluir(processo.id, admin), /obrigatório/i);
 
   itens.forEach((item) => checklist.responder(item.id, { resposta: 'Sim' }, admin));
-  assert.deepStrictEqual(processos.validarConclusao(processo.id, admin), []);
+  assert.deepStrictEqual(processos.validarConclusao(processo.id), []);
 
   const concluido = processos.concluir(processo.id, admin);
   assert.strictEqual(concluido.status, 'Concluído');
@@ -197,7 +196,6 @@ test('conclusão é bloqueada com item obrigatório pendente e liberada quando t
 test('itens opcionais não bloqueiam a conclusão quando EXIGIR_CHECKLIST_100 está desligado', () => {
   parametros.definir('EXIGIR_CHECKLIST_100', 'Não');
   parametros.definir('EXIGIR_UPLOAD_DOCUMENTOS', 'Não');
-  parametros.definir('EXIGIR_APROVACAO_GESTOR', 'Não');
 
   const processo = novoProcesso(tipoCertidoes.id);
   checklist
@@ -205,22 +203,21 @@ test('itens opcionais não bloqueiam a conclusão quando EXIGIR_CHECKLIST_100 es
     .filter((i) => i.obrigatorio)
     .forEach((item) => checklist.responder(item.id, { resposta: 'Sim' }, admin));
 
-  assert.deepStrictEqual(processos.validarConclusao(processo.id, admin), []);
+  assert.deepStrictEqual(processos.validarConclusao(processo.id), []);
   parametros.definir('EXIGIR_CHECKLIST_100', 'Sim');
-  assert.ok(processos.validarConclusao(processo.id, admin).some((p) => /EXIGIR_CHECKLIST_100/.test(p)));
+  assert.ok(processos.validarConclusao(processo.id).some((p) => /EXIGIR_CHECKLIST_100/.test(p)));
   parametros.definir('EXIGIR_CHECKLIST_100', 'Não');
 });
 
 test('BLOQUEAR_CONCLUSAO_COM_PENDENCIA desligado permite concluir com pendência', () => {
   parametros.definir('EXIGIR_UPLOAD_DOCUMENTOS', 'Não');
-  parametros.definir('EXIGIR_APROVACAO_GESTOR', 'Não');
   parametros.definir('EXIGIR_REVISAO_FINAL', 'Não');
 
   const processo = novoProcesso(tipoBaixa.id);
-  assert.ok(processos.validarConclusao(processo.id, admin).length > 0);
+  assert.ok(processos.validarConclusao(processo.id).length > 0);
 
   parametros.definir('BLOQUEAR_CONCLUSAO_COM_PENDENCIA', 'Não');
-  assert.deepStrictEqual(processos.validarConclusao(processo.id, admin), []);
+  assert.deepStrictEqual(processos.validarConclusao(processo.id), []);
   parametros.definir('BLOQUEAR_CONCLUSAO_COM_PENDENCIA', 'Sim');
   parametros.definir('EXIGIR_REVISAO_FINAL', 'Sim');
 });
@@ -230,12 +227,12 @@ test('EXIGIR_UPLOAD_DOCUMENTOS bloqueia a conclusão sem anexos', () => {
   const processo = novoProcesso(tipoCertidoes.id);
   checklist.doProcesso(processo.id).forEach((item) => checklist.responder(item.id, { resposta: 'Sim' }, admin));
 
-  assert.ok(processos.validarConclusao(processo.id, admin).some((p) => /documento/i.test(p)));
+  assert.ok(processos.validarConclusao(processo.id).some((p) => /documento/i.test(p)));
 
   db.get()
     .prepare('INSERT INTO documentos (processo_id, nome_original, nome_arquivo) VALUES (?, ?, ?)')
     .run(processo.id, 'contrato.pdf', 'x.pdf');
-  assert.deepStrictEqual(processos.validarConclusao(processo.id, admin), []);
+  assert.deepStrictEqual(processos.validarConclusao(processo.id), []);
   parametros.definir('EXIGIR_UPLOAD_DOCUMENTOS', 'Não');
 });
 
@@ -243,7 +240,6 @@ test('EXIGIR_APROVACAO_JURIDICA = Não faz os itens do Jurídico não bloquearem
   const tipoRecuperacao = conn.prepare("SELECT id FROM tipos_processo WHERE nome = 'Recuperação de Empresa'").get();
   parametros.definir('EXIGIR_APROVACAO_JURIDICA', 'Não');
   parametros.definir('EXIGIR_UPLOAD_DOCUMENTOS', 'Não');
-  parametros.definir('EXIGIR_APROVACAO_GESTOR', 'Não');
 
   const processo = novoProcesso(tipoRecuperacao.id);
   checklist
@@ -251,10 +247,10 @@ test('EXIGIR_APROVACAO_JURIDICA = Não faz os itens do Jurídico não bloquearem
     .filter((i) => i.setor !== 'Jurídico')
     .forEach((item) => checklist.responder(item.id, { resposta: 'Sim' }, admin));
 
-  assert.deepStrictEqual(processos.validarConclusao(processo.id, admin), []);
+  assert.deepStrictEqual(processos.validarConclusao(processo.id), []);
 
   parametros.definir('EXIGIR_APROVACAO_JURIDICA', 'Sim');
-  assert.ok(processos.validarConclusao(processo.id, admin).some((p) => /Jurídico/.test(p)));
+  assert.ok(processos.validarConclusao(processo.id).some((p) => /Jurídico/.test(p)));
   parametros.definir('EXIGIR_APROVACAO_JURIDICA', 'Não');
 });
 
@@ -360,7 +356,6 @@ test('ID de usuário é único e o e-mail passa a ser opcional', () => {
 
 test('conclusão e impedimento publicam aviso visível para todos os usuários', () => {
   parametros.definir('EXIGIR_UPLOAD_DOCUMENTOS', 'Não');
-  parametros.definir('EXIGIR_APROVACAO_GESTOR', 'Não');
   parametros.definir('EXIGIR_REVISAO_FINAL', 'Não');
 
   const antes = avisos.listar(admin.id, 500).length;

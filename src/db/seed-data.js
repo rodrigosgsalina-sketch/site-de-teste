@@ -60,8 +60,12 @@ const STATUS_PROCESSO = [
   { nome: "Aguardando Prefeitura", ordem: 10, final: 0, espera: 1 },
   { nome: "Impedido", ordem: 11, final: 0, espera: 0 },
   { nome: "Liberado", ordem: 12, final: 0, espera: 0 },
-  { nome: "Concluído", ordem: 13, final: 1, espera: 0 },
-  { nome: "Cancelado", ordem: 14, final: 1, espera: 0 },
+  // Checklist vencido, falta lançar a empresa no Domínio Sistemas. É situação
+  // de espera: quem conduz o processo escolhe na mão, e ela fica de pé até o
+  // lançamento sair — sem depender de um item de checklist para isso.
+  { nome: "Liberado para atualização/cadastro no Sistema Domínio", ordem: 13, final: 0, espera: 1 },
+  { nome: "Concluído", ordem: 14, final: 1, espera: 0 },
+  { nome: "Cancelado", ordem: 15, final: 1, espera: 0 },
 ];
 
 // tipo === null  =>  linha "Todos" da planilha (aplicada a qualquer processo)
@@ -199,7 +203,6 @@ const PARAMETROS = [
   { chave: 'EXIGIR_REVISAO_FINAL', valor: 'Sim', tipo: 'booleano', categoria: 'Fluxo', descricao: 'Exige o item de Qualidade (revisão final) respondido antes de concluir.' },
   { chave: 'EXIGIR_DUPLA_CONFERENCIA', valor: 'Não', tipo: 'booleano', categoria: 'Fluxo', descricao: 'Exige que a resposta do item seja confirmada por um segundo colaborador.' },
   { chave: 'EXIGIR_ORDEM_SETORES', valor: 'Sim', tipo: 'booleano', categoria: 'Fluxo', descricao: 'Cada setor do checklist só abre depois que o anterior for respondido, na ordem definida para o tipo de processo.' },
-  { chave: 'EXIGIR_APROVACAO_GESTOR', valor: 'Sim', tipo: 'booleano', categoria: 'Fluxo', descricao: 'Somente Administrador/Diretoria pode concluir o processo.' },
   { chave: 'UTILIZAR_VIABILIDADE', valor: 'Sim', tipo: 'booleano', categoria: 'Fluxo', descricao: 'Fluxo considera a etapa de viabilidade (Junta Comercial).' },
   { chave: 'EXIGIR_DBE', valor: 'Sim', tipo: 'booleano', categoria: 'Fluxo', descricao: 'Fluxo considera a emissão do DBE.' },
   { chave: 'EXIGIR_CERTIDAO_NEGATIVA', valor: 'Sim', tipo: 'booleano', categoria: 'Fluxo', descricao: 'Fluxo considera certidões negativas.' },

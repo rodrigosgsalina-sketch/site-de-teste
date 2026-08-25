@@ -35,6 +35,7 @@ const TIPOS = {
   ABERTO: 'aberto',
   CANCELADO: 'cancelado',
   REABERTO: 'reaberto',
+  STATUS: 'status',
   VEZ_SETOR: 'vez_setor',
   PRAZO: 'prazo',
   DOCUMENTO: 'documento',
@@ -47,6 +48,7 @@ const ROTULOS = {
   aberto: 'Novo processo',
   cancelado: 'Cancelado',
   reaberto: 'Reaberto',
+  status: 'Status',
   vez_setor: 'Sua vez',
   prazo: 'Prazo',
   documento: 'Documento',
@@ -59,6 +61,7 @@ const CORES = {
   aberto: 'azul',
   cancelado: 'vermelho',
   reaberto: 'azul',
+  status: 'neutro',
   vez_setor: 'amarelo',
   prazo: 'amarelo',
   documento: 'neutro',
@@ -300,6 +303,32 @@ function processoCancelado(processo, motivo, usuario) {
     mensagem:
       `${processo.tipo_processo} de ${processo.razao_social} foi cancelado` +
       `${usuario ? ` por ${usuario.nome}` : ''}${motivo ? `: ${motivo}` : '.'}`,
+    processoId: processo.id,
+    usuario,
+  });
+}
+
+/**
+ * O processo mudou de situação — vale para todo o escritório.
+ *
+ * É o aviso mais frequente da plataforma: sai tanto quando alguém escolhe a
+ * situação na mão quanto quando o próprio checklist empurra o processo para a
+ * etapa seguinte. Por isso ele não sobe para a faixa do topo (ver
+ * `TIPOS_DA_FAIXA`): chega pelo cartão do canto e fica no mural, sem cobrir a
+ * tela de quem está trabalhando.
+ *
+ * Conclusão, cancelamento e impedimento não passam por aqui — cada um tem
+ * aviso próprio, com o motivo junto.
+ */
+function mudancaDeStatus(processo, anterior, usuario, observacao) {
+  return publicar({
+    tipo: TIPOS.STATUS,
+    titulo: `Processo ${processo.codigo}: ${processo.status}`,
+    mensagem:
+      `${processo.tipo_processo} de ${processo.razao_social} passou de "${anterior}" para ` +
+      `"${processo.status}"` +
+      `${usuario ? ` (${usuario.nome})` : ' (pelo andamento do checklist)'}` +
+      `${observacao ? `: ${observacao}` : '.'}`,
     processoId: processo.id,
     usuario,
   });
@@ -550,6 +579,7 @@ module.exports = {
   processoImpedido,
   processoCancelado,
   processoReaberto,
+  mudancaDeStatus,
   vezDoSetor,
   prazoDoProcesso,
   obter,

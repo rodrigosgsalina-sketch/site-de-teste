@@ -156,6 +156,52 @@ function migrarEscopoDeAvisos(conn) {
 }
 
 /**
+ * Tipos de aviso novos entram num CHECK que já existe — e CHECK não se altera
+ * no SQLite. A tabela é reconstruída com a lista de hoje, preservando os
+ * avisos publicados e os seus ids (é por eles que `avisos_lidos` e
+ * `avisos_destinos` apontam de volta).
+ *
+ * A conferência é feita na própria definição da tabela: se o tipo mais novo já
+ * está lá, não há nada a fazer.
+ */
+function migrarTiposDeAviso(conn) {
+  if (!tabelaExiste(conn, 'avisos')) return;
+  const criacao = conn.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'avisos'").get();
+  if (!criacao || /'status'/.test(criacao.sql)) return;
+
+  const antigos = conn.prepare('SELECT * FROM avisos').all();
+
+  conn.pragma('foreign_keys = OFF');
+  conn.transaction(() => {
+    conn.exec(`
+      CREATE TABLE avisos_novo (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        tipo        TEXT    NOT NULL CHECK (tipo IN ('concluido', 'impedido', 'aberto', 'cancelado',
+                                                     'reaberto', 'status', 'vez_setor', 'prazo',
+                                                     'documento')),
+        escopo      TEXT    NOT NULL DEFAULT 'todos' CHECK (escopo IN ('todos', 'setores')),
+        titulo      TEXT    NOT NULL,
+        mensagem    TEXT    NOT NULL,
+        processo_id INTEGER REFERENCES processos (id) ON DELETE CASCADE,
+        usuario_id  INTEGER REFERENCES usuarios (id),
+        usuario_nome TEXT,
+        criado_em   TEXT    NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    const inserir = conn.prepare(
+      `INSERT INTO avisos_novo (id, tipo, escopo, titulo, mensagem, processo_id, usuario_id, usuario_nome, criado_em)
+       VALUES (@id, @tipo, @escopo, @titulo, @mensagem, @processo_id, @usuario_id, @usuario_nome, @criado_em)`
+    );
+    antigos.forEach((a) => inserir.run(a));
+    conn.exec('DROP TABLE avisos; ALTER TABLE avisos_novo RENAME TO avisos;');
+  })();
+  conn.pragma('foreign_keys = ON');
+
+  // eslint-disable-next-line no-console
+  console.log(`[migração] avisos aceitam o tipo "status" (${antigos.length} preservado(s)).`);
+}
+
+/**
  * O subtipo do processo nasceu como uma coluna única e virou uma lista: um
  * processo pode ter vários. O que estava na coluna passa para a tabela de
  * ligação e a coluna sai — duas fontes para o mesmo dado é o começo de uma
@@ -250,11 +296,66 @@ function migrarSetoresDoUsuario(conn) {
   console.log(`[migração] setor de ${criadas} usuário(s) levado para a tabela de setores por usuário.`);
 }
 
+/**
+ * Situações de processo criadas em versões novas.
+ *
+ * Vale o mesmo raciocínio dos parâmetros: a carga inicial só roda uma vez, e
+ * sem isto uma situação nova nunca apareceria na lista de quem já usa a
+ * plataforma. A ordem de todas as situações do código é reaplicada junto, para
+ * que a nova caia no lugar certo da lista e não no fim dela — a tela de Tipos e
+ * setores mostra as situações, mas não deixa reordená-las, então nada que o
+ * escritório tenha ajustado à mão se perde aqui.
+ */
+function semearStatusNovos(conn) {
+  if (!tabelaExiste(conn, 'status_processo')) return;
+  // Banco vazio é banco recém-criado: quem preenche é o `npm run seed`.
+  if (!conn.prepare('SELECT 1 FROM status_processo LIMIT 1').get()) return;
+
+  const seed = require('./seed-data');
+  const existe = conn.prepare('SELECT 1 FROM status_processo WHERE nome = ?');
+  const novos = seed.STATUS_PROCESSO.filter((s) => !existe.get(s.nome));
+  if (!novos.length) return;
+
+  const inserir = conn.prepare(
+    'INSERT INTO status_processo (nome, ordem, final, espera) VALUES (@nome, @ordem, @final, @espera)'
+  );
+  const reordenar = conn.prepare('UPDATE status_processo SET ordem = @ordem WHERE nome = @nome');
+  conn.transaction(() => {
+    novos.forEach((s) => inserir.run(s));
+    seed.STATUS_PROCESSO.forEach((s) => reordenar.run({ nome: s.nome, ordem: s.ordem }));
+  })();
+  // eslint-disable-next-line no-console
+  console.log(`[migração] ${novos.length} situação(ões) de processo: ${novos.map((s) => s.nome).join(', ')}.`);
+}
+
+/**
+ * Parâmetros que deixaram de existir no código.
+ *
+ * Um parâmetro que ninguém mais lê é pior do que nenhum: ele continua na tela
+ * de Parâmetros, aceita ser mudado e não muda nada. Some junto com a regra que
+ * o usava.
+ */
+const PARAMETROS_APOSENTADOS = [
+  // A conclusão deixou de ser privilégio de Administrador/Diretoria: quem
+  // participa do processo conclui, desde que cumpra os requisitos.
+  'EXIGIR_APROVACAO_GESTOR',
+];
+
+function removerParametrosAposentados(conn) {
+  if (!tabelaExiste(conn, 'parametros')) return;
+  const apagar = conn.prepare('DELETE FROM parametros WHERE chave = ?');
+  const apagados = PARAMETROS_APOSENTADOS.filter((chave) => Number(apagar.run(chave).changes || 0) > 0);
+  if (!apagados.length) return;
+  // eslint-disable-next-line no-console
+  console.log(`[migração] parâmetro(s) sem uso removido(s): ${apagados.join(', ')}.`);
+}
+
 function migrate(conn) {
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   migrarLoginDeUsuarios(conn);
   migrarClienteEmProcessos(conn);
   migrarEscopoDeAvisos(conn);
+  migrarTiposDeAviso(conn);
   // Antes do schema: ele cria um índice sobre a coluna nova do checklist
   // modelo, e o índice não existe sem a coluna.
   migrarSubtipoNoChecklistModelo(conn);
@@ -263,6 +364,8 @@ function migrate(conn) {
   migrarSubtiposDoProcesso(conn);
   migrarSetoresDoUsuario(conn);
   semearParametrosNovos(conn);
+  semearStatusNovos(conn);
+  removerParametrosAposentados(conn);
 }
 
 function get() {

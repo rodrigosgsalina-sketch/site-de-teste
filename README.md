@@ -359,14 +359,26 @@ atendimento livre, basta `EXIGIR_ORDEM_SETORES = Não` em **Administração → 
 **Motor de status** — recalculado a cada resposta do checklist:
 
 1. algum item impedido → `Impedido`;
-2. todos os obrigatórios bloqueantes concluídos → `Liberado`;
-3. status de espera definido manualmente é preservado enquanto houver pendências;
-4. caso contrário, `Em Análise <setor>` do primeiro setor com item pendente (Fiscal, DP,
+2. `Liberado para atualização/cadastro no Sistema Domínio` definido na mão é preservado;
+3. todos os obrigatórios bloqueantes concluídos → `Liberado`;
+4. status de espera definido manualmente é preservado enquanto houver pendências;
+5. caso contrário, `Em Análise <setor>` do primeiro setor com item pendente (Fiscal, DP,
    Contábil, Jurídico) — ou `Aberto`.
 
 Os status de espera (`Aguardando Cliente`, `Aguardando Assinaturas`, `Aguardando Junta
 Comercial`, `Aguardando Receita Federal`, `Aguardando Prefeitura`) são definidos na tela do
 processo. Alterar manualmente para um status de análise exige `PERMITIR_PULAR_ETAPAS`.
+
+**`Liberado para atualização/cadastro no Sistema Domínio`** é o passo entre o checklist vencido e
+o encerramento: o processo está pronto, falta lançar a empresa no Domínio Sistemas. Ele é
+escolhido na mesma lista dos status de espera, na tela do processo, e é o único que o recálculo
+não desfaz — justamente porque é usado quando o checklist já está completo, e a regra 3 o jogaria
+de volta para `Liberado` na resposta seguinte. Um impedimento continua passando por cima dele:
+impedimento precisa aparecer.
+
+> Situações novas chegam sozinhas a bancos já em uso, como os parâmetros: na primeira abertura
+> depois da atualização, o que falta é criado e a ordem da lista é reaplicada, para a situação
+> nova cair no lugar certo e não no fim.
 
 **Impedimento** — marcar impedimento exige descrição (`EXIGIR_OBSERVACAO_IMPEDIMENTO`), muda o
 item para `Impedido`, joga o processo para `Impedido`, notifica Diretoria e Administrativo
@@ -379,8 +391,13 @@ processo” fica desabilitado e a tela lista exatamente o que falta:
 - qualquer item impedido;
 - todos os itens, inclusive opcionais, se `EXIGIR_CHECKLIST_100` estiver ligado;
 - revisão final do setor Qualidade (`EXIGIR_REVISAO_FINAL`);
-- ao menos um documento anexado (`EXIGIR_UPLOAD_DOCUMENTOS`);
-- conclusão por gestor (`EXIGIR_APROVACAO_GESTOR`).
+- ao menos um documento anexado (`EXIGIR_UPLOAD_DOCUMENTOS`).
+
+**Quem pode concluir** — qualquer usuário cujo setor participe do checklist do processo, seja
+qual for o perfil. O que decide é a lista acima, não o cargo de quem clica: cumpridos os
+requisitos, o botão libera para todos. Existiu um parâmetro `EXIGIR_APROVACAO_GESTOR` que
+reservava a conclusão a Administrador/Diretoria; ele foi removido, e a migração o apaga das
+instalações que já o tinham.
 
 Itens com `OBRIGATORIO = Não` aparecem marcados como **opcional** e não bloqueiam.
 `EXIGIR_APROVACAO_JURIDICA = Não` faz os itens do Jurídico não bloquearem a conclusão —
@@ -552,6 +569,7 @@ número do processo e um “×” para dispensar. Clicar no título abre o proce
 | Evento | Onde nasce | Quem recebe |
 |---|---|---|
 | Processo **aberto** | `POST /processos` | **todos os usuários** |
+| **Situação alterada** | escolha manual na tela ou recálculo do checklist | **todos os usuários** |
 | Item de checklist com **impedimento** | resposta do item | **todos os usuários** |
 | Processo **concluído** | botão Concluir | **todos os usuários** |
 | Processo **cancelado** | ação de gestor | **todos os usuários** |
@@ -569,7 +587,13 @@ inteiro. Ele continua indo só para o setor que precisa agir.
 
 A **faixa no topo das telas** mostra apenas o que muda o rumo do processo — concluído, impedido e
 cancelado. Os demais avisos chegam pelo cartão no canto e ficam no mural, para não empilhar faixa
-em cima de faixa.
+em cima de faixa. É o caso da mudança de situação, o aviso mais frequente da plataforma: ele sai
+tanto quando alguém escolhe a situação na tela quanto quando o próprio checklist empurra o
+processo para a etapa seguinte, e por isso chega pelo cartão, sem cobrir a tela de quem está
+trabalhando.
+
+Conclusão, cancelamento e impedimento **não** geram também o aviso de mudança de situação: cada um
+já tem o seu, com o motivo junto. Dois avisos para o mesmo movimento diriam menos, não mais.
 
 ### Quem já viu o aviso (administradores)
 

@@ -19,6 +19,7 @@ const STATUS = {
   ABERTO: 'Aberto',
   IMPEDIDO: 'Impedido',
   LIBERADO: 'Liberado',
+  LIBERADO_DOMINIO: 'Liberado para atualização/cadastro no Sistema Domínio',
   CONCLUIDO: 'Concluído',
   CANCELADO: 'Cancelado',
 };
@@ -284,8 +285,10 @@ function atualizar(id, dados, usuario) {
     observacao: notas.join(' ') || 'Dados cadastrais do processo alterados.',
   });
 
-  // O checklist mudou: o status do processo pode ter mudado com ele.
-  if (ajuste) recalcularStatus(id, usuario, { silencioso: true });
+  // O checklist mudou: o status do processo pode ter mudado com ele. O
+  // histórico já registrou a edição acima; o aviso sai porque a situação do
+  // processo é do escritório inteiro, não de quem editou.
+  if (ajuste) recalcularStatus(id, usuario, { silencioso: true, anunciar: true });
 
   return { ...obter(id), ajusteChecklist: ajuste, mudancaSubtipos: mudanca };
 }
@@ -326,7 +329,7 @@ function atualizarChecklist(processoId, usuario) {
   });
 
   // Itens que entram ou saem mudam quem está pendente — e, com isso, o status.
-  recalcularStatus(processoId, usuario, { silencioso: true });
+  recalcularStatus(processoId, usuario, { silencioso: true, anunciar: true });
 
   return { ...ajuste, resumo };
 }
@@ -345,6 +348,15 @@ function statusCalculado(processo, itens) {
   }
   if (itens.some((i) => i.status_item === checklist.STATUS_ITEM.IMPEDIDO)) {
     return STATUS.IMPEDIDO;
+  }
+
+  // "Liberado para atualização/cadastro no Sistema Domínio" é o passo seguinte
+  // ao "Liberado", e por isso é escolhido justamente quando o checklist já
+  // venceu. Se ele caísse na regra abaixo, o próprio checklist completo o
+  // apagaria de volta para "Liberado" no recálculo seguinte — só o impedimento,
+  // que precisa aparecer, passa por cima dele.
+  if (processo.status_manual && processo.status === STATUS.LIBERADO_DOMINIO) {
+    return processo.status;
   }
 
   const bloqueantes = itens.filter((i) => i.obrigatorio && parametros.aprovacaoObrigatoria(i.setor));
@@ -370,8 +382,14 @@ function statusCalculado(processo, itens) {
 /**
  * Recalcula e persiste o status do processo. Registra o histórico quando o
  * status muda e devolve { anterior, atual, mudou }.
+ *
+ * `silencioso` cala o histórico, para quem já está registrando o movimento com
+ * outro nome ("Processo Criado", "Processo Reaberto"). `anunciar` é separado
+ * porque nem sempre andam juntos: editar o cadastro ou trazer o checklist para
+ * o modelo tem histórico próprio, mas se a situação do processo mudar no meio
+ * disso, o escritório precisa ser avisado do mesmo jeito.
  */
-function recalcularStatus(processoId, usuario, { silencioso = false } = {}) {
+function recalcularStatus(processoId, usuario, { silencioso = false, anunciar = !silencioso } = {}) {
   const processo = obter(processoId);
   if (!processo) return null;
   const itens = checklist.doProcesso(processoId);
@@ -397,6 +415,11 @@ function recalcularStatus(processoId, usuario, { silencioso = false } = {}) {
       observacao: `${processo.status} → ${novo}`,
     });
   }
+  // O impedimento é anunciado pelo checklist, que sabe o motivo e o item —
+  // um segundo aviso aqui só repetiria a notícia sem a parte que importa.
+  if (anunciar && novo !== STATUS.IMPEDIDO) {
+    avisos.mudancaDeStatus(obter(processoId), processo.status, usuario);
+  }
   return { anterior: processo.status, atual: novo, mudou: true };
 }
 
@@ -421,7 +444,9 @@ function definirStatusManual(processoId, nomeStatus, usuario, observacao) {
     usuario,
     observacao: `${processo.status} → ${alvo.nome}${observacao ? ` (${observacao})` : ''}`,
   });
-  return obter(processoId);
+  const atualizado = obter(processoId);
+  avisos.mudancaDeStatus(atualizado, processo.status, usuario, observacao);
+  return atualizado;
 }
 
 /* ------------------------------------------------------------------ *
@@ -432,7 +457,7 @@ function definirStatusManual(processoId, nomeStatus, usuario, observacao) {
  * Avalia as regras de bloqueio de conclusão e devolve a lista de
  * impedimentos (vazia = pode concluir).
  */
-function validarConclusao(processoId, usuario) {
+function validarConclusao(processoId) {
   const processo = obter(processoId);
   const problemas = [];
   if (!processo) return ['Processo não encontrado.'];
@@ -488,20 +513,20 @@ function validarConclusao(processoId, usuario) {
     if (!docs.total) problemas.push('É obrigatório anexar ao menos um documento ao processo.');
   }
 
-  if (parametros.bool('EXIGIR_APROVACAO_GESTOR', false) && usuario) {
-    const gestor = usuario.perfil === 'Administrador' || usuario.setor === 'Diretoria';
-    if (!gestor) problemas.push('A conclusão exige aprovação de um gestor (Administrador ou Diretoria).');
-  }
-
+  // Quem conclui é quem participa do processo, seja qual for o perfil. O que
+  // decide não é o cargo de quem clica: são os requisitos acima — checklist
+  // sem impedimento, obrigatórios respondidos, documento anexado. Houve aqui
+  // uma regra que só deixava Administrador/Diretoria concluir; ela saiu porque
+  // segurava trabalho pronto esperando alguém com crachá.
   return problemas;
 }
 
-function podeConcluir(processoId, usuario) {
-  return validarConclusao(processoId, usuario).length === 0;
+function podeConcluir(processoId) {
+  return validarConclusao(processoId).length === 0;
 }
 
 function concluir(processoId, usuario, observacao) {
-  const problemas = validarConclusao(processoId, usuario);
+  const problemas = validarConclusao(processoId);
   if (problemas.length) {
     const erro = new ErroValidacao(problemas.join(' '));
     erro.problemas = problemas;

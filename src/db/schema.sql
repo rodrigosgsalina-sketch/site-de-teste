@@ -314,7 +314,8 @@ CREATE INDEX IF NOT EXISTS idx_clientes_situacao ON clientes (situacao);
 CREATE TABLE IF NOT EXISTS avisos (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   tipo        TEXT    NOT NULL CHECK (tipo IN ('concluido', 'impedido', 'aberto', 'cancelado',
-                                               'reaberto', 'vez_setor', 'prazo', 'documento')),
+                                               'reaberto', 'status', 'vez_setor', 'prazo',
+                                               'documento')),
   -- 'todos' vale para a plataforma inteira; 'setores' só para quem está em avisos_destinos.
   escopo      TEXT    NOT NULL DEFAULT 'todos' CHECK (escopo IN ('todos', 'setores')),
   titulo      TEXT    NOT NULL,

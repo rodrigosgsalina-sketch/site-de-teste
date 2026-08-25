@@ -183,7 +183,7 @@ router.get('/:id', carregar, (req, res) => {
     ...g,
     editavel: acesso.podeEditarItem(usuario, { setor: g.setor }),
   }));
-  const problemas = processos.validarConclusao(processo.id, usuario);
+  const problemas = processos.validarConclusao(processo.id);
 
   // O que mudaria se o checklist fosse trazido para o modelo de hoje. Só faz
   // sentido para quem pode fazê-lo, então a conta nem é feita para os demais.
