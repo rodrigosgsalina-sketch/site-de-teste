@@ -53,7 +53,18 @@ const TABELAS = [
   'avisos',
   'avisos_destinos',
   'avisos_lidos',
+  'tabela_preco',
 ];
+
+/**
+ * Tabelas que ficam de fora do backup de propósito.
+ *
+ * `sessoes` é quem está logado agora, e `push_inscricoes` é o endereço de push
+ * de cada navegador: as duas dizem respeito ao aparelho, não ao escritório.
+ * Restaurá-las noutra máquina não faria sentido — e a de sessões derrubaria
+ * quem estivesse usando a plataforma no momento da restauração.
+ */
+const TABELAS_DE_FORA = ['sessoes', 'push_inscricoes'];
 
 /** Rótulos usados na tela de conferência. */
 const ROTULOS = {
@@ -76,6 +87,7 @@ const ROTULOS = {
   avisos: 'Avisos internos',
   avisos_destinos: 'Destinatários dos avisos',
   avisos_lidos: 'Avisos lidos',
+  tabela_preco: 'Tabela de preço',
 };
 
 function colunas(tabela) {
@@ -467,6 +479,7 @@ module.exports = {
   FORMATO,
   VERSAO,
   TABELAS,
+  TABELAS_DE_FORA,
   ROTULOS,
   gerar,
   analisar,

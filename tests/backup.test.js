@@ -301,3 +301,29 @@ test('backup gerado hoje continua conferindo consigo mesmo', () => {
   assert.ok(!analise.avisos.some((a) => /versão anterior/i.test(a)));
   assert.ok(Object.keys(arquivo.tabelas).includes('usuarios_setores'));
 });
+
+test('nenhuma tabela do banco fica de fora do backup por esquecimento', () => {
+  // Este teste existe por causa de um esquecimento real: a tabela de preço foi
+  // criada e o backup continuou levando só as antigas — o escritório teria
+  // restaurado a plataforma sem a tabela de preço e sem nada indicando isso.
+  // Toda tabela nova entra na lista do backup ou na lista das que ficam de
+  // fora de propósito; nenhuma pode simplesmente não estar em nenhuma.
+  const nomes = conn
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+    .all()
+    .map((t) => t.name);
+
+  const esquecidas = nomes.filter(
+    (t) => !backup.TABELAS.includes(t) && !backup.TABELAS_DE_FORA.includes(t)
+  );
+  assert.deepEqual(
+    esquecidas,
+    [],
+    'inclua a tabela em TABELAS (com rótulo) ou em TABELAS_DE_FORA, em src/domain/backup.js'
+  );
+
+  // E o que entra no backup precisa de rótulo, senão a tela de conferência
+  // mostra o nome cru da tabela para quem vai decidir se restaura.
+  const semRotulo = backup.TABELAS.filter((t) => !backup.ROTULOS[t]);
+  assert.deepEqual(semRotulo, []);
+});
