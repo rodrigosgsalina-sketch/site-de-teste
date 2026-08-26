@@ -47,7 +47,18 @@ CREATE TABLE IF NOT EXISTS status_processo (
   -- status "final" encerra o processo (Concluído / Cancelado)
   final  INTEGER NOT NULL DEFAULT 0 CHECK (final IN (0, 1)),
   -- status de espera podem ser definidos manualmente pelo responsável
-  espera INTEGER NOT NULL DEFAULT 0 CHECK (espera IN (0, 1))
+  espera INTEGER NOT NULL DEFAULT 0 CHECK (espera IN (0, 1)),
+  -- cor da etiqueta, escolhida entre as da identidade visual
+  cor    TEXT    NOT NULL DEFAULT 'neutro',
+  -- status citado pelo nome dentro do motor de status: pode mudar de cor e de
+  -- posição, mas não de nome nem de regra, e não pode ser excluído
+  sistema INTEGER NOT NULL DEFAULT 0 CHECK (sistema IN (0, 1)),
+  -- quando preenchido, este é o status de análise daquele setor: o motor o
+  -- aplica sozinho enquanto o setor tiver item pendente
+  setor_id INTEGER REFERENCES setores (id) ON DELETE SET NULL,
+  -- a escolha manual resiste ao checklist completo (ex.: liberado para
+  -- lançamento no Domínio, que só é escolhido depois de tudo respondido)
+  mantem_manual INTEGER NOT NULL DEFAULT 0 CHECK (mantem_manual IN (0, 1))
 );
 
 -- -------------------------------------------------------------- USUARIOS

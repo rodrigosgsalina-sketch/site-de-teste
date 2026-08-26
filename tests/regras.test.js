@@ -49,8 +49,18 @@ function carregar() {
     const tipo = conn.prepare('INSERT INTO tipos_processo (nome, ativo, ordem) VALUES (?, ?, ?)');
     seed.TIPOS_PROCESSO.forEach((t) => tipo.run(t.nome, t.ativo, t.ordem));
 
-    const status = conn.prepare('INSERT INTO status_processo (nome, ordem, final, espera) VALUES (?, ?, ?, ?)');
-    seed.STATUS_PROCESSO.forEach((s) => status.run(s.nome, s.ordem, s.final, s.espera));
+    const idSetorStatus = conn.prepare('SELECT id FROM setores WHERE nome = ?');
+    const status = conn.prepare(
+      `INSERT INTO status_processo (nome, ordem, final, espera, cor, sistema, setor_id, mantem_manual)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    seed.STATUS_PROCESSO.forEach((s) => {
+      const setor = s.setor ? idSetorStatus.get(s.setor) : null;
+      status.run(
+        s.nome, s.ordem, s.final, s.espera,
+        s.cor || 'neutro', s.sistema ? 1 : 0, setor ? setor.id : null, s.mantem_manual ? 1 : 0
+      );
+    });
 
     const param = conn.prepare('INSERT INTO parametros (chave, valor, tipo, categoria, descricao) VALUES (?, ?, ?, ?, ?)');
     seed.PARAMETROS.forEach((p) => param.run(p.chave, p.valor, p.tipo, p.categoria, p.descricao));

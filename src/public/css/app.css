@@ -379,6 +379,12 @@ table.tabela td.mono { white-space: nowrap; }
 .et-verde { background: var(--verde-claro); color: var(--verde); border-color: var(--verde-borda); }
 .et-amarelo { background: var(--ambar-claro); color: var(--ambar); border-color: var(--ambar-borda); }
 .et-vermelho { background: var(--vermelho-claro); color: var(--vermelho); border-color: var(--vermelho-borda); }
+/* Cores que só existem para as situações de processo cadastradas pelo
+   escritório. Seguem o mesmo desenho das demais — fundo claro, texto forte,
+   borda no meio do caminho — para uma situação nova não destoar da tela. */
+.et-turquesa { background: #e4f6f6; color: #0e6a68; border-color: #b5e3e2; }
+.et-laranja { background: #fdeee0; color: #9a4f0d; border-color: #f4d3b3; }
+.et-roxo { background: #efeafa; color: #5b3ba8; border-color: #d7cbf2; }
 .et-opcional {
   background: transparent; color: var(--tinta-4); border: 1px dashed var(--linha-forte); font-weight: 500;
 }
@@ -1107,3 +1113,22 @@ table.tp-grade tr:first-child th { position: sticky; top: 0; z-index: 1; }
   .tp-zoom input[type="range"] { flex: 1; width: auto; }
   .tp-palco { max-height: 70vh; }
 }
+
+/* ------------------------------------------------ situações do processo */
+/* A lista reaproveita o arrastar dos setores (.ordem-lista); o que muda é o
+   miolo da linha, que precisa acomodar a etiqueta, as marcas e as ações. */
+.situacoes-lista li { flex-wrap: wrap; gap: .5rem; }
+.situacao-marcas { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+.situacao-marcas .etiqueta { font-size: .68rem; }
+.situacao-acoes { margin-left: auto; display: flex; align-items: center; gap: .4rem; }
+
+.situacao-editor {
+  margin-top: 1.2rem; padding-top: 1rem; border-top: 1px solid var(--linha);
+}
+.situacao-editor h4 { margin: 0 0 .8rem; font-family: var(--display); font-size: .95rem; color: var(--tinta); }
+.situacao-marcadores { display: flex; flex-direction: column; gap: .3rem; margin: .5rem 0; }
+
+/* Campo travado (situação do sistema) ou desligado por outra escolha: some do
+   caminho sem sumir da tela, para quem olha entender que existe e por quê. */
+.campo.desligado { opacity: .5; }
+.campo.desligado label { cursor: not-allowed; }

@@ -47,25 +47,34 @@ const TIPOS_PROCESSO = [
   { nome: "Emissão de Alvarás e Licenças", ativo: 1, ordem: 25 },
 ];
 
+// `sistema: 1` marca o status citado pelo nome dentro do motor de status. Ele
+// muda de cor e de posição na tela de Tipos e setores, mas não de nome nem de
+// regra — renomear "Concluído" pararia a conclusão de processo em silêncio.
+// `setor` liga o status de análise ao setor correspondente: é assim que o
+// motor sabe qual aplicar, sem depender de o nome seguir uma convenção.
 const STATUS_PROCESSO = [
-  { nome: "Aberto", ordem: 1, final: 0, espera: 0 },
-  { nome: "Em Análise Fiscal", ordem: 2, final: 0, espera: 0 },
-  { nome: "Em Análise Departamento Pessoal", ordem: 3, final: 0, espera: 0 },
-  { nome: "Em Análise Contábil", ordem: 4, final: 0, espera: 0 },
-  { nome: "Em Análise Jurídica", ordem: 5, final: 0, espera: 0 },
-  { nome: "Aguardando Cliente", ordem: 6, final: 0, espera: 1 },
-  { nome: "Aguardando Assinaturas", ordem: 7, final: 0, espera: 1 },
-  { nome: "Aguardando Junta Comercial", ordem: 8, final: 0, espera: 1 },
-  { nome: "Aguardando Receita Federal", ordem: 9, final: 0, espera: 1 },
-  { nome: "Aguardando Prefeitura", ordem: 10, final: 0, espera: 1 },
-  { nome: "Impedido", ordem: 11, final: 0, espera: 0 },
-  { nome: "Liberado", ordem: 12, final: 0, espera: 0 },
+  { nome: "Aberto", ordem: 1, final: 0, espera: 0, cor: "neutro", sistema: 1 },
+  { nome: "Em Análise Fiscal", ordem: 2, final: 0, espera: 0, cor: "azul", sistema: 1, setor: "Fiscal" },
+  { nome: "Em Análise Departamento Pessoal", ordem: 3, final: 0, espera: 0, cor: "azul", sistema: 1, setor: "Departamento Pessoal" },
+  { nome: "Em Análise Contábil", ordem: 4, final: 0, espera: 0, cor: "azul", sistema: 1, setor: "Contábil" },
+  { nome: "Em Análise Jurídica", ordem: 5, final: 0, espera: 0, cor: "azul", sistema: 1, setor: "Jurídico" },
+  { nome: "Aguardando Cliente", ordem: 6, final: 0, espera: 1, cor: "amarelo" },
+  { nome: "Aguardando Assinaturas", ordem: 7, final: 0, espera: 1, cor: "amarelo" },
+  { nome: "Aguardando Junta Comercial", ordem: 8, final: 0, espera: 1, cor: "amarelo" },
+  { nome: "Aguardando Receita Federal", ordem: 9, final: 0, espera: 1, cor: "amarelo" },
+  { nome: "Aguardando Prefeitura", ordem: 10, final: 0, espera: 1, cor: "amarelo" },
+  { nome: "Impedido", ordem: 11, final: 0, espera: 0, cor: "vermelho", sistema: 1 },
+  { nome: "Liberado", ordem: 12, final: 0, espera: 0, cor: "verde", sistema: 1 },
   // Checklist vencido, falta lançar a empresa no Domínio Sistemas. É situação
   // de espera: quem conduz o processo escolhe na mão, e ela fica de pé até o
-  // lançamento sair — sem depender de um item de checklist para isso.
-  { nome: "Liberado para atualização/cadastro no Sistema Domínio", ordem: 13, final: 0, espera: 1 },
-  { nome: "Concluído", ordem: 14, final: 1, espera: 0 },
-  { nome: "Cancelado", ordem: 15, final: 1, espera: 0 },
+  // lançamento sair — daí o `mantem_manual`, sem o qual o próprio checklist
+  // completo a apagaria de volta para "Liberado" no recálculo seguinte.
+  {
+    nome: "Liberado para atualização/cadastro no Sistema Domínio",
+    ordem: 13, final: 0, espera: 1, cor: "turquesa", mantem_manual: 1,
+  },
+  { nome: "Concluído", ordem: 14, final: 1, espera: 0, cor: "verde", sistema: 1 },
+  { nome: "Cancelado", ordem: 15, final: 1, espera: 0, cor: "vermelho", sistema: 1 },
 ];
 
 // tipo === null  =>  linha "Todos" da planilha (aplicada a qualquer processo)

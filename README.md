@@ -209,6 +209,7 @@ src/
     importacao-clientes.js  leitura do relatório de empresas do Domínio Sistemas
     backup.js            backup completo em JSON e restauração transacional
     tabela-preco.js      tabela de preço do escritório (envio, versões e leitura)
+    status-processo.js   cadastro das situações: cor, regras e situação de análise por setor
   routes/                camada HTTP
   views/                 telas EJS
   public/                CSS, JS, sw.js (Service Worker), logotipo, Chart.js, pdf.js e fontes
@@ -360,26 +361,59 @@ atendimento livre, basta `EXIGIR_ORDEM_SETORES = Não` em **Administração → 
 **Motor de status** — recalculado a cada resposta do checklist:
 
 1. algum item impedido → `Impedido`;
-2. `Liberado para atualização/cadastro no Sistema Domínio` definido na mão é preservado;
+2. situação marcada como **mantém a escolha manual**, escolhida na mão, é preservada;
 3. todos os obrigatórios bloqueantes concluídos → `Liberado`;
-4. status de espera definido manualmente é preservado enquanto houver pendências;
-5. caso contrário, `Em Análise <setor>` do primeiro setor com item pendente (Fiscal, DP,
-   Contábil, Jurídico) — ou `Aberto`.
+4. situação de **espera externa** escolhida na mão é preservada enquanto houver pendências;
+5. caso contrário, a **situação de análise** do primeiro setor com item pendente — ou `Aberto`.
 
 Os status de espera (`Aguardando Cliente`, `Aguardando Assinaturas`, `Aguardando Junta
 Comercial`, `Aguardando Receita Federal`, `Aguardando Prefeitura`) são definidos na tela do
 processo. Alterar manualmente para um status de análise exige `PERMITIR_PULAR_ETAPAS`.
 
 **`Liberado para atualização/cadastro no Sistema Domínio`** é o passo entre o checklist vencido e
-o encerramento: o processo está pronto, falta lançar a empresa no Domínio Sistemas. Ele é
-escolhido na mesma lista dos status de espera, na tela do processo, e é o único que o recálculo
-não desfaz — justamente porque é usado quando o checklist já está completo, e a regra 3 o jogaria
-de volta para `Liberado` na resposta seguinte. Um impedimento continua passando por cima dele:
-impedimento precisa aparecer.
+o encerramento: o processo está pronto, falta lançar a empresa no Domínio Sistemas. É por isso que
+ele vem com **mantém a escolha manual** ligado — sem essa marca a regra 3 o jogaria de volta para
+`Liberado` na resposta seguinte. Um impedimento continua passando por cima dele: impedimento
+precisa aparecer.
+
+### Cadastro das situações (Administração → Tipos e setores)
+
+As situações deixaram de ser uma lista fixa no código. Na tela de **Tipos e setores** o
+administrador **cria, edita, exclui e reordena** (arrastando) as situações, escolhendo para cada
+uma:
+
+| Campo | O que faz |
+|---|---|
+| **Cor da etiqueta** | como a situação aparece na lista de processos e na tela do processo, com prévia ao lado |
+| **Encerra o processo** | tira o processo de circulação; chega-se a ela pelos botões de concluir e cancelar, nunca pela lista da tela |
+| **Espera externa** | aparece na lista da tela do processo para ser escolhida na mão e resiste ao recálculo enquanto houver item pendente |
+| **Mantém a escolha manual** | a escolha sobrevive ao checklist completo (o caso do lançamento no Domínio) |
+| **Situação de análise do setor** | o motor a aplica sozinho enquanto aquele setor tiver item pendente |
+
+A **cor sai de uma paleta**, e não de um seletor de cor livre: assim toda situação nova nasce
+legível e a tela continua parecendo uma tela só. São oito, cobrindo neutro, andamento, espera,
+atraso, pronto, concluído, impedido e acompanhamento especial.
+
+A **situação de análise por setor** é a novidade que abre caminho: antes eram quatro nomes
+escritos no código (`Em Análise Fiscal`, `… Departamento Pessoal`, `… Contábil`, `… Jurídica`), e
+um setor novo nunca ganhava situação própria sem alguém mexer no programa. Agora é uma ligação no
+cadastro — crie a situação, escolha o setor, e o motor passa a usá-la. Cada setor aceita uma só, e
+um setor sem situação própria simplesmente é pulado, como sempre foi.
+
+**O que não se edita.** Algumas situações são citadas **pelo nome** dentro do motor de status —
+`Aberto`, `Impedido`, `Liberado`, `Concluído` e `Cancelado`. Elas aparecem marcadas como *do
+sistema*: a cor e a posição são livres, o nome e as regras não, e excluir é recusado. Não é
+capricho: renomear `Concluído` pararia a conclusão de processo, o dashboard e o relatório final —
+tudo em silêncio, sem erro na tela. É a mesma armadilha que já tirou do Administrativo o direito de
+responder um setor quando o escritório renomeou "TI".
+
+Também é recusada a exclusão de uma situação **em uso**: a tela diz quantos processos estão nela,
+para serem movidos antes. E os nomes não se repetem.
 
 > Situações novas chegam sozinhas a bancos já em uso, como os parâmetros: na primeira abertura
 > depois da atualização, o que falta é criado e a ordem da lista é reaplicada, para a situação
-> nova cair no lugar certo e não no fim.
+> nova cair no lugar certo e não no fim. A migração também preenche cor, marca de sistema e
+> setor de análise das situações que já existiam.
 
 **Impedimento** — marcar impedimento exige descrição (`EXIGIR_OBSERVACAO_IMPEDIMENTO`), muda o
 item para `Impedido`, joga o processo para `Impedido`, notifica Diretoria e Administrativo

@@ -18,6 +18,7 @@ const ordemSetores = require('../domain/ordem-setores');
 const ordemItens = require('../domain/ordem-itens');
 const parametros = require('../domain/parametros');
 const processos = require('../domain/processos');
+const statusProcesso = require('../domain/status-processo');
 const usuarios = require('../domain/usuarios');
 const { ErroValidacao } = require('../domain/checklist');
 
@@ -366,7 +367,8 @@ router.get('/tabelas', (req, res) => {
     titulo: 'Tipos, subtipos, status e setores',
     tipos: conn.prepare('SELECT * FROM tipos_processo ORDER BY ordem, nome').all(),
     subtipos: subtiposDom.listar(),
-    status: conn.prepare('SELECT * FROM status_processo ORDER BY ordem').all(),
+    status: statusProcesso.listar(),
+    coresDeStatus: statusProcesso.CORES,
     setores: conn.prepare('SELECT * FROM setores ORDER BY ordem').all(),
   });
 });
@@ -449,6 +451,104 @@ router.post('/tabelas/tipos', (req, res, next) => {
     if (err instanceof ErroValidacao) {
       flash(req, 'erro', err.message);
       return res.redirect('/admin/tabelas');
+    }
+    next(err);
+  }
+});
+
+/* ------------------------------------------------- Situações do processo */
+
+/**
+ * Criar, alterar e excluir as situações (status) do processo.
+ *
+ * O que o motor de status cita pelo nome vem marcado como `sistema`: dessas,
+ * só cor e posição são livres. O domínio é que decide isso — aqui a rota
+ * apenas leva o formulário e traz a mensagem de volta.
+ */
+router.post('/tabelas/status', (req, res, next) => {
+  try {
+    const editando = Boolean(req.body.id);
+    const salvo = editando
+      ? statusProcesso.atualizar(Number(req.body.id), req.body)
+      : statusProcesso.criar(req.body);
+
+    historico.registrar({
+      processoId: null,
+      acao: editando ? 'Situação de Processo Alterada' : 'Situação de Processo Criada',
+      usuario: req.session.usuario,
+      observacao:
+        `${salvo.nome} — cor ${salvo.cor}` +
+        `${salvo.final ? ', encerra o processo' : ''}` +
+        `${salvo.espera ? ', espera externa' : ''}` +
+        `${salvo.mantem_manual ? ', mantém a escolha manual' : ''}` +
+        `${salvo.setor_nome ? `, análise do setor ${salvo.setor_nome}` : ''}.`,
+    });
+    flash(req, 'sucesso', `Situação "${salvo.nome}" salva.`);
+    res.redirect('/admin/tabelas#situacoes');
+  } catch (err) {
+    if (err instanceof ErroValidacao) {
+      flash(req, 'erro', err.message);
+      return res.redirect('/admin/tabelas#situacoes');
+    }
+    next(err);
+  }
+});
+
+router.post('/tabelas/status/:id/excluir', (req, res, next) => {
+  try {
+    const removido = statusProcesso.remover(Number(req.params.id));
+    historico.registrar({
+      processoId: null,
+      acao: 'Situação de Processo Excluída',
+      usuario: req.session.usuario,
+      observacao: removido.nome,
+    });
+    flash(req, 'sucesso', `Situação "${removido.nome}" excluída.`);
+    res.redirect('/admin/tabelas#situacoes');
+  } catch (err) {
+    if (err instanceof ErroValidacao) {
+      flash(req, 'erro', err.message);
+      return res.redirect('/admin/tabelas#situacoes');
+    }
+    next(err);
+  }
+});
+
+/** Ordem das situações — mesma mecânica de arrastar dos setores e itens. */
+router.post('/tabelas/status/ordem', (req, res, next) => {
+  const querJson = String(req.headers.accept || '').includes('application/json');
+  try {
+    const ids = []
+      .concat(req.body.status_ids || [])
+      .join(',')
+      .split(',')
+      .map(Number)
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (!ids.length) throw new ErroValidacao('Informe a ordem das situações.');
+
+    // Só a lista completa: uma lista pela metade deixaria as de fora com
+    // números velhos, no meio dos novos.
+    const atuais = statusProcesso.listar().map((s) => s.id);
+    if (atuais.length !== ids.length || atuais.some((id) => !ids.includes(id))) {
+      throw new ErroValidacao('A lista de situações não confere. Recarregue a página.');
+    }
+
+    statusProcesso.definirOrdem(ids);
+    historico.registrar({
+      processoId: null,
+      acao: 'Ordem das Situações Alterada',
+      usuario: req.session.usuario,
+      observacao: statusProcesso.listar().map((s) => s.nome).join(' → '),
+    });
+
+    if (querJson) return res.json({ ok: true, ordem: ids });
+    flash(req, 'sucesso', 'Ordem das situações atualizada.');
+    return res.redirect('/admin/tabelas#situacoes');
+  } catch (err) {
+    if (err instanceof ErroValidacao) {
+      if (querJson) return res.status(400).json({ ok: false, erro: err.message });
+      flash(req, 'erro', err.message);
+      return res.redirect('/admin/tabelas#situacoes');
     }
     next(err);
   }

@@ -31,11 +31,30 @@ function upsertTipos(conn) {
 }
 
 function upsertStatus(conn) {
+  // A cor e o setor de análise são reaplicados junto: eles fazem parte da
+  // definição da situação tanto quanto o nome. O que o escritório cadastrou
+  // por conta própria não aparece aqui e por isso não é tocado.
+  const idSetor = conn.prepare('SELECT id FROM setores WHERE nome = ?');
   const inserir = conn.prepare(
-    `INSERT INTO status_processo (nome, ordem, final, espera) VALUES (@nome, @ordem, @final, @espera)
-     ON CONFLICT (nome) DO UPDATE SET ordem = excluded.ordem, final = excluded.final, espera = excluded.espera`
+    `INSERT INTO status_processo (nome, ordem, final, espera, cor, sistema, setor_id, mantem_manual)
+     VALUES (@nome, @ordem, @final, @espera, @cor, @sistema, @setor_id, @mantem_manual)
+     ON CONFLICT (nome) DO UPDATE SET ordem = excluded.ordem, final = excluded.final,
+       espera = excluded.espera, cor = excluded.cor, sistema = excluded.sistema,
+       setor_id = excluded.setor_id, mantem_manual = excluded.mantem_manual`
   );
-  dados.STATUS_PROCESSO.forEach((s) => inserir.run(s));
+  dados.STATUS_PROCESSO.forEach((s) => {
+    const setor = s.setor ? idSetor.get(s.setor) : null;
+    inserir.run({
+      nome: s.nome,
+      ordem: s.ordem,
+      final: s.final,
+      espera: s.espera,
+      cor: s.cor || 'neutro',
+      sistema: s.sistema ? 1 : 0,
+      setor_id: setor ? setor.id : null,
+      mantem_manual: s.mantem_manual ? 1 : 0,
+    });
+  });
 }
 
 function upsertParametros(conn) {

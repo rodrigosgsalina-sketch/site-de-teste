@@ -15,21 +15,19 @@ const { agoraISO, hojeISO, somarDias, diffDias } = require('../lib/datas');
 
 const ErroValidacao = checklist.ErroValidacao;
 
+/**
+ * As situações que o motor cita pelo nome.
+ *
+ * São as marcadas como `sistema` na tabela: a tela de Tipos e setores deixa
+ * mudar a cor e a posição delas, e não o nome — renomear "Concluído" pararia a
+ * conclusão de processo em silêncio.
+ */
 const STATUS = {
   ABERTO: 'Aberto',
   IMPEDIDO: 'Impedido',
   LIBERADO: 'Liberado',
-  LIBERADO_DOMINIO: 'Liberado para atualização/cadastro no Sistema Domínio',
   CONCLUIDO: 'Concluído',
   CANCELADO: 'Cancelado',
-};
-
-/** Setores que possuem um status "Em Análise ..." próprio. */
-const STATUS_ANALISE = {
-  Fiscal: 'Em Análise Fiscal',
-  'Departamento Pessoal': 'Em Análise Departamento Pessoal',
-  Contábil: 'Em Análise Contábil',
-  Jurídico: 'Em Análise Jurídica',
 };
 
 const SELECT_PROCESSO = `
@@ -39,7 +37,9 @@ const SELECT_PROCESSO = `
             JOIN subtipos_processo s2 ON s2.id = ps2.subtipo_id
            WHERE ps2.processo_id = p.id) AS subtipos_processo,
          st.nome AS status, st.final AS status_final,
-         st.espera AS status_espera, u.nome AS responsavel_interno, uc.nome AS criado_por,
+         st.espera AS status_espera, st.cor AS status_cor,
+         st.mantem_manual AS status_mantem_manual,
+         u.nome AS responsavel_interno, uc.nome AS criado_por,
          cl.codigo AS cliente_codigo, cl.apelido AS cliente_apelido
     FROM processos p
     JOIN tipos_processo t ON t.id = p.tipo_processo_id
@@ -52,6 +52,17 @@ function statusId(nome) {
   const row = db.get().prepare('SELECT id FROM status_processo WHERE nome = ?').get(nome);
   if (!row) throw new Error(`Status desconhecido: ${nome}`);
   return row.id;
+}
+
+/** Situação de análise ligada a um setor, quando o cadastro define uma. */
+function statusDoSetor(setorId) {
+  if (!setorId) return null;
+  return (
+    db
+      .get()
+      .prepare('SELECT nome FROM status_processo WHERE setor_id = ? ORDER BY ordem, id LIMIT 1')
+      .get(Number(setorId)) || null
+  );
 }
 
 function obter(id) {
@@ -350,12 +361,12 @@ function statusCalculado(processo, itens) {
     return STATUS.IMPEDIDO;
   }
 
-  // "Liberado para atualização/cadastro no Sistema Domínio" é o passo seguinte
-  // ao "Liberado", e por isso é escolhido justamente quando o checklist já
-  // venceu. Se ele caísse na regra abaixo, o próprio checklist completo o
-  // apagaria de volta para "Liberado" no recálculo seguinte — só o impedimento,
-  // que precisa aparecer, passa por cima dele.
-  if (processo.status_manual && processo.status === STATUS.LIBERADO_DOMINIO) {
+  // Situação marcada como "mantém a escolha manual" fica de pé mesmo com o
+  // checklist completo — é o caso da liberação para lançamento no Domínio, que
+  // só é escolhida depois de tudo respondido e que a regra abaixo apagaria de
+  // volta para "Liberado". Só o impedimento, que precisa aparecer, passa por
+  // cima dela.
+  if (processo.status_manual && processo.status_mantem_manual) {
     return processo.status;
   }
 
@@ -370,11 +381,16 @@ function statusCalculado(processo, itens) {
     return processo.status;
   }
 
+  // Situação de análise do setor que está segurando a fila. A ligação
+  // setor -> situação sai do cadastro (`status_processo.setor_id`), e não de
+  // uma lista de nomes no código: setor novo ganha a sua situação pela tela de
+  // Tipos e setores, e um setor sem situação própria simplesmente é pulado.
   const pendentes = itens.filter((i) => i.status_item !== checklist.STATUS_ITEM.CONCLUIDO);
-  const candidatos = pendentes
-    .filter((i) => STATUS_ANALISE[i.setor])
-    .sort((a, b) => a.setor_ordem - b.setor_ordem || a.ordem - b.ordem);
-  if (candidatos.length) return STATUS_ANALISE[candidatos[0].setor];
+  const emOrdem = [...pendentes].sort((a, b) => a.setor_ordem - b.setor_ordem || a.ordem - b.ordem);
+  for (const item of emOrdem) {
+    const analise = statusDoSetor(item.setor_id);
+    if (analise) return analise.nome;
+  }
 
   return pendentes.length ? STATUS.ABERTO : STATUS.LIBERADO;
 }
@@ -765,7 +781,7 @@ async function verificarPrazos() {
 
 module.exports = {
   STATUS,
-  STATUS_ANALISE,
+  statusDoSetor,
   ErroValidacao,
   criar,
   atualizar,

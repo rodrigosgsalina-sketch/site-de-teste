@@ -297,6 +297,55 @@ function migrarSetoresDoUsuario(conn) {
 }
 
 /**
+ * As situações de processo passaram a ser cadastráveis: cor, situação de
+ * análise por setor e a marca do que o motor cita pelo nome.
+ *
+ * As colunas entram vazias e são preenchidas a partir da carga inicial, que é
+ * onde essas decisões estão escritas. Sem isto, um banco em uso ficaria com
+ * todas as etiquetas cinzas e — pior — com o motor sem saber qual situação
+ * aplicar a cada setor, porque a lista de nomes que ele tinha no código saiu
+ * daqui em diante.
+ */
+function migrarCadastroDeStatus(conn) {
+  if (!tabelaExiste(conn, 'status_processo')) return;
+  const existentes = colunas(conn, 'status_processo');
+  const novas = [
+    ['cor', "TEXT NOT NULL DEFAULT 'neutro'"],
+    ['sistema', 'INTEGER NOT NULL DEFAULT 0'],
+    ['setor_id', 'INTEGER REFERENCES setores (id)'],
+    ['mantem_manual', 'INTEGER NOT NULL DEFAULT 0'],
+  ].filter(([nome]) => !existentes.includes(nome));
+  if (!novas.length) return;
+
+  for (const [nome, tipo] of novas) {
+    conn.exec(`ALTER TABLE status_processo ADD COLUMN ${nome} ${tipo};`);
+  }
+
+  const seed = require('./seed-data');
+  const idSetor = conn.prepare('SELECT id FROM setores WHERE nome = ?');
+  const ajustar = conn.prepare(
+    `UPDATE status_processo
+        SET cor = @cor, sistema = @sistema, setor_id = @setor_id, mantem_manual = @mantem_manual
+      WHERE nome = @nome`
+  );
+  conn.transaction(() => {
+    for (const s of seed.STATUS_PROCESSO) {
+      const setor = s.setor ? idSetor.get(s.setor) : null;
+      ajustar.run({
+        nome: s.nome,
+        cor: s.cor || 'neutro',
+        sistema: s.sistema ? 1 : 0,
+        setor_id: setor ? setor.id : null,
+        mantem_manual: s.mantem_manual ? 1 : 0,
+      });
+    }
+  })();
+
+  // eslint-disable-next-line no-console
+  console.log('[migração] situações de processo ganharam cor, setor de análise e marca de sistema.');
+}
+
+/**
  * Situações de processo criadas em versões novas.
  *
  * Vale o mesmo raciocínio dos parâmetros: a carga inicial só roda uma vez, e
@@ -316,12 +365,32 @@ function semearStatusNovos(conn) {
   const novos = seed.STATUS_PROCESSO.filter((s) => !existe.get(s.nome));
   if (!novos.length) return;
 
-  const inserir = conn.prepare(
-    'INSERT INTO status_processo (nome, ordem, final, espera) VALUES (@nome, @ordem, @final, @espera)'
-  );
+  const temCadastro = colunas(conn, 'status_processo').includes('cor');
+  const idSetor = conn.prepare('SELECT id FROM setores WHERE nome = ?');
+  const inserir = temCadastro
+    ? conn.prepare(
+        `INSERT INTO status_processo (nome, ordem, final, espera, cor, sistema, setor_id, mantem_manual)
+         VALUES (@nome, @ordem, @final, @espera, @cor, @sistema, @setor_id, @mantem_manual)`
+      )
+    : conn.prepare(
+        'INSERT INTO status_processo (nome, ordem, final, espera) VALUES (@nome, @ordem, @final, @espera)'
+      );
   const reordenar = conn.prepare('UPDATE status_processo SET ordem = @ordem WHERE nome = @nome');
   conn.transaction(() => {
-    novos.forEach((s) => inserir.run(s));
+    novos.forEach((s) => {
+      if (!temCadastro) return inserir.run({ nome: s.nome, ordem: s.ordem, final: s.final, espera: s.espera });
+      const setor = s.setor ? idSetor.get(s.setor) : null;
+      return inserir.run({
+        nome: s.nome,
+        ordem: s.ordem,
+        final: s.final,
+        espera: s.espera,
+        cor: s.cor || 'neutro',
+        sistema: s.sistema ? 1 : 0,
+        setor_id: setor ? setor.id : null,
+        mantem_manual: s.mantem_manual ? 1 : 0,
+      });
+    });
     seed.STATUS_PROCESSO.forEach((s) => reordenar.run({ nome: s.nome, ordem: s.ordem }));
   })();
   // eslint-disable-next-line no-console
@@ -365,6 +434,7 @@ function migrate(conn) {
   migrarSetoresDoUsuario(conn);
   semearParametrosNovos(conn);
   semearStatusNovos(conn);
+  migrarCadastroDeStatus(conn);
   removerParametrosAposentados(conn);
 }
 

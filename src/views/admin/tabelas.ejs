@@ -156,24 +156,149 @@
   <% } %>
 </div>
 
-<div class="cartao">
-  <h3>Status de processo</h3>
-  <p class="dica">Os status são definidos automaticamente pelo andamento do checklist; os marcados como “espera” podem ser aplicados manualmente na tela do processo.</p>
-  <div class="tabela-scroll">
-    <table class="tabela">
-      <thead><tr><th>#</th><th>Status</th><th>Encerra o processo</th><th>Espera externa</th></tr></thead>
-      <tbody>
-        <% status.forEach(function (s) { %>
-          <tr>
-            <td class="num"><%= s.ordem %></td>
-            <td><span class="etiqueta <%= classeStatus(s.nome) %>"><%= s.nome %></span></td>
-            <td><%= s.final ? 'Sim' : 'Não' %></td>
-            <td><%= s.espera ? 'Sim' : 'Não' %></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
+<div class="cartao" id="situacoes">
+  <div class="cartao-titulo">
+    <h3>Situações do processo</h3>
+    <span class="etiqueta et-neutro"><%= status.length %> cadastrada(s)</span>
+  </div>
+  <p class="dica">
+    A maior parte das situações é aplicada sozinha pelo andamento do checklist. As de
+    <strong>espera externa</strong> aparecem na lista da tela do processo, para quem participa
+    escolher na mão. Arraste as linhas para mudar a ordem em que elas aparecem.
+  </p>
+
+  <!-- ------------------------------------------------------ lista/ordem -->
+  <form method="post" action="/admin/tabelas/status/ordem"
+        data-ordem-arrastavel data-campo="status_ids">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    <input type="hidden" name="status_ids" value="<%= status.map(function (s) { return s.id; }).join(',') %>">
+
+    <ol class="ordem-lista situacoes-lista">
+      <% status.forEach(function (s, i) { %>
+        <li tabindex="0" data-id="<%= s.id %>"
+            aria-label="<%= s.nome %>, posição <%= i + 1 %> de <%= status.length %>">
+          <span class="ordem-pegador" aria-hidden="true" title="Arraste para reordenar">⠿</span>
+          <span class="ordem-posicao"><%= i + 1 %></span>
+          <span class="ordem-nome">
+            <strong><span class="etiqueta <%= classeStatus(s.nome) %>"><%= s.nome %></span></strong>
+            <span class="situacao-marcas">
+              <% if (s.sistema) { %><span class="etiqueta et-neutro" title="Citada pelo nome dentro do motor de status">do sistema</span><% } %>
+              <% if (s.final) { %><span class="etiqueta et-verde">encerra</span><% } %>
+              <% if (s.espera) { %><span class="etiqueta et-amarelo">espera externa</span><% } %>
+              <% if (s.mantem_manual) { %><span class="etiqueta et-turquesa">mantém escolha</span><% } %>
+              <% if (s.setor_nome) { %><span class="etiqueta et-azul">análise · <%= s.setor_nome %></span><% } %>
+              <% if (s.em_uso) { %><span class="etiqueta et-neutro"><%= s.em_uso %> processo(s)</span><% } %>
+            </span>
+          </span>
+          <span class="situacao-acoes">
+            <button type="button" class="botao botao-secundario botao-pequeno"
+                    data-editar-situacao="<%= s.id %>">Editar</button>
+            <% if (!s.sistema && !s.em_uso) { %>
+              <button type="submit" class="ordem-excluir" form="excluir-situacao-<%= s.id %>"
+                      title="Excluir situação" aria-label="Excluir <%= s.nome %>">×</button>
+            <% } %>
+          </span>
+        </li>
+      <% }) %>
+    </ol>
+    <div class="acoes" data-ordem-manual>
+      <button class="botao botao-secundario botao-pequeno">Salvar ordem</button>
+      <span class="dica">Sem arrastar? Salve aqui.</span>
+    </div>
+    <span class="dica" data-ordem-estado role="status" aria-live="polite"></span>
+  </form>
+
+  <% status.filter(function (s) { return !s.sistema && !s.em_uso; }).forEach(function (s) { %>
+    <form id="excluir-situacao-<%= s.id %>" method="post" action="/admin/tabelas/status/<%= s.id %>/excluir"
+          data-confirmar="Excluir a situação &quot;<%= s.nome %>&quot;?" hidden>
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+    </form>
+  <% }) %>
+
+  <!-- ------------------------------------------------------ formulário -->
+  <div class="situacao-editor">
+    <h4 data-titulo-situacao>Nova situação</h4>
+    <form method="post" action="/admin/tabelas/status" data-form-situacao>
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+      <input type="hidden" name="id" value="" data-campo-id>
+
+      <div class="grade grade-2" style="gap:.9rem">
+        <div class="campo">
+          <label for="situacao-nome">Nome <span class="obrig">*</span></label>
+          <input type="text" id="situacao-nome" name="nome" required maxlength="120" data-campo-nome>
+          <div class="dica" data-aviso-sistema hidden>
+            Situação usada por dentro do sistema: o nome e as regras estão travados, porque o motor
+            de status a procura por este nome. Cor e posição continuam livres.
+          </div>
+        </div>
+        <div class="campo">
+          <label for="situacao-cor">Cor da etiqueta</label>
+          <select id="situacao-cor" name="cor" data-campo-cor>
+            <% coresDeStatus.forEach(function (c) { %>
+              <option value="<%= c.valor %>"><%= c.rotulo %></option>
+            <% }) %>
+          </select>
+          <div class="dica">
+            Prévia: <span class="etiqueta et-neutro" data-previa-cor>exemplo</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="campo">
+        <label for="situacao-setor">Situação de análise do setor</label>
+        <select id="situacao-setor" name="setor_id" data-campo-setor>
+          <option value="">— nenhum: não é situação de análise —</option>
+          <% setores.forEach(function (s) { %>
+            <option value="<%= s.id %>"><%= s.nome %></option>
+          <% }) %>
+        </select>
+        <div class="dica">
+          Ligada a um setor, esta situação é aplicada sozinha enquanto aquele setor tiver item
+          pendente no checklist — é assim que “Em Análise Fiscal” funciona. Um setor novo só ganha
+          situação própria se você criar uma aqui e ligá-la a ele.
+        </div>
+      </div>
+
+      <div class="situacao-marcadores">
+        <div class="campo checkbox">
+          <input type="checkbox" id="situacao-final" name="final" value="1" data-campo-final>
+          <label for="situacao-final">Encerra o processo</label>
+        </div>
+        <div class="campo checkbox">
+          <input type="checkbox" id="situacao-espera" name="espera" value="1" data-campo-espera>
+          <label for="situacao-espera">Espera externa (pode ser escolhida na mão)</label>
+        </div>
+        <div class="campo checkbox">
+          <input type="checkbox" id="situacao-mantem" name="mantem_manual" value="1" data-campo-mantem>
+          <label for="situacao-mantem">Mantém a escolha manual mesmo com o checklist concluído</label>
+        </div>
+      </div>
+      <p class="dica" style="margin:.2rem 0 .8rem">
+        <strong>Encerra o processo</strong> tira o processo de circulação — chega-se a ela pelos
+        botões de concluir e cancelar, nunca pela lista da tela do processo.
+        <strong>Espera externa</strong> é o que está parado esperando alguém de fora (cliente,
+        Junta, Receita) e resiste ao recálculo enquanto houver item pendente.
+        <strong>Mantém a escolha manual</strong> é para o passo que só existe depois do checklist
+        completo, como a liberação para lançamento no Domínio: sem ela, “Liberado” tomaria o lugar
+        no recálculo seguinte.
+      </p>
+
+      <div class="acoes">
+        <button class="botao">Salvar situação</button>
+        <button type="button" class="botao botao-secundario" data-cancelar-situacao hidden>Cancelar edição</button>
+      </div>
+    </form>
   </div>
 </div>
+
+<script nonce="<%= nonce %>">
+  window.SITUACOES = <%- jsonSeguro(status.map(function (s) {
+    return {
+      id: s.id, nome: s.nome, cor: s.cor, final: s.final, espera: s.espera,
+      mantem_manual: s.mantem_manual, setor_id: s.setor_id, sistema: s.sistema,
+    };
+  })) %>;
+</script>
+<script src="<%= estatico('/js/situacoes.js') %>" nonce="<%= nonce %>" defer></script>
 
 <%- include('../partials/rodape') %>

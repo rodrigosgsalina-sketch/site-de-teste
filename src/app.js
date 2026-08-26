@@ -15,6 +15,7 @@ const estaticos = require('./lib/estaticos');
 const seguranca = require('./lib/seguranca');
 const acesso = require('./domain/acesso');
 const avisosDom = require('./domain/avisos');
+const statusProcesso = require('./domain/status-processo');
 
 const app = express();
 
@@ -85,12 +86,13 @@ app.use(
 app.use(csrf.proteger);
 
 /** Cor da etiqueta conforme o status do processo. */
+/**
+ * Cor da etiqueta do status. A escolha vem do cadastro (Administração → Tipos
+ * e setores); o domínio guarda o mapa em memória e o refaz quando alguma
+ * situação muda.
+ */
 function classeStatus(status) {
-  if (status === 'Concluído' || status === 'Liberado') return 'et-verde';
-  if (status === 'Impedido' || status === 'Cancelado') return 'et-vermelho';
-  if (String(status || '').startsWith('Aguardando')) return 'et-amarelo';
-  if (String(status || '').startsWith('Em Análise')) return 'et-azul';
-  return 'et-neutro';
+  return statusProcesso.classeDaEtiqueta(status);
 }
 
 /** Cor da etiqueta conforme a situação do item de checklist. */
