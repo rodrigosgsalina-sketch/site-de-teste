@@ -39,6 +39,49 @@ Para subir também alguns processos de demonstração:
 npm run seed:demo
 ```
 
+### Abrir nas outras máquinas do escritório
+
+A plataforma escuta em **todas as placas de rede** da máquina onde você deu `npm start` — não há
+nada a ligar para isso. O que muda é o endereço: `localhost` só vale para quem está sentado no
+servidor; as outras máquinas usam o **IP dessa máquina na rede**, e o próprio `npm start` imprime
+qual é:
+
+```
+Nas outras máquinas da rede, abra:
+  http://192.168.0.15:3000   (Ethernet)
+```
+
+Se a tela não abrir de outra máquina e abrir no servidor, o problema não é a plataforma — é o
+caminho até ela. Nesta ordem:
+
+1. **Firewall do Windows.** É a causa mais comum. Na primeira vez que o Node abre uma porta, o
+   Windows pergunta se libera; negar (ou nunca ter visto a pergunta) deixa a porta fechada, e
+   **trocar a versão do Node refaz a pergunta**, porque a permissão é do executável, não da
+   pasta. Libere de uma vez, no PowerShell **como administrador**:
+
+   ```powershell
+   New-NetFirewallRule -DisplayName "JS Grilo Processos" -Direction Inbound `
+     -Protocol TCP -LocalPort 3000 -Profile Private -Action Allow
+   ```
+
+2. **Perfil da rede.** Em **Configurações → Rede e Internet**, a conexão precisa estar como
+   **Particular**. Em "Pública" o Windows bloqueia toda conexão de entrada, e o perfil volta
+   sozinho para pública quando o roteador é trocado ou a máquina entra numa rede nova.
+
+3. **O IP mudou.** Com DHCP o roteador pode entregar outro endereço ao servidor depois de um
+   reinício, e quem tinha o link antigo cai no vazio. Confirme o endereço impresso pelo
+   `npm start` e, se a plataforma vai ficar no ar, peça para fixar o IP do servidor no roteador.
+
+4. **Antivírus com firewall próprio** (Avast, AVG, Kaspersky, McAfee) tem a lista dele, separada
+   da do Windows — libere o Node lá também.
+
+5. **`FORCE_HTTPS` ligado sem certificado.** Nesse caso toda visita em `http://` é recusada,
+   inclusive as da rede. O `npm start` avisa quando é o caso; a saída é tirar `FORCE_HTTPS` do
+   `.env` ou gerar o certificado (`npm run certificado`).
+
+`npm run doutor` confere os itens acima que dá para conferir de dentro da máquina e mostra o
+endereço de rede a usar.
+
 Testes (regras de negócio, segurança, HTTPS, notificações e backup):
 
 ```bash

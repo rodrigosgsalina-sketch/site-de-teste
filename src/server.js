@@ -3,6 +3,7 @@
 const fs = require('fs');
 const http = require('http');
 const https = require('https');
+const os = require('os');
 
 const app = require('./app');
 const config = require('./config');
@@ -42,10 +43,63 @@ const servidor = config.httpsProprio
   ? https.createServer(credenciaisTls(), app)
   : http.createServer(app);
 
+/**
+ * Endereços IPv4 desta máquina na rede local.
+ *
+ * O `localhost` da mensagem de início só serve para quem está sentado no
+ * servidor. Quem abre a plataforma da sua mesa precisa do endereço da máquina
+ * na rede, e procurá-lo no `ipconfig` toda vez — ou descobrir que ele mudou
+ * sozinho, porque o roteador entrega IP por DHCP — é o começo de "parou de
+ * funcionar". Então o próprio `npm start` diz por onde entrar.
+ */
+function enderecosDaRede() {
+  const achados = [];
+  const interfaces = os.networkInterfaces();
+  for (const nome of Object.keys(interfaces)) {
+    for (const rede of interfaces[nome] || []) {
+      if (rede.family !== 'IPv4' && rede.family !== 4) continue;
+      if (rede.internal) continue;
+      achados.push({ nome, endereco: rede.address });
+    }
+  }
+  return achados;
+}
+
 servidor.listen(config.port, () => {
   const esquema = config.httpsProprio ? 'https' : 'http';
   // eslint-disable-next-line no-console
   console.log(`JS Grilo · Processos — ${esquema}://localhost:${config.port} (${config.env})`);
+
+  const rede = enderecosDaRede();
+  if (rede.length) {
+    // eslint-disable-next-line no-console
+    console.log('\nNas outras máquinas da rede, abra:');
+    for (const { nome, endereco } of rede) {
+      // eslint-disable-next-line no-console
+      console.log(`  ${esquema}://${endereco}:${config.port}   (${nome})`);
+    }
+    // eslint-disable-next-line no-console
+    console.log(
+      '\nSe não abrir de outra máquina, o servidor está de pé e quem barra é o caminho:\n' +
+        '  1. o Firewall do Windows precisa liberar o Node nesta porta — na primeira vez\n' +
+        '     ele pergunta, e negar (ou trocar a versão do Node) deixa a porta fechada;\n' +
+        '  2. a rede precisa estar marcada como "Particular", não "Pública";\n' +
+        '  3. o endereço acima muda sozinho se o roteador entregar outro IP — vale fixá-lo.\n' +
+        '  Conferência completa:  npm run doutor'
+    );
+  } else {
+    // eslint-disable-next-line no-console
+    console.warn('\n[atenção] nenhuma placa de rede com IPv4 encontrada: só dá para abrir nesta máquina.');
+  }
+
+  if (config.forcarHttps && !config.httpsProprio) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '\n[atenção] FORCE_HTTPS está ligado e não há certificado próprio: toda visita em http:// é\n' +
+        '          recusada ou redirecionada para https://, inclusive as da rede local.'
+    );
+  }
+
   if (!config.httpsProprio && config.producao && !config.trustProxy) {
     // eslint-disable-next-line no-console
     console.warn('[atenção] rodando sem TLS próprio e sem proxy declarado (TRUST_PROXY).');

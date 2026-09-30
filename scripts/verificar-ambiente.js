@@ -185,6 +185,59 @@ function pastaDeDados() {
   }
 }
 
+/**
+ * Acesso a partir das outras máquinas da rede.
+ *
+ * "Abre aqui mas não abre na mesa da colega" quase nunca é a plataforma: ela
+ * escuta em todas as placas de rede desde sempre. O que costuma barrar é o
+ * Firewall do Windows, a rede marcada como Pública, o IP que mudou sozinho —
+ * ou o HTTPS obrigatório ligado sem certificado. Esta conferência mostra por
+ * onde entrar e aponta o que está no caminho.
+ */
+function rede() {
+  const enderecos = [];
+  const interfaces = os.networkInterfaces();
+  for (const nome of Object.keys(interfaces)) {
+    for (const placa of interfaces[nome] || []) {
+      if ((placa.family === 'IPv4' || placa.family === 4) && !placa.internal) {
+        enderecos.push({ nome, endereco: placa.address });
+      }
+    }
+  }
+
+  const esquema = config.httpsProprio ? 'https' : 'http';
+  if (!enderecos.length) {
+    linha('alerta', 'Sem endereço de rede', 'nenhuma placa com IPv4: a plataforma só abre nesta máquina');
+  } else {
+    linha(
+      'ok',
+      `Endereço na rede: ${esquema}://${enderecos[0].endereco}:${config.port}`,
+      enderecos.length > 1
+        ? `outras placas: ${enderecos.slice(1).map((e) => e.endereco).join(', ')}`
+        : `placa ${enderecos[0].nome} — é este endereço que as outras máquinas digitam`
+    );
+  }
+
+  if (config.forcarHttps && !config.httpsProprio) {
+    linha(
+      'erro',
+      'FORCE_HTTPS ligado sem certificado próprio',
+      'toda visita em http:// é recusada, inclusive as da rede local. Tire FORCE_HTTPS do .env ' +
+        'ou gere o certificado:  npm run certificado'
+    );
+  }
+
+  if (os.platform() === 'win32') {
+    linha(
+      'alerta',
+      'Firewall do Windows',
+      `libere a porta ${config.port} para o Node se as outras máquinas não abrirem. No PowerShell ` +
+        'como administrador:  New-NetFirewallRule -DisplayName "JS Grilo Processos" -Direction Inbound ' +
+        `-Protocol TCP -LocalPort ${config.port} -Profile Private -Action Allow`
+    );
+  }
+}
+
 function notificacoes() {
   if (config.vapid.publica && config.vapid.privada) {
     linha('ok', 'Web Push configurado (VAPID)', 'notificação chega com o navegador fechado');
@@ -207,6 +260,7 @@ function main() {
   arquivoEnv();
   pastaDeDados();
   certificados();
+  rede();
   notificacoes();
 
   console.log('');
