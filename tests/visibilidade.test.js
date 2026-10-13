@@ -104,6 +104,38 @@ test('a listagem mostra o escritório inteiro; o filtro "meu setor" recorta', as
   assert.ok(!new RegExp(processo.codigo).test(meus), 'com o filtro ligado, some o que não é do setor');
 });
 
+test('a listagem mostra a data de conclusão — e só de quem foi concluído', async () => {
+  const parametros = require('../src/domain/parametros');
+  const anexo = parametros.texto('EXIGIR_UPLOAD_DOCUMENTOS', 'Sim');
+  parametros.definir('EXIGIR_UPLOAD_DOCUMENTOS', 'Não');
+
+  const aberto = novoProcesso();
+  const concluido = novoProcesso();
+  for (const item of checklist.doProcesso(concluido.id)) {
+    if (!item.resposta) checklist.responder(item.id, { resposta: 'Sim' }, admin);
+  }
+  processosDom.recalcularStatus(concluido.id, admin);
+  processosDom.concluir(concluido.id, admin);
+  parametros.definir('EXIGIR_UPLOAD_DOCUMENTOS', anexo);
+
+  const data = processosDom.obter(concluido.id).data_conclusao;
+  assert.ok(data, 'concluir grava a data');
+  const [ano, mes, dia] = data.slice(0, 10).split('-');
+
+  const http = await entrar('samuel');
+  const html = await (await http.get('/processos')).text();
+  assert.match(html, /<th>Conclusão<\/th>/);
+
+  // A linha de cada processo, do número até o fim da linha da tabela.
+  const linha = (codigo) => html.slice(html.indexOf(codigo), html.indexOf('</tr>', html.indexOf(codigo)));
+  assert.ok(linha(concluido.codigo).includes(`${dia}/${mes}/${ano}`), 'o concluído mostra a data');
+
+  // O aberto não tem conclusão: a célula fica com o traço, e nenhuma data a
+  // mais além da abertura e da previsão.
+  const datasDoAberto = linha(aberto.codigo).match(/\d{2}\/\d{2}\/\d{4}/g) || [];
+  assert.strictEqual(datasDoAberto.length, 2, 'em aberto só tem abertura e previsão');
+});
+
 test('processo excluído não existe para ninguém', async () => {
   const processo = novoProcesso();
   processosDom.remover(processo.id, admin, 'teste de visibilidade');

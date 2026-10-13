@@ -60,7 +60,7 @@
         <thead>
           <tr>
             <th>Número</th><th>Empresa</th><th>Tipo</th><th>Status</th>
-            <th>Etapa atual</th><th>Abertura</th><th>Previsão</th><th>Responsável</th>
+            <th>Etapa atual</th><th>Abertura</th><th>Previsão</th><th>Conclusão</th><th>Responsável</th>
           </tr>
         </thead>
         <tbody>
@@ -81,6 +81,9 @@
                   <span class="etiqueta et-vermelho">atrasado</span>
                 <% } %>
               </td>
+              <%# Só o processo concluído tem data aqui: o cancelado encerra sem
+                  concluir, e a reabertura apaga a data junto com o status. %>
+              <td><%= fmtData(p.data_conclusao) %></td>
               <td><%= p.responsavel_interno || '—' %></td>
             </tr>
           <% }) %>
