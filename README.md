@@ -876,8 +876,14 @@ As integrações ficam em `src/domain/integracoes.js`, cada uma com seu adaptado
 
 ## Tabela de preço
 
-Uma aba no menu de **todos os usuários**. Ela mostra a tabela de preço do escritório em tamanho de
-leitura, direto na tela — sem baixar arquivo, sem abrir outro programa.
+Uma aba no menu de **todos os usuários**. Ela mostra as tabelas de preço do escritório em tamanho
+de leitura, direto na tela — sem baixar arquivo, sem abrir outro programa.
+
+**São várias ao mesmo tempo.** Cada tabela tem título próprio (*Abertura de empresa*,
+*Mensalidades*, *Certidões*), e as publicadas aparecem num seletor no alto da aba, em ordem
+alfabética, para qualquer pessoa escolher qual abrir. A escolha fica lembrada durante a sessão:
+quem abriu *Mensalidades* volta a ela ao entrar de novo na aba. Cada tabela tem endereço próprio
+(`/tabela-preco?id=…`), então dá para guardar nos favoritos ou mandar a tabela certa para alguém.
 
 **Quem altera** é o administrador e o setor definido em `SETOR_TABELA_PRECO` (**Financeiro**, de
 fábrica). Para todos os demais a aba abre em consulta: eles veem a tabela inteira, com o zoom, e
@@ -920,14 +926,34 @@ Ampliar não cria detalhe, então o envio de uma imagem com menos de 1000 px de 
 recado a quem enviou, sugerindo trocar por uma versão maior ou pelo PDF original. É um aviso, não
 um bloqueio.
 
-### Versões
+### Publicar, trocar e retirar
 
-Cada envio guarda o anterior — uma tabela de preço tem histórico, e saber o que valia no mês
-passado é parte do trabalho. Quem pode alterar vê a lista das versões com data, autor e descrição,
-pode **fazer uma antiga voltar a ser a exibida** e pode apagar o que não serve mais. Apagando a que
-está em exibição, a mais recente das que sobraram assume: a tela nunca fica sem tabela tendo uma.
+Quem pode alterar tem, no fim da aba, o formulário de envio e a lista de **todas as tabelas**,
+publicadas ou não:
 
-Envio, troca e remoção entram no histórico do escritório (**Administração → Auditoria**).
+- **Publicar uma tabela nova** — arquivo, título e descrição. Sem título, vale o nome do arquivo.
+- **Trocar o preço de uma tabela que já existe** — envie o arquivo novo escolhendo-a em
+  *Substitui a tabela*. O arquivo novo entra publicado com o mesmo título, e o anterior sai de
+  publicação e fica guardado: o preço do mês passado continua consultável por quem administra.
+- **Retirar de publicação** — tira do seletor sem apagar; dá para publicar de novo depois.
+- **Renomear** e **apagar** (apagar leva o arquivo junto, e não mexe nas outras tabelas).
+
+Duas tabelas **publicadas** não podem ter o mesmo título — o seletor mostraria duas *Mensalidades*
+e quem lê teria de adivinhar qual vale. A plataforma recusa o envio, a publicação ou a troca de
+nome que causaria isso, e aponta o *Substitui a tabela* como caminho para atualizar o preço.
+
+**Tabela fora de publicação é preço que não vale mais**: quem só consulta não a abre nem por um
+endereço guardado — cai na primeira publicada, com um aviso — e não consegue baixar o arquivo.
+Quem administra abre qualquer uma, marcada como *fora de publicação*, para conferir antes de
+publicar ou consultar o que valia antes.
+
+Envio, troca, retirada, renomeação e remoção entram no histórico do escritório
+(**Administração → Auditoria**).
+
+> **Vindo da versão anterior**, em que só uma tabela aparecia: a que estava em exibição continua
+> publicada, as versões antigas ficam guardadas fora de publicação, e o título de cada uma nasce
+> do nome do arquivo — corrija em *Renomear*. Backups gerados antes desta mudança restauram do
+> mesmo jeito, sem publicar preço velho.
 
 ---
 

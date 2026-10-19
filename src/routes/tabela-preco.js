@@ -56,8 +56,14 @@ const TIPOS = {
 /* ------------------------------------------------------------------ tela */
 
 router.get('/', (req, res) => {
-  const item = tabelaPreco.atual();
   const podeEditar = acesso.podeEditarTabelaPreco(req.session.usuario);
+
+  // A escolha de quem lê fica na sessão: quem abriu "Mensalidades" volta a
+  // ela ao entrar de novo na aba, em vez de cair sempre na primeira da lista.
+  const pedido = req.query.id || req.session.tabelaPrecoId || null;
+  const { item, pedidaIndisponivel } = tabelaPreco.paraExibir(pedido, { podeVerTodas: podeEditar });
+  if (item) req.session.tabelaPrecoId = item.id;
+  else delete req.session.tabelaPrecoId;
 
   let planilha = null;
   let erroPlanilha = null;
@@ -72,11 +78,15 @@ router.get('/', (req, res) => {
   res.render('tabela-preco', {
     titulo: 'Tabela de preço',
     item,
+    publicadas: tabelaPreco.publicadas(),
+    // Só avisa quando o pedido veio do endereço: a escolha guardada na sessão
+    // que saiu de publicação é trocada sem alarde.
+    pedidaIndisponivel: Boolean(req.query.id) && pedidaIndisponivel,
     planilha,
     erroPlanilha,
     podeEditar,
     setorResponsavel: tabelaPreco.setorResponsavel(),
-    versoes: podeEditar ? tabelaPreco.versoes() : [],
+    todas: podeEditar ? tabelaPreco.todas() : [],
     larguraConfortavel: tabelaPreco.LARGURA_CONFORTAVEL,
     tamanhoMaximoMb: config.uploadMaxMb,
   });
@@ -86,8 +96,13 @@ router.get('/', (req, res) => {
 
 router.get('/arquivo/:id', (req, res) => {
   const item = tabelaPreco.obter(req.params.id);
-  if (!item) {
-    return res.status(404).render('erro', { titulo: 'Arquivo não encontrado', mensagem: '' });
+  // Tabela fora de publicação é preço que não vale mais: quem só consulta não
+  // a abre nem por endereço guardado. Quem administra, sim — é como confere.
+  if (!item || (!item.publicada && !acesso.podeEditarTabelaPreco(req.session.usuario))) {
+    return res.status(404).render('erro', {
+      titulo: 'Tabela não encontrada',
+      mensagem: 'Esta tabela de preço não está mais publicada.',
+    });
   }
   const caminho = tabelaPreco.caminhoAbsoluto(item);
   if (!fs.existsSync(caminho)) {
@@ -111,49 +126,88 @@ router.get('/arquivo/:id', (req, res) => {
 
 /* ------------------------------------------------------------- alteração */
 
+/** Volta para a aba mostrando a tabela em que se mexeu. */
+function voltar(res, id) {
+  res.redirect(id ? `/tabela-preco?id=${Number(id)}` : '/tabela-preco');
+}
+
+/** Mesmo tratamento de erro em todas as ações de quem administra. */
+function acao(fn) {
+  return (req, res, next) => {
+    try {
+      fn(req, res);
+    } catch (err) {
+      if (err instanceof ErroValidacao) {
+        flash(req, 'erro', err.message);
+        return voltar(res, req.params.id);
+      }
+      next(err);
+    }
+  };
+}
+
 router.post('/', acesso.exigirTabelaPreco, upload.single('arquivo'), csrf.verificar, (req, res, next) => {
   try {
     if (!req.file) throw new ErroValidacao('Escolha um arquivo .png, .pdf ou .xlsx para enviar.');
-    const { item, aviso } = tabelaPreco.registrar(req.file, req.body.descricao, req.session.usuario);
-    flash(req, aviso ? 'alerta' : 'sucesso', aviso || `Tabela de preço atualizada com ${item.nome_original}.`);
-    res.redirect('/tabela-preco');
+    const { item, aviso, substituida } = tabelaPreco.registrar(
+      req.file,
+      { titulo: req.body.titulo, descricao: req.body.descricao, substituiId: req.body.substitui_id },
+      req.session.usuario
+    );
+    const recado = substituida
+      ? `"${item.titulo}" atualizada: o arquivo novo está publicado e o anterior foi guardado fora de publicação.`
+      : `"${item.titulo}" publicada.`;
+    flash(req, aviso ? 'alerta' : 'sucesso', aviso ? `${recado} ${aviso}` : recado);
+    voltar(res, item.id);
   } catch (err) {
     // O arquivo já está no disco quando a validação falha aqui: some com ele.
     if (req.file && req.file.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     if (err instanceof ErroValidacao) {
       flash(req, 'erro', err.message);
-      return res.redirect('/tabela-preco');
+      return voltar(res, null);
     }
     next(err);
   }
 });
 
-router.post('/:id/atual', acesso.exigirTabelaPreco, (req, res, next) => {
-  try {
-    const item = tabelaPreco.tornarAtual(req.params.id, req.session.usuario);
-    flash(req, 'sucesso', `${item.nome_original} voltou a ser a tabela em exibição.`);
-    res.redirect('/tabela-preco');
-  } catch (err) {
-    if (err instanceof ErroValidacao) {
-      flash(req, 'erro', err.message);
-      return res.redirect('/tabela-preco');
-    }
-    next(err);
-  }
-});
+router.post(
+  '/:id/editar',
+  acesso.exigirTabelaPreco,
+  acao((req, res) => {
+    const item = tabelaPreco.atualizar(req.params.id, req.body, req.session.usuario);
+    flash(req, 'sucesso', `"${item.titulo}" salva.`);
+    voltar(res, item.id);
+  })
+);
 
-router.post('/:id/remover', acesso.exigirTabelaPreco, (req, res, next) => {
-  try {
+router.post(
+  '/:id/publicar',
+  acesso.exigirTabelaPreco,
+  acao((req, res) => {
+    const item = tabelaPreco.definirPublicacao(req.params.id, true, req.session.usuario);
+    flash(req, 'sucesso', `"${item.titulo}" está publicada para todo o escritório.`);
+    voltar(res, item.id);
+  })
+);
+
+router.post(
+  '/:id/retirar',
+  acesso.exigirTabelaPreco,
+  acao((req, res) => {
+    const item = tabelaPreco.definirPublicacao(req.params.id, false, req.session.usuario);
+    flash(req, 'sucesso', `"${item.titulo}" saiu de publicação e continua guardada.`);
+    voltar(res, item.id);
+  })
+);
+
+router.post(
+  '/:id/remover',
+  acesso.exigirTabelaPreco,
+  acao((req, res) => {
     const item = tabelaPreco.remover(req.params.id, req.session.usuario);
-    flash(req, 'sucesso', `${item.nome_original} removida.`);
-    res.redirect('/tabela-preco');
-  } catch (err) {
-    if (err instanceof ErroValidacao) {
-      flash(req, 'erro', err.message);
-      return res.redirect('/tabela-preco');
-    }
-    next(err);
-  }
-});
+    flash(req, 'sucesso', `"${item.titulo}" apagada.`);
+    voltar(res, null);
+  })
+);
 
 module.exports = router;

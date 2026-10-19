@@ -66,6 +66,27 @@ const TABELAS = [
  */
 const TABELAS_DE_FORA = ['sessoes', 'push_inscricoes'];
 
+/**
+ * Linhas de backups antigos que precisam ser traduzidas para as colunas de hoje.
+ *
+ * A restauração aproveita só as colunas que ainda existem, o que basta para
+ * coluna nova (ela entra com o padrão) — mas não para coluna **renomeada**: o
+ * valor dela seria jogado fora em silêncio. É o caso da tabela de preço, em que
+ * `atual` virou `publicada` quando passaram a ser várias; sem esta tradução,
+ * toda versão antiga voltaria publicada e o seletor se encheria de preço velho.
+ */
+const ADAPTACOES = {
+  tabela_preco(linha) {
+    const nova = { ...linha };
+    if (nova.publicada === undefined && nova.atual !== undefined) nova.publicada = nova.atual;
+    delete nova.atual;
+    if (!nova.titulo) {
+      nova.titulo = String(nova.nome_original || '').replace(/\.[^.]+$/, '') || `Tabela ${nova.id}`;
+    }
+    return nova;
+  },
+};
+
 /** Rótulos usados na tela de conferência. */
 const ROTULOS = {
   setores: 'Setores',
@@ -414,7 +435,8 @@ function restaurar(dados, { usuario = null, restaurarArquivos: reporArquivos = t
       }
 
       for (const nome of TABELAS) {
-        const linhas = Array.isArray(tabelas[nome]) ? tabelas[nome] : [];
+        const brutas = Array.isArray(tabelas[nome]) ? tabelas[nome] : [];
+        const linhas = ADAPTACOES[nome] ? brutas.map(ADAPTACOES[nome]) : brutas;
         inseridos[nome] = 0;
         if (!linhas.length || !tabelaExiste(nome)) continue;
 
@@ -480,6 +502,7 @@ module.exports = {
   VERSAO,
   TABELAS,
   TABELAS_DE_FORA,
+  ADAPTACOES,
   ROTULOS,
   gerar,
   analisar,

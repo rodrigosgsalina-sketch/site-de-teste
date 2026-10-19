@@ -15,8 +15,14 @@
  *                em tabela. Vem como dados, e não como HTML pronto: planilha é
  *                arquivo de terceiro, e o que ela traz é texto, nunca marcação.
  *
- * Cada envio guarda o anterior. Uma tabela de preço tem histórico, e saber o
- * que valia no mês passado é parte do trabalho.
+ * São **várias tabelas ao mesmo tempo** — abertura de empresa, mensalidade
+ * contábil, certidões —, cada uma com título próprio. As publicadas aparecem
+ * para todo o escritório, que escolhe qual abrir; as que saem de publicação
+ * ficam guardadas, porque o preço do mês passado também é informação.
+ *
+ * Trocar o preço de uma tabela é enviar o arquivo novo **no lugar** dela: o
+ * novo herda o título e entra publicado, o antigo sai de publicação e fica no
+ * histórico. Assim o seletor nunca mostra duas "Abertura de empresa".
  */
 
 const fs = require('fs');
@@ -70,14 +76,47 @@ const SELECT = `
     FROM tabela_preco t
     LEFT JOIN usuarios u ON u.id = t.usuario_id`;
 
-/** A versão em exibição. */
-function atual() {
-  return db.get().prepare(`${SELECT} WHERE t.atual = 1 ORDER BY t.id DESC LIMIT 1`).get() || null;
+/** Título padrão: o nome do arquivo, sem a extensão. */
+function tituloPadrao(nomeOriginal) {
+  return String(nomeOriginal || '').replace(/\.[^.]+$/, '').trim().slice(0, 120);
 }
 
-/** Todas as versões, da mais nova para a mais antiga. */
-function versoes(limite = 30) {
-  return db.get().prepare(`${SELECT} ORDER BY t.id DESC LIMIT ?`).all(limite);
+/** As publicadas, em ordem alfabética de título — é a ordem do seletor. */
+function publicadas() {
+  return db
+    .get()
+    .prepare(`${SELECT} WHERE t.publicada = 1 ORDER BY t.titulo COLLATE NOCASE, t.id DESC`)
+    .all();
+}
+
+/** Todas, publicadas primeiro, para a tela de quem administra. */
+function todas(limite = 200) {
+  return db
+    .get()
+    .prepare(`${SELECT} ORDER BY t.publicada DESC, t.titulo COLLATE NOCASE, t.id DESC LIMIT ?`)
+    .all(limite);
+}
+
+/**
+ * A tabela que a tela vai mostrar.
+ *
+ * Quem só consulta vê apenas as publicadas: um link antigo para uma tabela que
+ * saiu de publicação cai na primeira publicada, em vez de abrir um preço que
+ * não vale mais. Quem administra abre qualquer uma — é assim que confere um
+ * arquivo antes de publicá-lo, ou consulta o que valia antes.
+ *
+ * Devolve `{ item, pedidaIndisponivel }`: o segundo diz se foi pedida uma
+ * tabela que não pôde ser mostrada, para a tela avisar em vez de trocar calada.
+ */
+function paraExibir(idPedido, { podeVerTodas = false } = {}) {
+  const lista = publicadas();
+  const id = Number(idPedido) || 0;
+  if (id) {
+    const pedida = obter(id);
+    if (pedida && (pedida.publicada || podeVerTodas)) return { item: pedida, pedidaIndisponivel: false };
+    return { item: lista[0] || null, pedidaIndisponivel: true };
+  }
+  return { item: lista[0] || null, pedidaIndisponivel: false };
 }
 
 function obter(id) {
@@ -174,25 +213,77 @@ function grade(item, { maxLinhas = 400, maxColunas = 40 } = {}) {
 }
 
 /**
- * Grava o envio como a versão em exibição e devolve
- * `{ item, aviso }` — `aviso` é o recado sobre a imagem ter chegado pequena
- * demais para ser lida ampliada, quando for o caso.
+ * Título já em uso por outra tabela publicada?
+ *
+ * Duas "Abertura de empresa" no seletor obrigam quem lê a adivinhar qual vale.
+ * A comparação ignora maiúsculas e espaços nas pontas — "abertura de empresa "
+ * é o mesmo título.
  */
-function registrar(arquivo, descricao, usuario) {
+function tituloEmUso(titulo, ignorarId = 0) {
+  return (
+    db
+      .get()
+      .prepare(
+        `SELECT id, titulo FROM tabela_preco
+          WHERE publicada = 1 AND id <> ? AND lower(trim(titulo)) = lower(trim(?))
+          LIMIT 1`
+      )
+      .get(Number(ignorarId) || 0, String(titulo || '')) || null
+  );
+}
+
+function exigirTituloLivre(titulo, ignorarId = 0) {
+  const outra = tituloEmUso(titulo, ignorarId);
+  if (outra) {
+    throw new ErroValidacao(
+      `Já existe uma tabela publicada chamada "${outra.titulo}". Para trocar o preço dela, envie o ` +
+        'arquivo novo escolhendo-a em "Substitui a tabela"; para ter as duas, dê outro título.'
+    );
+  }
+}
+
+/**
+ * Grava o envio e devolve `{ item, aviso, substituida }`.
+ *
+ * Com `substituiId`, o arquivo novo entra no lugar daquela tabela: herda o
+ * título (se nenhum outro foi digitado) e a tira de publicação, tudo na mesma
+ * transação — o seletor nunca fica um instante sem ela nem com as duas.
+ *
+ * `aviso` é o recado sobre a imagem ter chegado pequena demais para ser lida
+ * ampliada, quando for o caso.
+ */
+function registrar(arquivo, dados = {}, usuario) {
   const formato = formatoDe(arquivo.originalname);
   if (!formato) throw new ErroValidacao('Envie um arquivo .png, .pdf ou .xlsx.');
+
+  const substituida = dados.substituiId ? obter(dados.substituiId) : null;
+  if (dados.substituiId && !substituida) {
+    throw new ErroValidacao('A tabela a ser substituída não existe mais. Recarregue a página.');
+  }
+
+  const titulo = (
+    String(dados.titulo || '').trim() ||
+    (substituida ? substituida.titulo : '') ||
+    tituloPadrao(arquivo.originalname)
+  ).slice(0, 120);
+  if (!titulo) throw new ErroValidacao('Dê um título à tabela.');
+  exigirTituloLivre(titulo, substituida ? substituida.id : 0);
 
   const caminho = path.join(pasta(), arquivo.filename);
   const medidas = formato === 'imagem' ? medidasPNG(caminho) : null;
 
   const id = db.tx(() => {
-    db.get().prepare('UPDATE tabela_preco SET atual = 0 WHERE atual = 1').run();
+    if (substituida) {
+      db.get().prepare('UPDATE tabela_preco SET publicada = 0 WHERE id = ?').run(substituida.id);
+    }
     const info = db
       .get()
       .prepare(
         `INSERT INTO tabela_preco
-           (nome_original, nome_arquivo, formato, mime, tamanho, largura, altura, descricao, atual, usuario_id)
-         VALUES (@nome_original, @nome_arquivo, @formato, @mime, @tamanho, @largura, @altura, @descricao, 1, @usuario_id)`
+           (nome_original, nome_arquivo, formato, mime, tamanho, largura, altura,
+            titulo, descricao, publicada, usuario_id)
+         VALUES (@nome_original, @nome_arquivo, @formato, @mime, @tamanho, @largura, @altura,
+                 @titulo, @descricao, 1, @usuario_id)`
       )
       .run({
         nome_original: String(arquivo.originalname || '').slice(0, 200),
@@ -202,7 +293,8 @@ function registrar(arquivo, descricao, usuario) {
         tamanho: arquivo.size || 0,
         largura: medidas ? medidas.largura : null,
         altura: medidas ? medidas.altura : null,
-        descricao: (descricao || '').trim() || null,
+        titulo,
+        descricao: String(dados.descricao || '').trim().slice(0, 200) || null,
         usuario_id: usuario ? usuario.id : null,
       });
     return Number(info.lastInsertRowid);
@@ -211,9 +303,11 @@ function registrar(arquivo, descricao, usuario) {
   const item = obter(id);
   historico.registrar({
     processoId: null,
-    acao: 'Tabela de Preço Atualizada',
+    acao: 'Tabela de Preço Publicada',
     usuario,
-    observacao: `${item.nome_original} (${Math.round((item.tamanho || 0) / 1024)} KB)`,
+    observacao:
+      `"${item.titulo}" — ${item.nome_original} (${Math.round((item.tamanho || 0) / 1024)} KB)` +
+      (substituida ? `, no lugar da versão de ${substituida.criado_em}.` : '.'),
   });
 
   const aviso =
@@ -222,52 +316,63 @@ function registrar(arquivo, descricao, usuario) {
         `ampliar não cria detalhe: se tiver uma versão maior (ou o PDF original), envie-a no lugar.`
       : null;
 
-  return { item, aviso };
+  return { item, aviso, substituida };
 }
 
-/** Escolhe uma versão anterior para voltar a ser a exibida. */
-function tornarAtual(id, usuario) {
+/** Corrige título e descrição de uma tabela. */
+function atualizar(id, dados, usuario) {
   const item = obter(id);
-  if (!item) throw new ErroValidacao('Versão não encontrada.');
-  if (item.atual) return item;
+  if (!item) throw new ErroValidacao('Tabela não encontrada.');
+  const titulo = String(dados.titulo || '').trim().slice(0, 120);
+  if (!titulo) throw new ErroValidacao('O título não pode ficar em branco.');
+  if (item.publicada) exigirTituloLivre(titulo, item.id);
 
-  db.tx(() => {
-    db.get().prepare('UPDATE tabela_preco SET atual = 0 WHERE atual = 1').run();
-    db.get().prepare('UPDATE tabela_preco SET atual = 1 WHERE id = ?').run(item.id);
-  });
+  const descricao = String(dados.descricao || '').trim().slice(0, 200) || null;
+  db.get().prepare('UPDATE tabela_preco SET titulo = ?, descricao = ? WHERE id = ?').run(titulo, descricao, item.id);
 
+  if (titulo !== item.titulo || descricao !== item.descricao) {
+    historico.registrar({
+      processoId: null,
+      acao: 'Tabela de Preço Alterada',
+      usuario,
+      observacao: titulo !== item.titulo ? `"${item.titulo}" passou a se chamar "${titulo}".` : `"${titulo}": descrição alterada.`,
+    });
+  }
+  return obter(item.id);
+}
+
+/** Põe ou tira uma tabela do seletor de todo o escritório. */
+function definirPublicacao(id, publicar, usuario) {
+  const item = obter(id);
+  if (!item) throw new ErroValidacao('Tabela não encontrada.');
+  const alvo = publicar ? 1 : 0;
+  if (item.publicada === alvo) return item;
+  if (alvo) exigirTituloLivre(item.titulo, item.id);
+
+  db.get().prepare('UPDATE tabela_preco SET publicada = ? WHERE id = ?').run(alvo, item.id);
   historico.registrar({
     processoId: null,
-    acao: 'Tabela de Preço Atualizada',
+    acao: alvo ? 'Tabela de Preço Publicada' : 'Tabela de Preço Retirada',
     usuario,
-    observacao: `Versão de ${item.criado_em} (${item.nome_original}) voltou a ser a exibida.`,
+    observacao: `"${item.titulo}" (${item.nome_original}, de ${item.criado_em}).`,
   });
-  return obter(id);
+  return obter(item.id);
 }
 
-/**
- * Apaga uma versão, arquivo e tudo. Some a que estava em exibição, quem assume
- * é a mais recente das que sobraram — a tela nunca fica sem tabela tendo uma.
- */
+/** Apaga uma tabela, arquivo e tudo. As demais não são tocadas. */
 function remover(id, usuario) {
   const item = obter(id);
-  if (!item) throw new ErroValidacao('Versão não encontrada.');
+  if (!item) throw new ErroValidacao('Tabela não encontrada.');
 
   const caminho = caminhoAbsoluto(item);
-  db.tx(() => {
-    db.get().prepare('DELETE FROM tabela_preco WHERE id = ?').run(item.id);
-    if (item.atual) {
-      const proxima = db.get().prepare('SELECT id FROM tabela_preco ORDER BY id DESC LIMIT 1').get();
-      if (proxima) db.get().prepare('UPDATE tabela_preco SET atual = 1 WHERE id = ?').run(proxima.id);
-    }
-  });
+  db.get().prepare('DELETE FROM tabela_preco WHERE id = ?').run(item.id);
   if (fs.existsSync(caminho)) fs.unlinkSync(caminho);
 
   historico.registrar({
     processoId: null,
     acao: 'Tabela de Preço Removida',
     usuario,
-    observacao: `${item.nome_original} (versão de ${item.criado_em}).`,
+    observacao: `"${item.titulo}" — ${item.nome_original} (de ${item.criado_em}).`,
   });
   return item;
 }
@@ -279,13 +384,17 @@ module.exports = {
   formatoDe,
   setorResponsavel,
   pasta,
-  atual,
-  versoes,
+  tituloPadrao,
+  publicadas,
+  todas,
+  paraExibir,
   obter,
   caminhoAbsoluto,
   medidasPNG,
   grade,
+  tituloEmUso,
   registrar,
-  tornarAtual,
+  atualizar,
+  definirPublicacao,
   remover,
 };

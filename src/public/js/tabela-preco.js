@@ -18,6 +18,25 @@
 
 const dados = window.TABELA_PRECO;
 if (dados) iniciar();
+ligarEnvio();
+
+/**
+ * Formulário de envio (só para quem administra): escolher "Substitui a
+ * tabela" mostra no título o nome que o arquivo novo vai herdar. O servidor
+ * já usa esse título quando o campo fica em branco — a tela só deixa isso à
+ * vista antes de enviar.
+ */
+function ligarEnvio() {
+  const substitui = document.querySelector('[data-tp-substitui]');
+  const titulo = document.querySelector('[data-tp-titulo]');
+  if (!substitui || !titulo) return;
+  const padrao = titulo.placeholder;
+  substitui.addEventListener('change', () => {
+    const opcao = substitui.selectedOptions[0];
+    const herdado = opcao && opcao.dataset.titulo;
+    titulo.placeholder = herdado ? `${herdado} — mantém o título da tabela substituída` : padrao;
+  });
+}
 
 function iniciar() {
   const palco = document.querySelector('[data-tp-palco]');

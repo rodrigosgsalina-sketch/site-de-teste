@@ -419,6 +419,42 @@ function removerParametrosAposentados(conn) {
   console.log(`[migração] parâmetro(s) sem uso removido(s): ${apagados.join(', ')}.`);
 }
 
+/**
+ * A tabela de preço deixou de ser uma só.
+ *
+ * Antes, `atual = 1` marcava a única em exibição e as outras eram versões
+ * anteriores dela. Agora o escritório publica várias ao mesmo tempo, cada uma
+ * com título próprio, e quem lê escolhe qual abrir. A coluna é renomeada para
+ * `publicada` — o sentido é o mesmo para quem já tinha dados: a que estava em
+ * exibição continua publicada, e as versões antigas continuam guardadas fora
+ * de publicação. O título nasce do nome do arquivo enviado, e pode ser
+ * corrigido na tela.
+ *
+ * Roda antes do schema: ele cria um índice sobre `publicada`, e o índice não
+ * existe sem a coluna.
+ */
+function migrarTabelasDePreco(conn) {
+  if (!tabelaExiste(conn, 'tabela_preco')) return;
+  const atuais = colunas(conn, 'tabela_preco');
+  if (atuais.includes('publicada')) return;
+
+  conn.transaction(() => {
+    conn.exec('DROP INDEX IF EXISTS idx_tabela_preco_atual;');
+    conn.exec('ALTER TABLE tabela_preco RENAME COLUMN atual TO publicada;');
+    if (!atuais.includes('titulo')) {
+      conn.exec("ALTER TABLE tabela_preco ADD COLUMN titulo TEXT NOT NULL DEFAULT '';");
+    }
+    const linhas = conn.prepare("SELECT id, nome_original FROM tabela_preco WHERE titulo = ''").all();
+    const nomear = conn.prepare('UPDATE tabela_preco SET titulo = ? WHERE id = ?');
+    for (const linha of linhas) {
+      nomear.run(String(linha.nome_original || '').replace(/\.[^.]+$/, '') || `Tabela ${linha.id}`, linha.id);
+    }
+  })();
+
+  // eslint-disable-next-line no-console
+  console.log('[migração] tabela de preço passou a aceitar várias publicadas ao mesmo tempo.');
+}
+
 function migrate(conn) {
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   migrarLoginDeUsuarios(conn);
@@ -428,6 +464,7 @@ function migrate(conn) {
   // Antes do schema: ele cria um índice sobre a coluna nova do checklist
   // modelo, e o índice não existe sem a coluna.
   migrarSubtipoNoChecklistModelo(conn);
+  migrarTabelasDePreco(conn);
   conn.exec(schema);
   // Depois do schema: estas dependem das tabelas de ligação que ele acabou de criar.
   migrarSubtiposDoProcesso(conn);

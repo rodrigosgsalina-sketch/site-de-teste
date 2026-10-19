@@ -15,34 +15,60 @@
 
 <div class="cartao">
   <div class="cartao-titulo">
-    <h2 style="margin:0">Tabela de preço</h2>
-    <% if (item) { %>
-      <span class="etiqueta et-neutro">
-        <%= item.nome_original %> · enviada em <%= fmtDataHora(item.criado_em) %>
-        <% if (item.usuario_nome) { %> por <%= item.usuario_nome %><% } %>
-      </span>
-    <% } %>
+    <h2 style="margin:0">Tabelas de preço</h2>
+    <span class="etiqueta et-neutro"><%= publicadas.length %> publicada(s)</span>
   </div>
   <p class="dica" style="margin:.2rem 0 0">
-    A tabela vale para todo o escritório e fica aqui, sempre na versão mais recente.
+    Escolha abaixo qual tabela abrir. Elas valem para todo o escritório.
     <% if (podeEditar) { %>
-      Você pode alterá-la: envie o arquivo novo abaixo e ele passa a ser o exibido.
+      Você pode publicar, trocar e retirar tabelas na área no fim da página.
     <% } else { %>
-      Quem altera é o setor <%= setorResponsavel %> e os administradores; para os demais ela fica
-      disponível para consulta.
+      Quem publica e altera é o setor <%= setorResponsavel %> e os administradores.
     <% } %>
   </p>
-  <% if (item && item.descricao) { %>
-    <p style="margin:.7rem 0 0"><%= item.descricao %></p>
+
+  <% if (publicadas.length) { %>
+    <%# Seletor: um link por tabela publicada. É link, e não um botão que troca
+        a tela por JavaScript, de propósito — dá para guardar nos favoritos ou
+        mandar a tabela certa para alguém. %>
+    <nav class="tp-seletor" aria-label="Tabelas de preço publicadas">
+      <% publicadas.forEach(function (t) { %>
+        <a href="/tabela-preco?id=<%= t.id %>"
+           class="tp-opcao <%= item && item.id === t.id ? 'ativa' : '' %>"
+           <% if (item && item.id === t.id) { %>aria-current="page"<% } %>><%= t.titulo %></a>
+      <% }) %>
+    </nav>
   <% } %>
 </div>
+
+<% if (pedidaIndisponivel) { %>
+  <div class="aviso aviso-alerta">
+    A tabela deste endereço não está mais publicada<%= item ? ' — abrindo a primeira da lista.' : '.' %>
+  </div>
+<% } %>
+
+<% if (item) { %>
+  <div class="tp-sobre">
+    <h3 style="margin:0"><%= item.titulo %></h3>
+    <% if (!item.publicada) { %>
+      <span class="etiqueta et-amarelo" title="Só quem administra vê esta tabela">fora de publicação</span>
+    <% } %>
+    <span class="dica">
+      <%= item.nome_original %> · enviada em <%= fmtDataHora(item.criado_em) %>
+      <% if (item.usuario_nome) { %> por <%= item.usuario_nome %><% } %>
+    </span>
+    <% if (item.descricao) { %><p style="margin:.3rem 0 0;width:100%"><%= item.descricao %></p><% } %>
+  </div>
+<% } %>
 
 <% if (!item) { %>
   <div class="cartao">
     <p class="vazio">
-      Nenhuma tabela de preço publicada ainda.
+      Nenhuma tabela de preço publicada.
       <% if (!podeEditar) { %>
-        Assim que o setor <%= setorResponsavel %> enviar o arquivo, ele aparece aqui.
+        Assim que o setor <%= setorResponsavel %> publicar uma, ela aparece aqui.
+      <% } else { %>
+        Publique a primeira no formulário abaixo.
       <% } %>
     </p>
   </div>
@@ -117,19 +143,37 @@
 
 <!-- ------------------------------------------------------------ alteração -->
 <% if (podeEditar) { %>
-  <div class="grade grade-2">
+  <div class="grade grade-2" id="administrar">
     <div class="cartao">
-      <h3><%= item ? 'Enviar uma nova versão' : 'Publicar a tabela de preço' %></h3>
+      <h3>Publicar uma tabela</h3>
       <p class="dica" style="margin:0 0 .8rem">
         Aceita <strong>.png</strong>, <strong>.pdf</strong> e <strong>.xlsx</strong>, até
         <%= tamanhoMaximoMb %> MB. Para leitura na tela, o PDF é o que fica mais nítido em qualquer
         zoom; sendo imagem, envie com pelo menos <%= larguraConfortavel %> px de largura.
       </p>
-      <form method="post" action="/tabela-preco" enctype="multipart/form-data">
+      <form method="post" action="/tabela-preco" enctype="multipart/form-data" data-tp-envio>
         <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <div class="campo">
           <label for="arquivo">Arquivo <span class="obrig">*</span></label>
           <input type="file" id="arquivo" name="arquivo" accept=".png,.pdf,.xlsx" required>
+        </div>
+        <div class="campo">
+          <label for="substitui_id">Substitui a tabela</label>
+          <select id="substitui_id" name="substitui_id" data-tp-substitui>
+            <option value="">— nenhuma: é uma tabela nova —</option>
+            <% publicadas.forEach(function (t) { %>
+              <option value="<%= t.id %>" data-titulo="<%= t.titulo %>"><%= t.titulo %></option>
+            <% }) %>
+          </select>
+          <div class="dica">
+            Para atualizar o preço de uma tabela que já existe. O arquivo novo entra publicado com o
+            mesmo título, e o anterior sai de publicação e fica guardado na lista ao lado.
+          </div>
+        </div>
+        <div class="campo">
+          <label for="titulo">Título</label>
+          <input type="text" id="titulo" name="titulo" maxlength="120" data-tp-titulo
+                 placeholder="ex.: Abertura de empresa — se ficar em branco, usa o nome do arquivo">
         </div>
         <div class="campo">
           <label for="descricao">Descrição</label>
@@ -141,34 +185,59 @@
     </div>
 
     <div class="cartao">
-      <h3>Versões anteriores</h3>
-      <% if (versoes.length <= 1) { %>
-        <p class="vazio">Nenhuma versão anterior — esta é a primeira.</p>
+      <h3>Todas as tabelas</h3>
+      <% if (!todas.length) { %>
+        <p class="vazio">Nenhuma tabela enviada ainda.</p>
       <% } else { %>
         <p class="dica" style="margin:0 0 .8rem">
-          Cada envio guarda o anterior. Uma versão antiga pode voltar a ser a exibida.
+          As publicadas aparecem no seletor para todo o escritório. Retirar de publicação esconde
+          a tabela sem apagar — dá para publicar de novo depois.
         </p>
         <ul class="tp-versoes">
-          <% versoes.forEach(function (v) { %>
-            <li>
-              <div>
-                <strong><%= v.nome_original %></strong>
-                <% if (v.atual) { %><span class="etiqueta et-verde">em exibição</span><% } %>
+          <% todas.forEach(function (v) { %>
+            <li class="<%= v.publicada ? '' : 'tp-retirada' %>">
+              <div class="tp-versao-info">
+                <a href="/tabela-preco?id=<%= v.id %>"><strong><%= v.titulo %></strong></a>
+                <% if (v.publicada) { %>
+                  <span class="etiqueta et-verde">publicada</span>
+                <% } else { %>
+                  <span class="etiqueta et-neutro">fora de publicação</span>
+                <% } %>
                 <small>
-                  <%= fmtDataHora(v.criado_em) %><% if (v.usuario_nome) { %> · <%= v.usuario_nome %><% } %>
+                  <%= v.nome_original %> · <%= fmtDataHora(v.criado_em) %><% if (v.usuario_nome) { %> · <%= v.usuario_nome %><% } %>
                   · <%= Math.max(1, Math.round((v.tamanho || 0) / 1024)) %> KB
                   <% if (v.descricao) { %> · <%= v.descricao %><% } %>
                 </small>
+                <details class="tp-renomear">
+                  <summary>Renomear</summary>
+                  <form method="post" action="/tabela-preco/<%= v.id %>/editar">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <div class="campo">
+                      <label for="titulo-<%= v.id %>">Título</label>
+                      <input type="text" id="titulo-<%= v.id %>" name="titulo" value="<%= v.titulo %>" maxlength="120" required>
+                    </div>
+                    <div class="campo">
+                      <label for="descricao-<%= v.id %>">Descrição</label>
+                      <input type="text" id="descricao-<%= v.id %>" name="descricao" value="<%= v.descricao || '' %>" maxlength="200">
+                    </div>
+                    <button class="botao botao-secundario botao-pequeno">Salvar</button>
+                  </form>
+                </details>
               </div>
               <div class="tp-versao-acoes">
-                <% if (!v.atual) { %>
-                  <form method="post" action="/tabela-preco/<%= v.id %>/atual">
+                <% if (v.publicada) { %>
+                  <form method="post" action="/tabela-preco/<%= v.id %>/retirar">
                     <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-                    <button class="botao botao-secundario botao-pequeno">Exibir esta</button>
+                    <button class="botao botao-secundario botao-pequeno">Retirar</button>
+                  </form>
+                <% } else { %>
+                  <form method="post" action="/tabela-preco/<%= v.id %>/publicar">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button class="botao botao-secundario botao-pequeno">Publicar</button>
                   </form>
                 <% } %>
                 <form method="post" action="/tabela-preco/<%= v.id %>/remover"
-                      data-confirmar="Apagar esta versão da tabela de preço? O arquivo some do servidor.">
+                      data-confirmar="Apagar &quot;<%= v.titulo %>&quot; (<%= v.nome_original %>)? O arquivo some do servidor.">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                   <button class="botao botao-perigo botao-pequeno">Apagar</button>
                 </form>
@@ -181,7 +250,7 @@
   </div>
 <% } %>
 
-<% if (item) { %>
+<% if (item || podeEditar) { %>
   <script nonce="<%= nonce %>">
     window.TABELA_PRECO = <%- jsonSeguro(dadosVisualizador) %>;
     window.TABELA_PRECO_PDFJS = {

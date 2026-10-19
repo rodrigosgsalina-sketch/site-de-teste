@@ -28,6 +28,7 @@ const conn = carregarSeed(db, { senha: 'teste123' });
 const acesso = require('../src/domain/acesso');
 const parametros = require('../src/domain/parametros');
 const tabelaPreco = require('../src/domain/tabela-preco');
+const backup = require('../src/domain/backup');
 
 const app = require('../src/app');
 const servidor = app.listen(0);
@@ -54,15 +55,18 @@ function pngFalso(largura, altura = 100) {
 }
 
 /** Grava um arquivo na pasta da tabela de preço, como o multer faria. */
-function enviar(nomeOriginal, conteudo, quem = admin, descricao = null) {
+function enviar(nomeOriginal, conteudo, quem = admin, dados = {}) {
   const nomeArquivo = `${Date.now()}-${Math.random().toString(16).slice(2, 10)}${path.extname(nomeOriginal)}`;
   fs.writeFileSync(path.join(tabelaPreco.pasta(), nomeArquivo), conteudo);
   return tabelaPreco.registrar(
     { originalname: nomeOriginal, filename: nomeArquivo, size: conteudo.length, mimetype: 'application/octet-stream' },
-    descricao,
+    dados,
     quem
   );
 }
+
+/** Títulos publicados, na ordem do seletor. */
+const titulosPublicados = () => tabelaPreco.publicadas().map((t) => t.titulo);
 
 /* -------------------------------------------------------- permissões */
 
@@ -116,56 +120,144 @@ test('o caminho do arquivo não escapa da pasta da tabela de preço', () => {
 
 /* ------------------------------------------------------------- envio */
 
-test('o envio vira a versão exibida e guarda a anterior', () => {
-  const primeira = enviar('precos-janeiro.png', pngFalso(1600, 900), admin, 'vigência de janeiro');
-  assert.strictEqual(primeira.item.formato, 'imagem');
-  assert.strictEqual(primeira.item.largura, 1600);
-  assert.strictEqual(tabelaPreco.atual().id, primeira.item.id);
+test('várias tabelas ficam publicadas ao mesmo tempo, cada uma com o seu título', () => {
+  const abertura = enviar('abertura.png', pngFalso(1600, 900), admin, { titulo: 'Abertura de empresa' });
+  const mensal = enviar('mensal.png', pngFalso(1600, 900), financeiro, { titulo: 'Mensalidades' });
+  const semTitulo = enviar('Certidões 2026.png', pngFalso(1600, 900));
 
-  const segunda = enviar('precos-fevereiro.png', pngFalso(1800, 900), financeiro);
-  assert.strictEqual(tabelaPreco.atual().id, segunda.item.id, 'a nova assume a exibição');
-  assert.strictEqual(tabelaPreco.obter(primeira.item.id).atual, 0, 'a anterior sai de exibição');
+  assert.strictEqual(semTitulo.item.titulo, 'Certidões 2026', 'sem título, vale o nome do arquivo');
+  const titulos = titulosPublicados();
+  for (const t of ['Abertura de empresa', 'Mensalidades', 'Certidões 2026']) {
+    assert.ok(titulos.includes(t), `"${t}" precisa estar publicada`);
+  }
+  assert.deepStrictEqual(titulos, [...titulos].sort((a, b) => a.localeCompare(b, 'pt-BR')), 'em ordem alfabética');
+  assert.ok(abertura.item.publicada && mensal.item.publicada);
+});
 
-  const nomes = tabelaPreco.versoes().map((v) => v.nome_original);
-  assert.ok(nomes.includes('precos-janeiro.png') && nomes.includes('precos-fevereiro.png'));
+test('quem lê escolhe qual tabela abrir', () => {
+  const [primeira, segunda] = tabelaPreco.publicadas();
+  assert.strictEqual(tabelaPreco.paraExibir(null).item.id, primeira.id, 'sem escolha, abre a primeira');
+  assert.strictEqual(tabelaPreco.paraExibir(segunda.id).item.id, segunda.id, 'com escolha, abre a escolhida');
+});
+
+test('substituir põe o arquivo novo no lugar e guarda o antigo fora de publicação', () => {
+  const antiga = tabelaPreco.publicadas().find((t) => t.titulo === 'Abertura de empresa');
+  const nova = enviar('abertura-v2.png', pngFalso(1800, 900), financeiro, { substituiId: antiga.id });
+
+  assert.strictEqual(nova.item.titulo, 'Abertura de empresa', 'o arquivo novo herda o título');
+  assert.strictEqual(nova.substituida.id, antiga.id);
+  assert.strictEqual(tabelaPreco.obter(antiga.id).publicada, 0, 'a anterior sai de publicação');
+  assert.ok(tabelaPreco.obter(antiga.id), 'mas continua guardada');
+  assert.strictEqual(
+    titulosPublicados().filter((t) => t === 'Abertura de empresa').length,
+    1,
+    'o seletor nunca mostra duas com o mesmo nome'
+  );
+});
+
+test('título repetido entre as publicadas é recusado — no envio, na publicação e ao renomear', () => {
+  assert.throws(
+    () => enviar('outra.png', pngFalso(1600, 900), admin, { titulo: '  mensalidades ' }),
+    /Já existe uma tabela publicada chamada "Mensalidades"/
+  );
+
+  // A versão antiga da abertura está fora de publicação: publicá-la de volta
+  // colocaria duas "Abertura de empresa" no seletor.
+  const antiga = tabelaPreco.todas().find((t) => t.titulo === 'Abertura de empresa' && !t.publicada);
+  assert.throws(() => tabelaPreco.definirPublicacao(antiga.id, true, admin), /Já existe uma tabela publicada/);
+
+  const certidoes = tabelaPreco.publicadas().find((t) => t.titulo === 'Certidões 2026');
+  assert.throws(() => tabelaPreco.atualizar(certidoes.id, { titulo: 'Mensalidades' }, admin), /Já existe/);
+
+  // Fora de publicação, o título repetido não atrapalha ninguém.
+  const renomeada = tabelaPreco.atualizar(antiga.id, { titulo: 'Abertura de empresa', descricao: 'até setembro' }, admin);
+  assert.strictEqual(renomeada.descricao, 'até setembro');
+});
+
+test('retirar de publicação esconde de quem lê, sem apagar', () => {
+  const certidoes = tabelaPreco.publicadas().find((t) => t.titulo === 'Certidões 2026');
+  tabelaPreco.definirPublicacao(certidoes.id, false, admin);
+
+  assert.ok(!titulosPublicados().includes('Certidões 2026'));
+  assert.ok(tabelaPreco.obter(certidoes.id), 'continua guardada');
+
+  // Quem só lê e pede a retirada pelo endereço cai na primeira publicada, com aviso.
+  const leitura = tabelaPreco.paraExibir(certidoes.id);
+  assert.notStrictEqual(leitura.item.id, certidoes.id);
+  assert.ok(leitura.pedidaIndisponivel);
+  // Quem administra abre, para conferir.
+  assert.strictEqual(tabelaPreco.paraExibir(certidoes.id, { podeVerTodas: true }).item.id, certidoes.id);
+
+  tabelaPreco.definirPublicacao(certidoes.id, true, admin);
+  assert.ok(titulosPublicados().includes('Certidões 2026'), 'e volta quando publicada de novo');
 });
 
 test('imagem estreita demais avisa quem enviou — ampliar não cria detalhe', () => {
-  const pequena = enviar('miniatura.png', pngFalso(480, 300));
+  const pequena = enviar('miniatura.png', pngFalso(480, 300), admin, { titulo: 'Miniatura' });
   assert.match(pequena.aviso, /480 px/);
 
-  const grande = enviar('boa.png', pngFalso(tabelaPreco.LARGURA_CONFORTAVEL + 200, 800));
+  const grande = enviar('boa.png', pngFalso(tabelaPreco.LARGURA_CONFORTAVEL + 200, 800), admin, { titulo: 'Grande' });
   assert.strictEqual(grande.aviso, null, 'imagem grande não precisa de recado');
 });
 
-test('o envio fica no histórico do escritório', () => {
-  const linha = conn
-    .prepare("SELECT * FROM historico WHERE acao = 'Tabela de Preço Atualizada' ORDER BY id DESC LIMIT 1")
-    .get();
-  assert.ok(linha, 'o envio precisa deixar rastro');
-  assert.strictEqual(linha.processo_id, null, 'a tabela de preço não pertence a processo nenhum');
+test('envio, retirada e remoção ficam no histórico do escritório', () => {
+  const acoes = conn
+    .prepare("SELECT DISTINCT acao FROM historico WHERE acao LIKE 'Tabela de Preço%' AND processo_id IS NULL")
+    .all()
+    .map((l) => l.acao);
+  assert.ok(acoes.includes('Tabela de Preço Publicada'));
+  assert.ok(acoes.includes('Tabela de Preço Retirada'));
 });
 
-test('uma versão anterior pode voltar a ser a exibida', () => {
-  const anteriores = tabelaPreco.versoes().filter((v) => !v.atual);
-  const escolhida = anteriores[anteriores.length - 1];
-  tabelaPreco.tornarAtual(escolhida.id, admin);
-  assert.strictEqual(tabelaPreco.atual().id, escolhida.id);
-  assert.strictEqual(tabelaPreco.versoes().filter((v) => v.atual).length, 1, 'só uma fica em exibição');
-});
+test('apagar uma tabela tira o arquivo do disco e não mexe nas outras', () => {
+  const alvo = tabelaPreco.publicadas().find((t) => t.titulo === 'Miniatura');
+  const caminho = tabelaPreco.caminhoAbsoluto(alvo);
+  const outras = titulosPublicados().filter((t) => t !== 'Miniatura');
 
-test('apagar a exibida promove a mais recente que sobrou, e o arquivo some do disco', () => {
-  const exibida = tabelaPreco.atual();
-  const caminho = tabelaPreco.caminhoAbsoluto(exibida);
-  assert.ok(fs.existsSync(caminho));
-
-  tabelaPreco.remover(exibida.id, admin);
+  tabelaPreco.remover(alvo.id, admin);
 
   assert.ok(!fs.existsSync(caminho), 'o arquivo é apagado junto');
-  assert.strictEqual(tabelaPreco.obter(exibida.id), null);
-  const nova = tabelaPreco.atual();
-  assert.ok(nova, 'sobrando versão, a tela não fica sem tabela');
-  assert.strictEqual(nova.id, Math.max(...tabelaPreco.versoes().map((v) => v.id)));
+  assert.strictEqual(tabelaPreco.obter(alvo.id), null);
+  assert.deepStrictEqual(titulosPublicados(), outras, 'as demais continuam publicadas');
+});
+
+test('banco da versão anterior (uma tabela "atual") vira o modelo de várias publicadas', () => {
+  // Volta a tabela ao formato antigo, com uma em exibição e uma versão velha.
+  conn.exec('DROP INDEX IF EXISTS idx_tabela_preco_publicada;');
+  conn.exec('ALTER TABLE tabela_preco DROP COLUMN titulo;');
+  conn.exec('ALTER TABLE tabela_preco RENAME COLUMN publicada TO atual;');
+  conn.exec('UPDATE tabela_preco SET atual = 0;');
+  const inserir = conn.prepare(
+    `INSERT INTO tabela_preco (nome_original, nome_arquivo, formato, tamanho, atual)
+     VALUES (?, ?, 'imagem', 10, ?)`
+  );
+  const velha = Number(inserir.run('precos-julho.png', 'x-velha.png', 0).lastInsertRowid);
+  const vigente = Number(inserir.run('precos-agosto.png', 'x-vigente.png', 1).lastInsertRowid);
+
+  db.migrate(conn);
+
+  assert.strictEqual(tabelaPreco.obter(vigente).publicada, 1, 'a que estava em exibição continua publicada');
+  assert.strictEqual(tabelaPreco.obter(velha).publicada, 0, 'a versão antiga continua guardada, fora do seletor');
+  assert.strictEqual(tabelaPreco.obter(vigente).titulo, 'precos-agosto', 'o título nasce do nome do arquivo');
+  assert.deepStrictEqual(titulosPublicados(), ['precos-agosto']);
+
+  // Deixa o banco como os testes seguintes esperam.
+  conn.prepare('DELETE FROM tabela_preco WHERE id IN (?, ?)').run(velha, vigente);
+  for (const t of tabelaPreco.todas()) tabelaPreco.definirPublicacao(t.id, true, admin);
+});
+
+test('backup antigo restaura a coluna "atual" como publicação, sem publicar preço velho', () => {
+  const adaptar = backup.ADAPTACOES.tabela_preco;
+  const vigente = adaptar({ id: 1, nome_original: 'precos.pdf', atual: 1 });
+  const velha = adaptar({ id: 2, nome_original: 'precos-antigos.pdf', atual: 0 });
+  assert.strictEqual(vigente.publicada, 1);
+  assert.strictEqual(velha.publicada, 0);
+  assert.strictEqual(vigente.titulo, 'precos');
+  assert.ok(!('atual' in vigente), 'a coluna que não existe mais não vai para o INSERT');
+  // Backup novo passa sem mudança.
+  const atual = adaptar({ id: 3, nome_original: 'a.pdf', titulo: 'Mensalidades', publicada: 0 });
+  assert.strictEqual(atual.titulo, 'Mensalidades');
+  assert.strictEqual(atual.publicada, 0);
 });
 
 /* --------------------------------------------------- leitor de PDF */
@@ -229,7 +321,7 @@ test('a tela abre para quem só consulta, sem o formulário de envio', async () 
   const html = await resposta.text();
   assert.match(html, /Tabela de preço/);
   assert.ok(!/name="arquivo"/.test(html), 'quem só consulta não recebe o formulário');
-  assert.match(html, /alterada pelo|Quem altera é o setor/i);
+  assert.match(html, /Quem publica e altera é o setor Financeiro/);
 });
 
 test('a aba aparece no menu de todo mundo', async () => {
@@ -246,10 +338,48 @@ test('sem permissão, o envio é recusado no servidor — não só escondido na 
 });
 
 test('o arquivo é servido com o tipo declarado e sem adivinhação do navegador', async () => {
-  const item = tabelaPreco.atual();
+  const item = tabelaPreco.publicadas()[0];
   const cliente = await sessao('ana.paula');
   const resposta = await cliente.get(`/tabela-preco/arquivo/${item.id}`);
   assert.strictEqual(resposta.status, 200);
   assert.strictEqual(resposta.headers.get('x-content-type-options'), 'nosniff');
   assert.ok(resposta.headers.get('content-type'));
+});
+
+test('o seletor mostra todas as publicadas para quem só consulta, e o endereço escolhe', async () => {
+  const cliente = await sessao('ana.paula');
+  const publicadas = tabelaPreco.publicadas();
+  assert.ok(publicadas.length >= 2, 'o teste precisa de mais de uma publicada');
+
+  const html = await (await cliente.get('/tabela-preco')).text();
+  for (const t of publicadas) {
+    assert.ok(html.includes(`href="/tabela-preco?id=${t.id}"`), `"${t.titulo}" precisa estar no seletor`);
+  }
+
+  const escolhida = publicadas[publicadas.length - 1];
+  const aberta = await (await cliente.get(`/tabela-preco?id=${escolhida.id}`)).text();
+  assert.match(aberta, new RegExp(`href="/tabela-preco\\?id=${escolhida.id}"\\s+class="tp-opcao ativa"`));
+  assert.match(aberta, new RegExp(`window\\.TABELA_PRECO = \\{"id":${escolhida.id},`));
+
+  // A escolha fica lembrada: voltar à aba sem endereço reabre a mesma.
+  const deVolta = await (await cliente.get('/tabela-preco')).text();
+  assert.match(deVolta, new RegExp(`window\\.TABELA_PRECO = \\{"id":${escolhida.id},`));
+});
+
+test('quem só consulta não abre nem baixa tabela fora de publicação', async () => {
+  const retirada = tabelaPreco.publicadas()[0];
+  tabelaPreco.definirPublicacao(retirada.id, false, admin);
+
+  const leitor = await sessao('ana.paula');
+  const html = await (await leitor.get(`/tabela-preco?id=${retirada.id}`)).text();
+  assert.match(html, /não está mais publicada/);
+  assert.ok(!html.includes(`href="/tabela-preco?id=${retirada.id}"`), 'nem aparece no seletor');
+  assert.strictEqual((await leitor.get(`/tabela-preco/arquivo/${retirada.id}`)).status, 404);
+
+  const gestor = await sessao('andreia');
+  assert.strictEqual((await gestor.get(`/tabela-preco/arquivo/${retirada.id}`)).status, 200, 'o Financeiro confere');
+  const conferencia = await (await gestor.get(`/tabela-preco?id=${retirada.id}`)).text();
+  assert.match(conferencia, /fora de publicação/);
+
+  tabelaPreco.definirPublicacao(retirada.id, true, admin);
 });

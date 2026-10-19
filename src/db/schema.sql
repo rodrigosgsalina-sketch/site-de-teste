@@ -372,10 +372,12 @@ CREATE TABLE IF NOT EXISTS push_inscricoes (
 CREATE INDEX IF NOT EXISTS idx_push_usuario ON push_inscricoes (usuario_id);
 
 -- -------------------------------------------------------- TABELA DE PREÇO
--- A tabela de preço do escritório, enviada como arquivo e exibida para todos.
--- Cada envio vira uma linha; `atual = 1` marca a que aparece na tela, e as
--- demais ficam como versões anteriores (uma tabela de preço tem histórico, e
--- saber o que valia mês passado é parte do trabalho).
+-- As tabelas de preço do escritório, enviadas como arquivo e exibidas para
+-- todos. São várias ao mesmo tempo (abertura de empresa, mensalidade contábil,
+-- certidões...): cada envio vira uma linha com título próprio, e as marcadas
+-- como `publicada` aparecem para o escritório escolher qual ler. As que saem
+-- de publicação continuam guardadas — o preço do mês passado também é
+-- informação.
 CREATE TABLE IF NOT EXISTS tabela_preco (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   nome_original TEXT    NOT NULL,
@@ -388,11 +390,13 @@ CREATE TABLE IF NOT EXISTS tabela_preco (
   -- chegou pequeno demais para ser lido de longe
   largura       INTEGER,
   altura        INTEGER,
+  -- nome que aparece no seletor ("Abertura de empresa", "Mensalidades")
+  titulo        TEXT    NOT NULL DEFAULT '',
   descricao     TEXT,
-  atual         INTEGER NOT NULL DEFAULT 1 CHECK (atual IN (0, 1)),
+  publicada     INTEGER NOT NULL DEFAULT 1 CHECK (publicada IN (0, 1)),
   usuario_id    INTEGER REFERENCES usuarios (id),
   criado_em     TEXT    NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX IF NOT EXISTS idx_tabela_preco_atual ON tabela_preco (atual, id DESC);
+CREATE INDEX IF NOT EXISTS idx_tabela_preco_publicada ON tabela_preco (publicada, titulo);
 
 -- Sessões do express-session ficam na tabela `sessoes` (src/lib/session-store.js).
