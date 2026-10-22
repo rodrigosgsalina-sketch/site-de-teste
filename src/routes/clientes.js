@@ -188,28 +188,44 @@ router.post('/importar/confirmar', exigirAdministrador, (req, res, next) => {
     if (!pendente || !pendente.registros || !pendente.registros.length) {
       throw new ErroValidacao('A conferência expirou. Envie a planilha novamente.');
     }
+    // Os dois desligados por padrão: a importação cadastra só o que falta e
+    // não mexe em quem já está no sistema.
     const atualizarExistentes = req.body.atualizar === '1';
-    const resultado = importacao.importar(pendente.registros, req.session.usuario, { atualizarExistentes });
+    const incluirMesmoDocumento = req.body.incluir_repetidos === '1';
+    const resultado = importacao.importar(pendente.registros, req.session.usuario, {
+      atualizarExistentes,
+      incluirMesmoDocumento,
+    });
 
     historico.registrar({
       processoId: null,
       acao: 'Clientes Importados',
       usuario: req.session.usuario,
       observacao:
-        `${pendente.nomeOriginal}: ${resultado.criados} novo(s), ${resultado.atualizados} atualizado(s), ` +
-        `${resultado.ignorados} ignorado(s)` + (resultado.falhas.length ? `, ${resultado.falhas.length} com falha` : ''),
+        `${pendente.nomeOriginal}: ${resultado.criados} nova(s), ${resultado.atualizados} atualizada(s), ` +
+        `${resultado.ignorados} já cadastrada(s) mantida(s) como estavam` +
+        (resultado.mesmoDocumento ? `, ${resultado.mesmoDocumento} deixada(s) de fora por repetir CNPJ/CPF já cadastrado` : '') +
+        (resultado.falhas.length ? `, ${resultado.falhas.length} com falha` : ''),
     });
 
     fs.rm(path.join(DIR_IMPORTACOES, pendente.arquivo), { force: true }, () => {});
     delete req.session.importacaoClientes;
 
-    flash(
-      req,
-      resultado.falhas.length ? 'alerta' : 'sucesso',
-      `Importação concluída: ${resultado.criados} empresa(s) cadastrada(s), ` +
-        `${resultado.atualizados} atualizada(s), ${resultado.ignorados} ignorada(s)` +
-        (resultado.falhas.length ? ` e ${resultado.falhas.length} com falha.` : '.')
-    );
+    const partes = [`${resultado.criados} empresa(s) nova(s) cadastrada(s)`];
+    if (resultado.atualizados) partes.push(`${resultado.atualizados} atualizada(s)`);
+    if (resultado.ignorados) partes.push(`${resultado.ignorados} já cadastrada(s), mantida(s) como estavam`);
+    if (resultado.mesmoDocumento) {
+      partes.push(`${resultado.mesmoDocumento} deixada(s) de fora por repetir o CNPJ/CPF de uma já cadastrada`);
+    }
+    if (resultado.falhas.length) {
+      partes.push(
+        `${resultado.falhas.length} com falha (${resultado.falhas
+          .slice(0, 3)
+          .map((f) => `${f.codigo}: ${f.motivo}`)
+          .join('; ')}${resultado.falhas.length > 3 ? '; …' : ''})`
+      );
+    }
+    flash(req, resultado.falhas.length ? 'alerta' : 'sucesso', `Importação concluída: ${partes.join(', ')}.`);
     res.redirect('/clientes');
   } catch (err) {
     if (err instanceof ErroValidacao) {

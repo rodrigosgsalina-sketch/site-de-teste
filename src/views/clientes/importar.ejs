@@ -32,8 +32,12 @@
     <h3>Como funciona</h3>
     <ul class="limpa">
       <li class="feito">Nada é gravado ao enviar: primeiro você confere o que foi lido.</li>
-      <li class="feito">As empresas são identificadas pelo <strong>código</strong> do Domínio.</li>
-      <li class="feito">Empresas já cadastradas podem ser atualizadas ou mantidas como estão — você escolhe.</li>
+      <li class="feito">As empresas são identificadas pelo <strong>código</strong> do Domínio: código já
+        cadastrado não é cadastrado de novo.</li>
+      <li class="feito">Código novo com <strong>CNPJ/CPF</strong> que já pertence a outra empresa cadastrada
+        fica de fora, como provável duplicata — e aparece na conferência para você decidir.</li>
+      <li class="feito">Por padrão só as empresas que faltam são cadastradas; atualizar as que já existem é
+        opcional, e só troca o que vier preenchido na planilha.</li>
       <li class="feito">As observações internas escritas na plataforma são preservadas na atualização.</li>
       <li class="feito">A importação fica registrada na auditoria, com quem fez e o resultado.</li>
     </ul>
@@ -59,17 +63,21 @@
       </div>
       <div class="indicador ok">
         <div class="valor"><%= analise.novos %></div>
-        <div class="rotulo">Serão cadastradas</div>
+        <div class="rotulo">Novas — serão cadastradas</div>
       </div>
       <div class="indicador">
         <div class="valor"><%= analise.existentes %></div>
-        <div class="rotulo">Já existem (mesmo código)</div>
+        <div class="rotulo">Já cadastradas (mesmo código)</div>
       </div>
-      <div class="indicador <%= analise.erros.length ? 'alerta' : '' %>">
-        <div class="valor"><%= analise.erros.length %></div>
-        <div class="rotulo">Linhas descartadas</div>
+      <div class="indicador <%= analise.mesmoDocumento.length ? 'alerta' : '' %>">
+        <div class="valor"><%= analise.mesmoDocumento.length %></div>
+        <div class="rotulo">Código novo, CNPJ/CPF já cadastrado</div>
       </div>
     </div>
+    <% if (analise.erros.length) { %>
+      <p class="dica" style="margin-top:.6rem"><strong><%= analise.erros.length %></strong> registro(s) da
+        planilha não puderam ser lidos — veja abaixo.</p>
+    <% } %>
 
     <p class="dica" style="margin-top:.9rem">
       <strong><%= analise.camposEncontrados.length %></strong> campos reconhecidos por empresa.
@@ -104,8 +112,66 @@
     </div>
   <% } %>
 
+  <% if (analise.mesmoDocumento.length) { %>
+    <div class="cartao">
+      <h3>Código novo, mas CNPJ/CPF de uma empresa já cadastrada</h3>
+      <p class="dica" style="max-width:80ch">
+        Quase sempre é a mesma empresa cadastrada duas vezes no Domínio, e por isso elas
+        <strong>não</strong> entram — senão viram duplicata aqui. Confira a lista: se alguma for de fato
+        outra empresa (o Domínio tem empresas diferentes com o mesmo documento, por erro de digitação),
+        marque a opção no fim da página para cadastrar estas também.
+      </p>
+      <div class="tabela-scroll">
+        <table class="tabela">
+          <thead><tr><th>Na planilha</th><th>CNPJ / CPF</th><th>Já cadastrada como</th></tr></thead>
+          <tbody>
+            <% analise.mesmoDocumento.slice(0, 100).forEach(function (r) { %>
+              <tr>
+                <td><span class="mono"><%= r.codigo %></span> · <%= r.nome %><% if (r.situacao) { %> <span class="dica">(<%= r.situacao %>)</span><% } %></td>
+                <td class="mono"><%= r.cnpj_cpf %></td>
+                <td>
+                  <a href="/clientes/<%= r.__idExistente %>" target="_blank" rel="noopener">
+                    <span class="mono"><%= r.__codigoNoSistema %></span> · <%= r.__nomeNoSistema %>
+                  </a>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% if (analise.mesmoDocumento.length > 100) { %>
+        <p class="dica">Mostrando as 100 primeiras de <%= analise.mesmoDocumento.length %>.</p>
+      <% } %>
+    </div>
+  <% } %>
+
+  <% if (analise.repetidasNaPlanilha.length) { %>
+    <div class="cartao">
+      <details>
+        <summary><strong><%= analise.repetidasNaPlanilha.length %></strong> CNPJ/CPF aparecem em mais de
+          uma empresa nova da própria planilha</summary>
+        <p class="dica" style="max-width:80ch">
+          A repetição vem do Domínio. Cada uma entra com o seu código, como está lá — a lista é só para
+          você saber.
+        </p>
+        <ul class="limpa">
+          <% analise.repetidasNaPlanilha.forEach(function (g) { %>
+            <li><span class="mono"><%= g.documento %></span> —
+              <%= g.empresas.map(function (e) { return e.codigo + ' · ' + e.nome; }).join('  |  ') %></li>
+          <% }) %>
+        </ul>
+      </details>
+    </div>
+  <% } %>
+
+  <%
+    // Com quase todas já cadastradas, as primeiras linhas da planilha não
+    // mostram o que interessa. Havendo novas, a lista é delas.
+    const novas = analise.registros.filter(function (r) { return r.__situacao === 'nova'; });
+    const listadas = novas.length ? novas.slice(0, 100) : analise.registros.slice(0, 15);
+  %>
   <div class="cartao">
-    <h3>Amostra do que será gravado</h3>
+    <h3><%= novas.length ? 'Empresas que serão cadastradas' : 'Amostra do que foi lido' %></h3>
     <div class="tabela-scroll">
       <table class="tabela">
         <thead>
@@ -113,7 +179,7 @@
               <th>Município</th><th>Situação</th><th>Situação no sistema</th></tr>
         </thead>
         <tbody>
-          <% analise.registros.slice(0, 15).forEach(function (r) { %>
+          <% listadas.forEach(function (r) { %>
             <tr>
               <td class="mono"><%= r.codigo %></td>
               <td><%= r.apelido || '—' %></td>
@@ -123,10 +189,12 @@
               <td><%= [r.municipio, r.uf].filter(Boolean).join(' / ') || '—' %></td>
               <td><%= r.situacao || '—' %></td>
               <td>
-                <% if (r.__novo) { %>
+                <% if (r.__situacao === 'nova') { %>
                   <span class="etiqueta et-verde">nova</span>
+                <% } else if (r.__situacao === 'cadastrada') { %>
+                  <span class="etiqueta et-neutro">já cadastrada</span>
                 <% } else { %>
-                  <span class="etiqueta et-amarelo">já cadastrada</span>
+                  <span class="etiqueta et-amarelo">CNPJ já cadastrado (<%= r.__codigoNoSistema %>)</span>
                 <% } %>
               </td>
             </tr>
@@ -135,7 +203,12 @@
       </table>
     </div>
     <p class="dica">
-      Mostrando <%= Math.min(15, analise.registros.length) %> de <%= analise.registros.length %> empresas.
+      <% if (novas.length) { %>
+        Mostrando <%= listadas.length %> de <%= novas.length %> empresa(s) nova(s). As já cadastradas não
+        aparecem aqui.
+      <% } else { %>
+        Mostrando <%= listadas.length %> de <%= analise.registros.length %> empresas — todas já estão no sistema.
+      <% } %>
     </p>
   </div>
 
@@ -143,15 +216,35 @@
     <h3>Confirmar importação</h3>
     <form method="post" action="/clientes/importar/confirmar">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-      <div class="checkbox" style="margin-bottom:.9rem">
-        <input type="checkbox" id="atualizar" name="atualizar" value="1" checked>
-        <label for="atualizar">
-          Atualizar as <strong><%= analise.existentes %></strong> empresa(s) já cadastradas com os dados da planilha
-          <div class="dica">Desmarque para cadastrar somente as novas. As observações internas são sempre preservadas.</div>
-        </label>
-      </div>
+      <p style="margin:0 0 .9rem">
+        Serão cadastradas as <strong><%= analise.novos %></strong> empresa(s) que ainda não estão no
+        sistema. As <strong><%= analise.existentes %></strong> já cadastradas ficam como estão, a menos que
+        você marque abaixo.
+      </p>
+      <% if (analise.existentes) { %>
+        <div class="checkbox" style="margin-bottom:.7rem">
+          <input type="checkbox" id="atualizar" name="atualizar" value="1">
+          <label for="atualizar">
+            Atualizar também as <strong><%= analise.existentes %></strong> já cadastradas com os dados da planilha
+            <div class="dica">Só é trocado o que vier preenchido na planilha: campo vazio não apaga o que já
+              está no cadastro. O código e as observações internas nunca mudam.</div>
+          </label>
+        </div>
+      <% } %>
+      <% if (analise.mesmoDocumento.length) { %>
+        <div class="checkbox" style="margin-bottom:.9rem">
+          <input type="checkbox" id="incluir_repetidos" name="incluir_repetidos" value="1">
+          <label for="incluir_repetidos">
+            Cadastrar também as <strong><%= analise.mesmoDocumento.length %></strong> de código novo cujo
+            CNPJ/CPF já está cadastrado
+            <div class="dica">Só se você conferiu a lista acima e são mesmo empresas diferentes.</div>
+          </label>
+        </div>
+      <% } %>
       <div class="acoes">
-        <button class="botao">Importar <%= analise.registros.length %> empresa(s)</button>
+        <button class="botao" <%= analise.novos || analise.existentes || analise.mesmoDocumento.length ? '' : 'disabled' %>>
+          <%= analise.novos ? 'Cadastrar ' + analise.novos + ' empresa(s) nova(s)' : 'Confirmar' %>
+        </button>
         <button class="botao botao-secundario" formaction="/clientes/importar/cancelar">Cancelar</button>
       </div>
     </form>

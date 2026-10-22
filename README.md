@@ -545,12 +545,35 @@ esse formato, ignora os cabeçalhos e aproveita os 45 campos da ficha. Planilhas
 reconhecidos por sinônimos.
 
 O fluxo tem duas etapas: ao enviar o arquivo **nada é gravado** — a tela mostra quantas empresas
-foram lidas, quantas são novas, quantas já existem, o que foi descartado e uma amostra do que será
-gravado. Só depois da confirmação a importação acontece.
+foram lidas, quantas são novas, quantas já existem, o que foi descartado e a lista das que serão
+cadastradas. Só depois da confirmação a importação acontece.
 
-- as empresas são identificadas pelo **código** do Domínio;
-- empresas já cadastradas podem ser atualizadas ou mantidas como estão (opção na confirmação);
-- as **observações internas** escritas na plataforma nunca são sobrescritas pela importação;
+**Reimportar cadastra só o que falta.** Dá para enviar o relatório completo do Domínio quantas vezes
+for preciso:
+
+- a empresa é identificada pelo **código** do Domínio — código já cadastrado não entra de novo;
+- **código novo com CNPJ/CPF que já pertence a uma empresa cadastrada** fica de fora por padrão,
+  como provável duplicata (a mesma empresa recadastrada no Domínio). A conferência mostra cada uma
+  ao lado da que já existe, com a opção de cadastrar mesmo assim — o Domínio tem empresas
+  diferentes com o mesmo documento, por erro de digitação lá;
+- CNPJ zerado (`00.000.000/0000-00`) ou incompleto não conta como identificação: o relatório real
+  tem empresas diferentes com o CNPJ zerado;
+- atualizar as já cadastradas é **opcional e desmarcado**; marcado, só troca o que vier
+  **preenchido** na planilha — campo vazio não apaga o cadastro, e o código e as **observações
+  internas** nunca mudam;
+- a situação de cada empresa é conferida de novo na confirmação: se alguém cadastrou uma delas
+  depois da conferência, ela não entra duplicada.
+
+> **O `.xls` do Domínio vem com um defeito interno** que o Excel tolera e a biblioteca de leitura
+> não: o índice que diz onde a aba começa aponta para centenas de milhares de células vazias soltas
+> antes dela. Lido como veio, o arquivo parecia uma planilha sem conteúdo ("não encontrei
+> empresas"). O leitor refaz o arquivo em memória antes de ler (`src/lib/xls-reparo.js`) e
+> descarta as células mescladas, que só deixavam a leitura lenta: o relatório de 952 empresas é
+> lido em cerca de 2 segundos. Se um arquivo ainda assim não abrir, a mensagem pede para salvá-lo
+> no Excel como `.xlsx` — e não diz mais que não há empresas.
+
+Mais detalhes:
+
 - datas viram formato ISO e o capital social também é guardado como número, para ordenar e somar;
 - cada importação fica registrada na auditoria com o resultado.
 
