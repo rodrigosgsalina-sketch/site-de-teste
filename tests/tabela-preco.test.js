@@ -383,3 +383,119 @@ test('quem só consulta não abre nem baixa tabela fora de publicação', async 
 
   tabelaPreco.definirPublicacao(retirada.id, true, admin);
 });
+
+/* ------------------------------------------------- backup e restauração */
+
+/*
+ * Defeito real: ao restaurar um backup, as tabelas de preço voltavam e os
+ * arquivos delas não. A aba mostrava "Unexpected server response (404) while
+ * retrieving PDF". Duas causas: os arquivos só iam no backup com a opção de
+ * anexos marcada (e o backup automático nunca a marca), e a restauração só
+ * aceitava pastas numeradas — `uploads/tabela-preco/` era pulada em silêncio.
+ */
+
+function pdfFalso(texto) {
+  return Buffer.from(`%PDF-1.4\n% ${texto}\n%%EOF\n`);
+}
+
+/** Simula a outra máquina: a pasta de arquivos da tabela de preço vazia. */
+function esvaziarPastaDePrecos() {
+  for (const nome of fs.readdirSync(tabelaPreco.pasta())) fs.unlinkSync(path.join(tabelaPreco.pasta(), nome));
+}
+
+test('a pasta do backup e a da tabela de preço são a mesma', () => {
+  assert.strictEqual(backup.PASTA_TABELA_PRECO, path.basename(tabelaPreco.pasta()));
+});
+
+test('o backup leva os arquivos da tabela de preço mesmo sem a opção de anexos', () => {
+  const { item } = enviar('honorarios.pdf', pdfFalso('honorarios'), admin, { titulo: 'Honorários 2026' });
+  const dados = backup.gerar({ usuario: admin, incluirArquivos: false });
+
+  const caminho = `${backup.PASTA_TABELA_PRECO}/${item.nome_arquivo}`;
+  const levado = dados.arquivos.find((a) => a.caminho === caminho);
+  assert.ok(levado, 'o arquivo da tabela precisa estar no backup');
+  assert.strictEqual(Buffer.from(levado.conteudo, 'base64').toString(), pdfFalso('honorarios').toString());
+  assert.ok(
+    dados.arquivos.every((a) => a.caminho.startsWith(`${backup.PASTA_TABELA_PRECO}/`)),
+    'anexos de processo continuam dependendo da opção'
+  );
+});
+
+test('restaurar noutra máquina devolve os arquivos e a tabela abre', async () => {
+  const antes = tabelaPreco.publicadas();
+  const conteudos = new Map(antes.map((t) => [t.id, fs.readFileSync(tabelaPreco.caminhoAbsoluto(t))]));
+  const dados = backup.gerar({ usuario: admin, incluirArquivos: false });
+
+  esvaziarPastaDePrecos();
+  assert.ok(antes.every((t) => !tabelaPreco.arquivoNoServidor(t)), 'a "outra máquina" começa sem arquivos');
+
+  const analise = backup.analisar(Buffer.from(JSON.stringify(dados)));
+  assert.strictEqual(analise.tabelasPreco.semArquivo.length, 0, 'a conferência vê os arquivos no backup');
+
+  const resultado = backup.restaurar(analise.dados, { usuario: admin });
+  assert.strictEqual(resultado.tabelasPrecoRepostas, conteudos.size);
+  assert.deepStrictEqual(resultado.tabelasPrecoSemArquivo, []);
+
+  for (const [id, conteudo] of conteudos) {
+    const t = tabelaPreco.obter(id);
+    assert.ok(tabelaPreco.arquivoNoServidor(t), `"${t.titulo}" voltou sem arquivo`);
+    assert.ok(fs.readFileSync(tabelaPreco.caminhoAbsoluto(t)).equals(conteudo), 'o arquivo volta igual');
+  }
+
+  const leitor = await sessao('ana.paula');
+  const alvo = antes[0];
+  assert.strictEqual((await leitor.get(`/tabela-preco/arquivo/${alvo.id}`)).status, 200, 'o leitor não recebe 404');
+});
+
+test('"não repor os documentos anexados" não deixa a tabela de preço sem arquivo', () => {
+  const dados = backup.gerar({ usuario: admin, incluirArquivos: false });
+  esvaziarPastaDePrecos();
+  const resultado = backup.restaurar(dados, { usuario: admin, restaurarArquivos: false });
+  assert.ok(resultado.tabelasPrecoRepostas > 0);
+  assert.deepStrictEqual(resultado.tabelasPrecoSemArquivo, []);
+});
+
+test('backup antigo, sem os arquivos da tabela de preço: avisa antes e a aba explica em vez de dar 404', async () => {
+  const dados = backup.gerar({ usuario: admin, incluirArquivos: false });
+  // Como os backups gerados antes desta correção: sem os arquivos.
+  dados.arquivos = [];
+  delete dados.checksum;
+  esvaziarPastaDePrecos();
+
+  const analise = backup.analisar(Buffer.from(JSON.stringify(dados)));
+  assert.ok(analise.tabelasPreco.semArquivo.length > 0);
+  assert.ok(analise.avisos.some((a) => /tabela\(s\) de preço vêm sem o arquivo/.test(a)), 'a conferência avisa');
+
+  const resultado = backup.restaurar(analise.dados, { usuario: admin });
+  assert.ok(resultado.tabelasPrecoSemArquivo.length > 0, 'o resultado diz quais faltam');
+
+  const alvo = tabelaPreco.publicadas()[0];
+  const leitor = await sessao('ana.paula');
+  const html = await (await leitor.get(`/tabela-preco?id=${alvo.id}`)).text();
+  assert.match(html, /O arquivo desta tabela não está neste servidor/);
+  assert.match(html, /window\.TABELA_PRECO = null;/, 'o leitor de PDF nem é acionado');
+
+  const gestor = await sessao('andreia');
+  const htmlGestor = await (await gestor.get(`/tabela-preco?id=${alvo.id}`)).text();
+  assert.match(htmlGestor, /Substitui a tabela/);
+  assert.match(htmlGestor, /arquivo ausente/);
+});
+
+test('a restauração não grava arquivo fora das pastas conhecidas', () => {
+  const dados = backup.gerar({ usuario: admin, incluirArquivos: false });
+  const conteudo = Buffer.from('nao deveria existir');
+  const pacote = (caminho) => ({
+    caminho,
+    tamanho: conteudo.length,
+    sha256: require('crypto').createHash('sha256').update(conteudo).digest('hex'),
+    conteudo: conteudo.toString('base64'),
+  });
+  dados.arquivos.push(pacote('outra-pasta/intruso.txt'), pacote('tabela-preco/../../intruso2.txt'));
+  delete dados.checksum;
+  backup.restaurar(dados, { usuario: admin });
+
+  const uploads = path.join(tmp, 'uploads');
+  assert.ok(!fs.existsSync(path.join(uploads, 'outra-pasta')), 'pasta desconhecida não é criada');
+  assert.ok(!fs.existsSync(path.join(tmp, 'intruso2.txt')));
+  assert.ok(!fs.existsSync(path.join(uploads, 'intruso2.txt')));
+});

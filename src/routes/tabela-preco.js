@@ -65,9 +65,13 @@ router.get('/', (req, res) => {
   if (item) req.session.tabelaPrecoId = item.id;
   else delete req.session.tabelaPrecoId;
 
+  // Sem o arquivo no disco, nem adianta chamar o leitor: ele só devolveria
+  // "404" sem dizer o porquê. A tela explica e mostra o caminho do reenvio.
+  const semArquivo = Boolean(item) && !tabelaPreco.arquivoNoServidor(item);
+
   let planilha = null;
   let erroPlanilha = null;
-  if (item && item.formato === 'planilha') {
+  if (item && !semArquivo && item.formato === 'planilha') {
     try {
       planilha = tabelaPreco.grade(item);
     } catch (err) {
@@ -84,6 +88,7 @@ router.get('/', (req, res) => {
     pedidaIndisponivel: Boolean(req.query.id) && pedidaIndisponivel,
     planilha,
     erroPlanilha,
+    semArquivo,
     podeEditar,
     setorResponsavel: tabelaPreco.setorResponsavel(),
     todas: podeEditar ? tabelaPreco.todas() : [],

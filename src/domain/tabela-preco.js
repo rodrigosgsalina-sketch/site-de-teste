@@ -94,7 +94,8 @@ function todas(limite = 200) {
   return db
     .get()
     .prepare(`${SELECT} ORDER BY t.publicada DESC, t.titulo COLLATE NOCASE, t.id DESC LIMIT ?`)
-    .all(limite);
+    .all(limite)
+    .map((t) => ({ ...t, semArquivo: !arquivoNoServidor(t) }));
 }
 
 /**
@@ -132,6 +133,23 @@ function caminhoAbsoluto(item) {
   const alvo = path.resolve(raiz, path.basename(String(item.nome_arquivo || '')));
   if (!alvo.startsWith(raiz + path.sep)) throw new ErroValidacao('Caminho de arquivo inválido.');
   return alvo;
+}
+
+/**
+ * O arquivo da tabela está no disco deste servidor?
+ *
+ * A linha pode existir sem o arquivo — o caso típico é um backup restaurado
+ * noutra máquina, gerado antes de os arquivos da tabela de preço irem junto.
+ * A tela pergunta antes de tentar abrir, para explicar o que houve em vez de
+ * mostrar o erro do leitor de PDF.
+ */
+function arquivoNoServidor(item) {
+  if (!item) return false;
+  try {
+    return fs.existsSync(caminhoAbsoluto(item));
+  } catch (_) {
+    return false;
+  }
 }
 
 /**
@@ -390,6 +408,7 @@ module.exports = {
   paraExibir,
   obter,
   caminhoAbsoluto,
+  arquivoNoServidor,
   medidasPNG,
   grade,
   tituloEmUso,

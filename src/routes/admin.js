@@ -191,6 +191,7 @@ router.post('/backup/restaurar', uploadBackup.single('backup'), csrf.verificar, 
         conteudo: analise.conteudo,
         arquivos: analise.arquivos,
         bytesArquivos: analise.bytesArquivos,
+        tabelasPreco: analise.tabelasPreco,
         avisos: analise.avisos,
       },
     };
@@ -246,7 +247,11 @@ router.post('/backup/confirmar', (req, res, next) => {
       usuario: usuarioAtual,
       observacao:
         `${pendente.resumo.nomeEnviado} (gerado em ${pendente.resumo.geradoEm}) — ` +
-        `${resultado.total} registro(s), ${resultado.arquivosRepostos} anexo(s). ` +
+        `${resultado.total} registro(s), ${resultado.arquivosRepostos} anexo(s), ` +
+        `${resultado.tabelasPrecoRepostas} arquivo(s) de tabela de preço. ` +
+        (resultado.tabelasPrecoSemArquivo.length
+          ? `Tabela(s) de preço sem arquivo: ${resultado.tabelasPrecoSemArquivo.join(', ')}. `
+          : '') +
         (recomposto.length ? `Recomposto: ${recomposto.join('; ')}. ` : '') +
         `Cópia do estado anterior: ${path.basename(resultado.copiaDeSeguranca)}.`,
     });
@@ -268,13 +273,19 @@ router.post('/backup/confirmar', (req, res, next) => {
       setor_id: aindaExiste.setor_id,
     };
 
+    const faltamPrecos = resultado.tabelasPrecoSemArquivo;
     flash(
       req,
-      'sucesso',
+      faltamPrecos.length ? 'alerta' : 'sucesso',
       `Backup restaurado: ${resultado.total} registro(s) repostos` +
-        (resultado.arquivosRepostos ? ` e ${resultado.arquivosRepostos} anexo(s)` : '') +
+        (resultado.arquivosRepostos ? `, ${resultado.arquivosRepostos} anexo(s)` : '') +
+        (resultado.tabelasPrecoRepostas ? `, ${resultado.tabelasPrecoRepostas} arquivo(s) de tabela de preço` : '') +
         (recomposto.length ? `. Recomposto o que o arquivo não trazia: ${recomposto.join('; ')}` : '') +
-        `. O estado anterior foi guardado em ${path.basename(resultado.copiaDeSeguranca)}.`
+        `. O estado anterior foi guardado em ${path.basename(resultado.copiaDeSeguranca)}.` +
+        (faltamPrecos.length
+          ? ` Atenção: ${faltamPrecos.length} tabela(s) de preço voltaram sem o arquivo (${faltamPrecos.join(', ')}) — ` +
+            'envie o arquivo de novo em Tabela de preço → Substitui a tabela.'
+          : '')
     );
     res.redirect('/admin/parametros#backup');
   } catch (err) {

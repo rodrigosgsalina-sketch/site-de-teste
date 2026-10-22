@@ -72,6 +72,21 @@
       <% } %>
     </p>
   </div>
+<% } else if (semArquivo) { %>
+  <div class="cartao">
+    <div class="aviso aviso-alerta" style="margin:0">
+      <strong>O arquivo desta tabela não está neste servidor.</strong>
+      A tabela está cadastrada, mas o arquivo dela (<span class="mono"><%= item.nome_original %></span>)
+      não veio junto — isso acontece ao restaurar um backup gerado antes de os arquivos da tabela de
+      preço irem no backup.
+      <% if (podeEditar) { %>
+        Para corrigir, envie o arquivo de novo no formulário abaixo, escolhendo
+        <strong>“<%= item.titulo %>”</strong> em <em>Substitui a tabela</em>.
+      <% } else { %>
+        Avise o setor <%= setorResponsavel %> para enviar o arquivo de novo.
+      <% } %>
+    </div>
+  </div>
 <% } else if (erroPlanilha) { %>
   <div class="aviso aviso-erro"><%= erroPlanilha %></div>
 <% } else { %>
@@ -198,6 +213,9 @@
             <li class="<%= v.publicada ? '' : 'tp-retirada' %>">
               <div class="tp-versao-info">
                 <a href="/tabela-preco?id=<%= v.id %>"><strong><%= v.titulo %></strong></a>
+                <% if (v.semArquivo) { %>
+                  <span class="etiqueta et-vermelho" title="Envie de novo em Substitui a tabela">arquivo ausente</span>
+                <% } %>
                 <% if (v.publicada) { %>
                   <span class="etiqueta et-verde">publicada</span>
                 <% } else { %>
@@ -252,7 +270,7 @@
 
 <% if (item || podeEditar) { %>
   <script nonce="<%= nonce %>">
-    window.TABELA_PRECO = <%- jsonSeguro(dadosVisualizador) %>;
+    window.TABELA_PRECO = <%- jsonSeguro(semArquivo ? null : dadosVisualizador) %>;
     window.TABELA_PRECO_PDFJS = {
       biblioteca: '<%= estatico('/vendor/pdf.min.mjs') %>',
       worker: '<%= estatico('/vendor/pdf.worker.min.mjs') %>'

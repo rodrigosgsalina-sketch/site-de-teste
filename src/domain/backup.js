@@ -154,12 +154,64 @@ function impressao(tabelas, arquivos) {
 
 /* ------------------------------------------------------------------ gerar */
 
-/** Percorre uploads/ devolvendo os caminhos relativos dos anexos. */
+/**
+ * Pasta dos arquivos da tabela de preço dentro de uploads/ (a mesma de
+ * src/domain/tabela-preco.js — um teste confere que as duas não se separam).
+ *
+ * Os anexos de processo ficam em pastas numeradas (`uploads/<id do processo>/`)
+ * e só vão no backup quando se pede, porque pesam. A tabela de preço é outra
+ * coisa: sem o arquivo, a linha restaurada aponta para o nada e a aba mostra
+ * erro. Por isso os arquivos dela vão **sempre**.
+ */
+const PASTA_TABELA_PRECO = 'tabela-preco';
+
+/** Pastas de uploads/ que podem voltar numa restauração, além das numeradas. */
+const PASTAS_FIXAS = new Set([PASTA_TABELA_PRECO]);
+
+/** Lê um arquivo de uploads/ no formato em que ele viaja no backup. */
+function empacotar(relativo, completo) {
+  const conteudo = fs.readFileSync(completo);
+  return {
+    caminho: relativo,
+    tamanho: conteudo.length,
+    sha256: crypto.createHash('sha256').update(conteudo).digest('hex'),
+    conteudo: conteudo.toString('base64'),
+  };
+}
+
+/**
+ * Arquivos das tabelas de preço cadastradas — só os que o banco cita, e não a
+ * pasta inteira. Devolve também as linhas cujo arquivo já não estava no disco,
+ * para a tela avisar quem baixa o backup.
+ */
+function arquivosDaTabelaDePreco() {
+  if (!tabelaExiste('tabela_preco')) return { arquivos: [], semArquivo: [] };
+  const raiz = path.resolve(config.uploadsDir, PASTA_TABELA_PRECO);
+  const arquivos = [];
+  const semArquivo = [];
+  const vistos = new Set();
+  for (const linha of db.get().prepare('SELECT id, titulo, nome_arquivo FROM tabela_preco').all()) {
+    const nome = path.basename(String(linha.nome_arquivo || ''));
+    const completo = path.join(raiz, nome);
+    if (!nome || !fs.existsSync(completo)) {
+      semArquivo.push(linha.titulo || `Tabela ${linha.id}`);
+      continue;
+    }
+    if (vistos.has(nome)) continue;
+    vistos.add(nome);
+    arquivos.push(empacotar(`${PASTA_TABELA_PRECO}/${nome}`, completo));
+  }
+  return { arquivos, semArquivo };
+}
+
+/** Percorre uploads/ devolvendo os caminhos relativos dos anexos de processo. */
 function listarArquivos() {
   const raiz = path.resolve(config.uploadsDir);
   if (!fs.existsSync(raiz)) return [];
   const encontrados = [];
   for (const pasta of fs.readdirSync(raiz)) {
+    // Só as pastas de processo: a da tabela de preço tem caminho próprio.
+    if (!/^\d+$/.test(pasta)) continue;
     const caminhoPasta = path.join(raiz, pasta);
     if (!fs.statSync(caminhoPasta).isDirectory()) continue;
     for (const arquivo of fs.readdirSync(caminhoPasta)) {
@@ -174,8 +226,9 @@ function listarArquivos() {
 }
 
 /**
- * Monta o backup. `incluirArquivos` embute os anexos em base64 — o arquivo
- * cresce, mas passa a ser autossuficiente.
+ * Monta o backup. Os arquivos da tabela de preço vão sempre; `incluirArquivos`
+ * acrescenta os anexos dos processos, em base64 — o arquivo cresce, mas passa
+ * a ser autossuficiente.
  */
 function gerar({ usuario = null, incluirArquivos = false, limiteArquivosMb = 200 } = {}) {
   const conn = db.get();
@@ -193,7 +246,10 @@ function gerar({ usuario = null, incluirArquivos = false, limiteArquivosMb = 200
     totais[nome] = linhas.length;
   }
 
-  const arquivos = [];
+  // A tabela de preço vai inteira e não entra no limite: sem os arquivos, as
+  // linhas restauradas apontariam para o nada.
+  const precos = arquivosDaTabelaDePreco();
+  const arquivos = [...precos.arquivos];
   let bytesArquivos = 0;
   let arquivosIgnorados = 0;
 
@@ -204,13 +260,7 @@ function gerar({ usuario = null, incluirArquivos = false, limiteArquivosMb = 200
         arquivosIgnorados += 1;
         continue;
       }
-      const conteudo = fs.readFileSync(anexo.completo);
-      arquivos.push({
-        caminho: anexo.relativo,
-        tamanho: anexo.tamanho,
-        sha256: crypto.createHash('sha256').update(conteudo).digest('hex'),
-        conteudo: conteudo.toString('base64'),
-      });
+      arquivos.push(empacotar(anexo.relativo, anexo.completo));
       bytesArquivos += anexo.tamanho;
     }
   }
@@ -222,6 +272,8 @@ function gerar({ usuario = null, incluirArquivos = false, limiteArquivosMb = 200
     gerado_em: agoraISO(),
     gerado_por: usuario ? `${usuario.nome} (${usuario.login})` : 'sistema',
     inclui_arquivos: incluirArquivos,
+    inclui_tabelas_preco: true,
+    tabelas_preco_sem_arquivo: precos.semArquivo,
     arquivos_ignorados: arquivosIgnorados,
     totais,
     checksum: impressao(tabelas, arquivos),
@@ -304,6 +356,27 @@ function analisar(buffer) {
     atual: tabelaExiste(nome) ? db.get().prepare(`SELECT COUNT(*) AS t FROM ${nome}`).get().t : 0,
   }));
 
+  // Tabelas de preço: o arquivo precisa vir no backup ou já estar neste
+  // servidor. Um backup gerado antes desta correção não trazia os arquivos —
+  // restaurá-lo noutra máquina deixava a aba com erro, sem aviso nenhum.
+  const linhasDePreco = Array.isArray(tabelas.tabela_preco) ? tabelas.tabela_preco : [];
+  const caminhosNoBackup = new Set(arquivos.map((a) => String(a.caminho || '')));
+  const raizPrecos = path.resolve(config.uploadsDir, PASTA_TABELA_PRECO);
+  const precosSemArquivo = linhasDePreco
+    .filter((t) => {
+      const nome = path.basename(String(t.nome_arquivo || ''));
+      return !caminhosNoBackup.has(`${PASTA_TABELA_PRECO}/${nome}`) && !fs.existsSync(path.join(raizPrecos, nome));
+    })
+    .map((t) => t.titulo || t.nome_original || `Tabela ${t.id}`);
+  if (precosSemArquivo.length) {
+    avisos.push(
+      `${precosSemArquivo.length} tabela(s) de preço vêm sem o arquivo neste backup e o arquivo também não ` +
+        `está neste servidor: ${precosSemArquivo.join(', ')}. Elas voltam cadastradas, mas será preciso ` +
+        'enviar o arquivo de novo (Tabela de preço → Substitui a tabela). Isso acontece com backups gerados ' +
+        'antes desta versão; os novos já levam os arquivos.'
+    );
+  }
+
   const usuariosNoArquivo = Array.isArray(tabelas.usuarios) ? tabelas.usuarios : [];
   if (!usuariosNoArquivo.some((u) => u.perfil === 'Administrador' && u.status === 'Ativo')) {
     avisos.push(
@@ -314,24 +387,41 @@ function analisar(buffer) {
   return {
     dados,
     conteudo,
-    arquivos: arquivos.length,
+    arquivos: arquivos.filter((a) => !String(a.caminho || '').startsWith(`${PASTA_TABELA_PRECO}/`)).length,
     bytesArquivos: arquivos.reduce((soma, a) => soma + Number(a.tamanho || 0), 0),
+    tabelasPreco: {
+      total: linhasDePreco.length,
+      arquivos: arquivos.filter((a) => String(a.caminho || '').startsWith(`${PASTA_TABELA_PRECO}/`)).length,
+      semArquivo: precosSemArquivo,
+    },
     avisos,
   };
 }
 
 /* ------------------------------------------------------------ restaurar */
 
-/** Repõe os anexos em uploads/, sem deixar o caminho escapar da pasta. */
-function restaurarArquivos(arquivos) {
+/**
+ * Repõe os arquivos em uploads/, sem deixar o caminho escapar da pasta.
+ *
+ * Aceita as pastas numeradas dos processos e as pastas fixas (a da tabela de
+ * preço). Antes só as numeradas passavam, e os arquivos da tabela de preço
+ * eram pulados em silêncio mesmo quando vinham no backup — a tabela voltava
+ * e o arquivo dela não.
+ *
+ * `anexosDeProcesso: false` repõe só a tabela de preço: é a opção "não repor
+ * os documentos anexados" da tela, que fala dos documentos dos processos.
+ */
+function restaurarArquivos(arquivos, { anexosDeProcesso = true } = {}) {
   const raiz = path.resolve(config.uploadsDir);
-  let gravados = 0;
+  const contagem = { anexos: 0, tabelasPreco: 0 };
   for (const arquivo of arquivos || []) {
     const partes = String(arquivo.caminho || '').split('/');
     if (partes.length !== 2) continue;
-    const pasta = String(Number(partes[0]) || 0);
+    const fixa = PASTAS_FIXAS.has(partes[0]);
+    const pasta = fixa ? partes[0] : String(Number(partes[0]) || 0);
     const nome = path.basename(partes[1]);
     if (pasta === '0' || !nome) continue;
+    if (!fixa && !anexosDeProcesso) continue;
 
     const destino = path.resolve(raiz, pasta, nome);
     if (!destino.startsWith(raiz + path.sep)) continue;
@@ -342,9 +432,25 @@ function restaurarArquivos(arquivos) {
     }
     fs.mkdirSync(path.dirname(destino), { recursive: true });
     fs.writeFileSync(destino, conteudo);
-    gravados += 1;
+    if (pasta === PASTA_TABELA_PRECO) contagem.tabelasPreco += 1;
+    else contagem.anexos += 1;
   }
-  return gravados;
+  return contagem;
+}
+
+/**
+ * Tabelas de preço do banco cujo arquivo não está no disco. Depois de uma
+ * restauração, é o que ainda precisa ser reenviado.
+ */
+function tabelasDePrecoSemArquivo() {
+  if (!tabelaExiste('tabela_preco')) return [];
+  const raiz = path.resolve(config.uploadsDir, PASTA_TABELA_PRECO);
+  return db
+    .get()
+    .prepare('SELECT id, titulo, nome_arquivo FROM tabela_preco ORDER BY titulo')
+    .all()
+    .filter((t) => !fs.existsSync(path.join(raiz, path.basename(String(t.nome_arquivo || '')))))
+    .map((t) => t.titulo || `Tabela ${t.id}`);
 }
 
 /**
@@ -485,12 +591,16 @@ function restaurar(dados, { usuario = null, restaurarArquivos: reporArquivos = t
   }
 
   const violacoes = conn.prepare('PRAGMA foreign_key_check').all();
-  const arquivosRepostos = reporArquivos ? restaurarArquivos(dados.arquivos) : 0;
+  // Os arquivos da tabela de preço voltam sempre; os anexos de processo,
+  // só se não foi pedido para deixá-los de fora.
+  const repostos = restaurarArquivos(dados.arquivos, { anexosDeProcesso: reporArquivos });
 
   return {
     inseridos,
     total: Object.values(inseridos).reduce((a, b) => a + b, 0),
-    arquivosRepostos,
+    arquivosRepostos: repostos.anexos,
+    tabelasPrecoRepostas: repostos.tabelasPreco,
+    tabelasPrecoSemArquivo: tabelasDePrecoSemArquivo(),
     copiaDeSeguranca,
     completado,
     violacoes: violacoes.length,
@@ -498,6 +608,8 @@ function restaurar(dados, { usuario = null, restaurarArquivos: reporArquivos = t
 }
 
 module.exports = {
+  PASTA_TABELA_PRECO,
+  tabelasDePrecoSemArquivo,
   FORMATO,
   VERSAO,
   TABELAS,

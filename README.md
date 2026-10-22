@@ -1331,10 +1331,24 @@ operação — e os dois são exclusivos do administrador.
 
 **Salvar backup** baixa um único arquivo `.json` com *tudo* o que está na plataforma naquele
 momento: processos, checklists, clientes, usuários (com os setores de cada um), parâmetros,
-checklist modelo, ordem de atendimento, histórico/auditoria, avisos (com seus destinatários) e
-notificações. Uma caixa opcional inclui também os
+checklist modelo, ordem de atendimento, histórico/auditoria, avisos (com seus destinatários),
+notificações e as **tabelas de preço, com os arquivos delas**. Uma caixa opcional inclui também os
 documentos anexados aos processos, e aí o arquivo passa a bastar sozinho. O nome sai no formato
 `backup-jsgrilo-2026-08-03-18-29.json`.
+
+**Os arquivos das tabelas de preço vão sempre**, com ou sem a caixa marcada — e também no backup
+automático e na cópia de segurança feita antes de restaurar. Os anexos de processo são opcionais
+porque pesam; a tabela de preço não pode ficar para trás, porque sem o arquivo a linha restaurada
+aponta para o nada. Da mesma forma, *"não repor os documentos anexados"* na restauração vale só
+para os anexos de processo: os arquivos da tabela de preço são repostos de qualquer jeito.
+
+> **Backups gerados antes desta correção** não levavam os arquivos da tabela de preço, e a
+> restauração também não os repunha (ela só aceitava as pastas numeradas dos processos). Restaurar
+> um desses noutra máquina deixava a aba com *"Unexpected server response (404) while retrieving
+> PDF"*. Agora a conferência avisa, antes de restaurar, quais tabelas vêm sem arquivo; depois de
+> restaurar, a aba explica o que houve e quem administra vê a tabela marcada como *arquivo
+> ausente* — basta reenviar o arquivo em *Substitui a tabela*. Gere um backup novo depois de
+> atualizar a plataforma: a partir dele, os arquivos vão junto.
 
 **Restaurar backup** recebe esse mesmo arquivo de volta, em duas etapas:
 

@@ -78,7 +78,8 @@
           <input type="checkbox" id="incluir_arquivos" name="incluir_arquivos" value="1">
           <label for="incluir_arquivos">
             Incluir os documentos anexados aos processos
-            <div class="dica">Deixa o arquivo bem maior, mas o backup passa a bastar sozinho.</div>
+            <div class="dica">Deixa o arquivo bem maior, mas o backup passa a bastar sozinho. Os
+              arquivos das tabelas de preço vão sempre, com ou sem esta opção.</div>
           </label>
         </div>
         <button class="botao">Baixar backup agora</button>
@@ -123,6 +124,10 @@
           <% if (conferencia.arquivos) { %>
             · <%= conferencia.arquivos %> anexo(s) (<%= Math.round(conferencia.bytesArquivos / 1024 / 1024 * 10) / 10 %> MB)
           <% } %>
+          <% if (conferencia.tabelasPreco && conferencia.tabelasPreco.total) { %>
+            · <%= conferencia.tabelasPreco.total %> tabela(s) de preço,
+            <%= conferencia.tabelasPreco.arquivos %> com o arquivo no backup
+          <% } %>
         </div>
 
         <% conferencia.avisos.forEach(function (aviso) { %>
@@ -149,7 +154,8 @@
           <input type="hidden" name="_csrf" value="<%= csrfToken %>">
           <div class="checkbox" style="margin:.4rem 0">
             <input type="checkbox" id="ignorar_arquivos" name="ignorar_arquivos" value="1">
-            <label for="ignorar_arquivos">Não repor os documentos anexados (só os dados)</label>
+            <label for="ignorar_arquivos">Não repor os documentos anexados aos processos (só os dados)
+              <div class="dica">Os arquivos das tabelas de preço são repostos de qualquer jeito.</div></label>
           </div>
           <div class="campo">
             <label for="confirmacao">Para confirmar, digite <strong>RESTAURAR</strong></label>
